@@ -1,0 +1,703 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`registry and snapshots (R3.8) > alphabet timeline of "Hello, world!" 1`] = `
+{
+  "duration": 0.9066666666666666,
+  "events": [
+    {
+      "dot": {
+        "color": "hsl(97 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 286.3386075644989,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 3250,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 450,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 2200,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2900,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0,
+      "tokenIndex": 0,
+    },
+    {
+      "dot": {
+        "color": "hsl(55 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 281.7461562212949,
+        "gain": 0.4,
+        "glide": -1.5,
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 450,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 2200,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2900,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.06666666666666667,
+      "tokenIndex": 1,
+    },
+    {
+      "dot": {
+        "color": "hsl(152 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 272.5776779779014,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 4250,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 450,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 2200,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2900,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.13333333333333333,
+      "tokenIndex": 2,
+    },
+    {
+      "dot": {
+        "color": "hsl(152 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 272.4739391195738,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 4250,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 450,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 2200,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2900,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.2,
+      "tokenIndex": 3,
+    },
+    {
+      "dot": {
+        "color": "hsl(194 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 270.06633290127405,
+        "gain": 0.4,
+        "glide": -1.5,
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 500,
+          },
+          {
+            "bandwidth": 100,
+            "frequency": 900,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2800,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.26666666666666666,
+      "tokenIndex": 4,
+    },
+    {
+      "dot": {
+        "color": "hsl(305 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 288.8944952361977,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 7000,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 70,
+            "frequency": 340,
+          },
+          {
+            "bandwidth": 100,
+            "frequency": 800,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2700,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.5333333333333333,
+      "tokenIndex": 7,
+    },
+    {
+      "dot": {
+        "color": "hsl(194 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 268.49036811949225,
+        "gain": 0.4,
+        "glide": -1.5,
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 500,
+          },
+          {
+            "bandwidth": 100,
+            "frequency": 900,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2800,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.6,
+      "tokenIndex": 8,
+    },
+    {
+      "dot": {
+        "color": "hsl(235 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 282.10203877219294,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 5750,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 90,
+            "frequency": 850,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 1400,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2800,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.6666666666666666,
+      "tokenIndex": 9,
+    },
+    {
+      "dot": {
+        "color": "hsl(152 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 267.46231013162424,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 4250,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 80,
+            "frequency": 450,
+          },
+          {
+            "bandwidth": 110,
+            "frequency": 2200,
+          },
+          {
+            "bandwidth": 170,
+            "frequency": 2900,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.7333333333333333,
+      "tokenIndex": 10,
+    },
+    {
+      "dot": {
+        "color": "hsl(42 55% 55%)",
+        "size": "md",
+      },
+      "duration": 0.056666666666666664,
+      "sound": {
+        "durationRatio": 0.85,
+        "frequency": 270.6333353897854,
+        "gain": 0.4,
+        "glide": -1.5,
+        "noiseBurst": {
+          "centerHz": 2250,
+          "durationMs": 12,
+        },
+        "vocalTract": [
+          {
+            "bandwidth": 70,
+            "frequency": 310,
+          },
+          {
+            "bandwidth": 120,
+            "frequency": 2600,
+          },
+          {
+            "bandwidth": 200,
+            "frequency": 3300,
+          },
+        ],
+        "waveform": "sawtooth",
+      },
+      "start": 0.7999999999999999,
+      "tokenIndex": 11,
+    },
+  ],
+}
+`;
+
+exports[`registry and snapshots (R3.8) > beep timeline of "Hello, world!" 1`] = `
+{
+  "duration": 0.8833333333333333,
+  "events": [
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 592.2093545093488,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0,
+      "tokenIndex": 0,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 567.562218819109,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.06666666666666667,
+      "tokenIndex": 1,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 598.7928679983776,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.13333333333333333,
+      "tokenIndex": 2,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 593.8531577562864,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.2,
+      "tokenIndex": 3,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 593.6885803342518,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.26666666666666666,
+      "tokenIndex": 4,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 593.3819066184208,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.5333333333333333,
+      "tokenIndex": 7,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 566.7444995940641,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.6,
+      "tokenIndex": 8,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 583.3000810399436,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.6666666666666666,
+      "tokenIndex": 9,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 570.2486541946666,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.7333333333333333,
+      "tokenIndex": 10,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "md",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "frequency": 564.9176146445539,
+        "gain": 0.35,
+        "waveform": "square",
+      },
+      "start": 0.7999999999999999,
+      "tokenIndex": 11,
+    },
+  ],
+}
+`;
+
+exports[`registry and snapshots (R3.8) > grunt timeline of "Hello, world!" 1`] = `
+{
+  "duration": 0.89,
+  "events": [
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "sm",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "formants": [
+          600,
+          1000,
+        ],
+        "frequency": 155.81635258557708,
+        "gain": 0.5,
+        "glide": -3,
+        "waveform": "sawtooth",
+      },
+      "start": 0,
+      "tokenIndex": 0,
+    },
+    {
+      "dot": {
+        "color": "var(--blue)",
+        "size": "md",
+      },
+      "duration": 0.05,
+      "sound": {
+        "durationRatio": 0.75,
+        "formants": [
+          700,
+          1200,
+        ],
+        "frequency": 196.09937714718654,
+        "gain": 0.5,
+        "glide": -5,
+        "waveform": "sawtooth",
+      },
+      "start": 0.06666666666666667,
+      "tokenIndex": 1,
+    },
+    {
+      "dot": {
+        "color": "var(--orange)",
+        "size": "md",
+      },
+      "duration": 0.04,
+      "sound": {
+        "durationRatio": 0.6,
+        "formants": [
+          800,
+          1400,
+        ],
+        "frequency": 236.07859467706842,
+        "gain": 0.5,
+        "glide": -6,
+        "waveform": "sawtooth",
+      },
+      "start": 0.13333333333333333,
+      "tokenIndex": 2,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "sm",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "formants": [
+          600,
+          1000,
+        ],
+        "frequency": 152.60806030384967,
+        "gain": 0.5,
+        "glide": -3,
+        "waveform": "sawtooth",
+      },
+      "start": 0.2,
+      "tokenIndex": 3,
+    },
+    {
+      "dot": {
+        "color": "var(--olive)",
+        "size": "lg",
+      },
+      "duration": 0.06,
+      "sound": {
+        "durationRatio": 0.9,
+        "formants": [
+          500,
+          900,
+        ],
+        "frequency": 119.35630911175647,
+        "gain": 0.5,
+        "glide": -2,
+        "waveform": "sawtooth",
+      },
+      "start": 0.26666666666666666,
+      "tokenIndex": 4,
+    },
+    {
+      "dot": {
+        "color": "var(--orange)",
+        "size": "md",
+      },
+      "duration": 0.04,
+      "sound": {
+        "durationRatio": 0.6,
+        "formants": [
+          800,
+          1400,
+        ],
+        "frequency": 229.88720955251003,
+        "gain": 0.5,
+        "glide": -6,
+        "waveform": "sawtooth",
+      },
+      "start": 0.5333333333333333,
+      "tokenIndex": 7,
+    },
+    {
+      "dot": {
+        "color": "var(--blue)",
+        "size": "md",
+      },
+      "duration": 0.05,
+      "sound": {
+        "durationRatio": 0.75,
+        "formants": [
+          700,
+          1200,
+        ],
+        "frequency": 198.12706027709453,
+        "gain": 0.5,
+        "glide": -5,
+        "waveform": "sawtooth",
+      },
+      "start": 0.6,
+      "tokenIndex": 8,
+    },
+    {
+      "dot": {
+        "color": "var(--orange)",
+        "size": "md",
+      },
+      "duration": 0.04,
+      "sound": {
+        "durationRatio": 0.6,
+        "formants": [
+          800,
+          1400,
+        ],
+        "frequency": 233.14875239392163,
+        "gain": 0.5,
+        "glide": -6,
+        "waveform": "sawtooth",
+      },
+      "start": 0.6666666666666666,
+      "tokenIndex": 9,
+    },
+    {
+      "dot": {
+        "color": "var(--teal)",
+        "size": "sm",
+      },
+      "duration": 0.03333333333333333,
+      "sound": {
+        "durationRatio": 0.5,
+        "formants": [
+          600,
+          1000,
+        ],
+        "frequency": 158.9418520928752,
+        "gain": 0.5,
+        "glide": -3,
+        "waveform": "sawtooth",
+      },
+      "start": 0.7333333333333333,
+      "tokenIndex": 10,
+    },
+    {
+      "dot": {
+        "color": "var(--orange)",
+        "size": "md",
+      },
+      "duration": 0.04,
+      "sound": {
+        "durationRatio": 0.6,
+        "formants": [
+          800,
+          1400,
+        ],
+        "frequency": 240.2420231266244,
+        "gain": 0.5,
+        "glide": -6,
+        "waveform": "sawtooth",
+      },
+      "start": 0.7999999999999999,
+      "tokenIndex": 11,
+    },
+  ],
+}
+`;
