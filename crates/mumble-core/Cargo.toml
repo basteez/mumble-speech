@@ -1,0 +1,18 @@
+[package]
+name = "mumble-speech"
+description = "Video-game mumble speech synthesis (beep, grunt, alphabet styles). Deterministic, no_std."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "mumble_speech"
+
+[dependencies]
+libm = "0.2.16"
+unicode-normalization = { version = "0.1.26", default-features = false }
+unicode-segmentation = "1.13.3"
+
+[dev-dependencies]
+unicode-segmentation = "1.13.3"

@@ -1,31 +1,31 @@
-# Mumble Speech — Specifiche
+# Mumble Speech — Specifications
 
-Libreria che genera "mumble speech" (il parlato finto dei videogiochi) in tre
-stili: core in Rust con binding per web (WASM/npm), Godot, Unity e C ABI.
+Library that generates "mumble speech" (the fake speech of video games) in three
+styles: Rust core with bindings for web (WASM/npm), Godot, Unity and C ABI.
 
-La pagina web di prova è un progetto separato, `mumble-speech-playground`, con
-le sue spec.
+The test web page is a separate project, `mumble-speech-playground`, with
+its own specs.
 
-## Documenti
+## Documents
 
-| File | Contenuto | Domanda a cui risponde |
+| File | Content | Question it answers |
 |---|---|---|
-| [requirements.md](requirements.md) | Requisiti numerati: comportamento (R*) e libreria (L*) | *Cosa* deve fare |
-| [design.md](design.md) | Architettura, algoritmi, binding, CI | *Come* lo fa |
-| [tasks.md](tasks.md) | Piano di implementazione tracciabile | *In che ordine* lo costruiamo |
+| [requirements.md](requirements.md) | Numbered requirements: behavior (R*) and library (L*) | *What* it must do |
+| [design.md](design.md) | Architecture, algorithms, bindings, CI | *How* it does it |
+| [tasks.md](tasks.md) | Traceable implementation plan | *In what order* we build it |
 
-## Regole del processo
+## Process rules
 
-1. Le spec sono la fonte di verità. Un cambio di comportamento si fa prima qui,
-   poi nel codice.
-2. Ogni requisito ha un ID (`R3.2`, `L3.2`). Task, test e commit lo citano.
-3. Un task è chiuso solo quando i criteri di accettazione collegati sono
-   verificati (test automatico o checklist manuale indicata nel task).
-4. Le decisioni prese durante l'implementazione che non sono già nelle spec
-   vanno aggiunte in `design.md` → *Registro decisioni*.
+1. The specs are the source of truth. A behavior change is made here first,
+   then in the code.
+2. Every requirement has an ID (`R3.2`, `L3.2`). Tasks, tests and commits cite it.
+3. A task is closed only when the linked acceptance criteria are
+   verified (automated test or manual checklist indicated in the task).
+4. Decisions made during implementation that are not already in the specs
+   must be added to `design.md` → *Decision log*.
 
-## Stato
+## Status
 
-- [x] requirements.md approvato (2026-10-19; R* dalla prima versione, L* dalla spec della libreria)
-- [x] design.md approvato (2026-10-19)
-- [x] tasks.md approvato (2026-10-19)
+- [x] requirements.md approved (2026-10-19; R* from the first version, L* from the library spec)
+- [x] design.md approved (2026-10-19)
+- [x] tasks.md approved (2026-10-19)

@@ -1,40 +1,40 @@
 # Design
 
-Stato: **approvato il 2026-10-19.** Riferimenti ai requisiti tra parentesi
-quadre, per esempio [L3.2]. Gli algoritmi (§4–§7) vengono dalla prima versione
-in TypeScript; i punti cambiati sono in §8.
+Status: **approved on 2026-10-19.** References to requirements in square
+brackets, for example [L3.2]. The algorithms (§4–§7) come from the first version
+in TypeScript; the points that changed are in §8.
 
-## 1. Struttura del repository
+## 1. Repository structure
 
-Monorepo con workspace Cargo e npm.
+Monorepo with Cargo and npm workspaces.
 
 ```
 crates/
-  mumble-core/        # tutta la logica, #![no_std] + alloc [L1.1, L1.3]
+  mumble-core/        # package `mumble-speech` (LQ1): all the logic, #![no_std] + alloc [L1.1, L1.3]
   mumble-ffi/         # C ABI: cdylib + staticlib, header via cbindgen [L4.3–L4.5]
-  mumble-wasm/        # export wasm-bindgen [L4.1]
+  mumble-wasm/        # wasm-bindgen exports [L4.1]
   mumble-godot/       # GDExtension via godot-rust (gdext) [L4.6]
-  mumble-conformance/ # generatore dei vettori [L5.1]
+  mumble-conformance/ # vector generator [L5.1]
 packages/
-  web/                # @mumble-speech/web: wrapper TS + WebAudioPlayer [L4.1]
+  web/                # @mumble-speech/web: TS wrapper + WebAudioPlayer [L4.1]
 bindings/
-  c/                  # mumble.h generato, esempio e test CMake
-  godot/              # addons/mumble_speech + progetto di esempio e test
-  unity/              # pacchetto UPM: Runtime/, Plugins/, Samples~/, Tests/
+  c/                  # generated mumble.h, CMake example and tests
+  godot/              # addons/mumble_speech + example project and tests
+  unity/              # UPM package: Runtime/, Plugins/, Samples~/, Tests/
 conformance/
   vectors.json        # [L5.1]
 specs/
 ```
 
-## 2. API del core (Rust)
+## 2. Core API (Rust)
 
 ```rust
 pub enum StyleId { Beep, Grunt, Alphabet }
 
 pub struct Voice {
     pub style: StyleId,
-    pub pitch: f64,      // semitoni, −12..12
-    pub speed: f64,      // caratteri/s, 5..30
+    pub pitch: f64,      // semitones, −12..12
+    pub speed: f64,      // characters/s, 5..30
     pub variation: f64,  // 0..1
     pub seed: u32,       // [L1.6]
 }
@@ -42,129 +42,145 @@ pub struct Voice {
 pub enum DotSize { Sm, Md, Lg }
 pub struct Dot { pub rgb: u32, pub size: DotSize }        // 0xRRGGBB [L2.3]
 
+impl Voice {
+    pub const fn new(style: StyleId) -> Voice;      // pitch 0, speed 15, variation 0, seed 0
+    pub fn validate(&self) -> Result<(), Error>;    // [L1.7]
+}
+
+pub enum Error { PitchOutOfRange, SpeedOutOfRange, VariationOutOfRange, SampleRateOutOfRange }
+
 pub struct Event {
     pub grapheme_index: u32,
-    pub utf8: Range<u32>,
-    pub utf16: Range<u32>,                                // per JS e C# [L2.3]
-    pub start: f64, pub duration: f64,                    // secondi
+    pub utf8_start: u32, pub utf8_len: u32,
+    pub utf16_start: u32, pub utf16_len: u32,             // for JS and C# [L2.3]
+    pub start: f64, pub duration: f64,                    // seconds
     pub dot: Dot,
 }
 
 pub struct Timeline { pub events: Vec<Event>, pub duration: f64 }
 
-pub fn timeline(text: &str, voice: &Voice) -> Timeline;                    // [L2.2]
-pub fn render(text: &str, voice: &Voice, sample_rate: u32) -> Render;     // [L2.1]
-pub struct Render { pub samples: Vec<f32>, pub timeline: Timeline }
-pub fn encode_wav(samples: &[f32], sample_rate: u32) -> Vec<u8>;         // [L2.4]
+pub fn timeline(text: &str, voice: &Voice) -> Result<Timeline, Error>;                 // [L2.2]
+pub fn render(text: &str, voice: &Voice, sample_rate: u32) -> Result<Render, Error>;  // [L2.1]
+pub struct Render { pub samples: Vec<f32>, pub sample_rate: u32, pub timeline: Timeline }
+pub fn encode_wav(samples: &[f32], sample_rate: u32) -> Vec<u8>;                      // [L2.4]
 
-pub struct Speaker { /* voice, rng, prev, sample_rate */ }                // [L3]
+pub struct Speaker { /* voice, sample rate, style rng, noise rng, previous variant */ } // [L3]
 impl Speaker {
-    pub fn new(voice: Voice, sample_rate: u32) -> Self;
+    pub fn new(voice: Voice, sample_rate: u32) -> Result<Speaker, Error>;
     pub fn next(&mut self, text: &str) -> Utterance;
     pub fn reset(&mut self);
 }
 pub struct Utterance { pub samples: Vec<f32>, pub advance: f64, pub dot: Option<Dot> }
 ```
 
-`render` è implementato sopra `Speaker`: per ogni grafema chiama `next` e
-scrive i campioni a `round(t × sampleRate)`, con `t` pari agli advance
-cumulati. Così L3.2 vale per costruzione, ed è comunque verificato da un test.
+`render` is implemented on top of `Speaker`: for each grapheme it uses the same
+planning and synthesis as `next` and writes the samples at
+`round(t × sampleRate)`, with `t` equal to the cumulative advances. This way
+L3.2 holds by construction, and it is verified by a test anyway.
 
-Dipendenze del core: `libm` (matematica deterministica [L1.4]) e
-`unicode-segmentation` (grafemi, `no_std`). Nient'altro.
+The style rng and the noise rng (consonant bursts) are both part of the
+Speaker state, so they advance in the same order in both APIs.
 
-## 3. Determinismo cross-platform [L1.4]
+Test-only internals (sound specs, style tables, single-sound synthesis) are
+exposed under `mumble_speech::internals`, `#[doc(hidden)]` and outside the
+stable API.
 
-- Tutti i calcoli interni in `f64`, uscita convertita in `f32` solo alla fine.
-- Funzioni trascendenti (`sin`, `cos`, `exp`, `pow`, `log2`) solo da `libm`,
-  mai da `std` o dalla libm di sistema, che differiscono tra piattaforme.
-- Rust non fonde le operazioni in FMA in automatico; non si usa `mul_add`.
-- Nessuna iterazione su `HashMap`; le tabelle sono array.
-- Posizioni in campioni con `round` di `libm`.
-- Verifica: gli stessi vettori di conformità girano su nativo (macOS, Windows,
-  Linux) e su WASM in CI, confrontando l'hash del PCM.
+Core dependencies: `libm` (deterministic math [L1.4]), `unicode-segmentation`
+(graphemes) and `unicode-normalization` (diacritic stripping, R1.4), all
+`no_std`. Nothing else.
 
-## 4. Algoritmi
+## 3. Cross-platform determinism [L1.4]
 
-### 4.1 Normalizzazione e tokenizzazione [R1.4, R1.5]
+- All internal computations in `f64`, output converted to `f32` only at the end.
+- Transcendental functions (`sin`, `cos`, `exp`, `pow`, `log2`) only from `libm`,
+  never from `std` or from the system libm, which differ across platforms.
+- Rust does not fuse operations into FMA automatically; `mul_add` is not used.
+- No iteration over `HashMap`; tables are arrays.
+- Sample positions with `libm`'s `round`.
+- Verification: the same conformance vectors run on native (macOS, Windows,
+  Linux) and on WASM in CI, comparing the PCM hash.
+
+## 4. Algorithms
+
+### 4.1 Normalization and tokenization [R1.4, R1.5]
 
 1. `base = char.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()`.
-2. Classificazione, in quest'ordine:
-   - `\n` o `. ! ? …` → `pause-long`
+2. Classification, in this order:
+   - `\n` or `. ! ? …` → `pause-long`
    - `, ; :` → `pause-short`
-   - spazi e tab → `space`
+   - spaces and tabs → `space`
    - `base` in `a–z` → `letter`
    - `0–9` → `digit`
-   - tutto il resto → `other` (emoji, alfabeti non latini, simboli)
-3. Si itera per *grapheme* (`Intl.Segmenter`), così un'emoji composta conta come un solo token.
+   - everything else → `other` (emoji, non-Latin alphabets, symbols)
+3. Iteration is per *grapheme* (`Intl.Segmenter`), so a composite emoji counts as a single token.
 
-### 4.2 Determinismo [R3.8]
+### 4.2 Determinism [R3.8]
 
-- `seed = fnv1a(styleId) XOR voice.seed` (LD1; nella prima versione derivava dal testo).
-- `rng = mulberry32(seed)`: unica sorgente di casualità, consumata in ordine di token.
-- Nessuna altra sorgente di casualità nel core.
+- `seed = fnv1a(styleId) XOR voice.seed` (LD1; in the first version it was derived from the text).
+- `rng = mulberry32(seed)`: the only source of randomness, consumed in token order.
+- No other source of randomness in the core.
 
 ### 4.3 Scheduling [R3.6, R3.7, R7.4]
 
 ```
 slot = 1 / voice.speed
 t = 0
-per ogni token:
+for each token:
   space        → t += 1 slot
   pause-short  → t += 2 slot
   pause-long   → t += 4 slot
-  sonoro       → { sound, dot } = style.voice(token, rng, prev)
-                 dur = sound.durationRatio * slot      // ≤ 0.9 slot ⇒ nessuna sovrapposizione
-                 semitoni = voice.pitch + (rng() * 2 - 1) * voice.variation * 2
-                 freq = sound.frequency * 2^(semitoni / 12)
-                 emetti evento(start = t, duration = dur)
+  sounding     → { sound, dot } = style.voice(token, rng, prev)
+                 dur = sound.durationRatio * slot      // ≤ 0.9 slot ⇒ no overlap
+                 semitones = voice.pitch + (rng() * 2 - 1) * voice.variation * 2
+                 freq = sound.frequency * 2^(semitones / 12)
+                 emit event(start = t, duration = dur)
                  t += 1 slot
-duration = ultimo evento.start + ultimo evento.duration + 0.05
+duration = last event.start + last event.duration + 0.05
 ```
 
-Nota: `rng()` per la variazione si consuma **sempre**, anche con variazione 0,
-così la sequenza casuale degli stili non dipende dalla variazione.
+Note: `rng()` for the variation is **always** consumed, even with variation 0,
+so that the styles' random sequence does not depend on the variation.
 
-## 5. Stili
+## 5. Styles
 
-Frequenze base prima della trasposizione [R4.2].
+Base frequencies before transposition [R4.2].
 
 ### 5.1 `beep` [R3.1]
 
-| Proprietà | Valore |
+| Property | Value |
 |---|---|
-| Forma d'onda | `square` |
-| Frequenza | 520 Hz |
+| Waveform | `square` |
+| Frequency | 520 Hz |
 | `durationRatio` | 0.5 |
 | Gain | 0.35 |
-| Pallino | colore `--teal`, `md` |
+| Dot | color `--teal`, `md` |
 
-Nessun uso di `rng` dentro lo stile.
+No use of `rng` inside the style.
 
 ### 5.2 `grunt` [R3.2, R3.3]
 
-Quattro grunt fissi: onda `sawtooth` filtrata passa-basso, glissando verso il basso.
+Four fixed grunts: low-pass filtered `sawtooth` wave, downward glissando.
 
-| # | Frequenza | Glide | `durationRatio` | Formanti | Pallino |
+| # | Frequency | Glide | `durationRatio` | Formants | Dot |
 |---|---|---|---|---|---|
 | 0 | 140 Hz | −3 | 0.5 | 600 / 1000 | `--teal`, `sm` |
 | 1 | 180 Hz | −5 | 0.75 | 700 / 1200 | `--blue`, `md` |
 | 2 | 110 Hz | −2 | 0.9 | 500 / 900 | `--olive`, `lg` |
 | 3 | 210 Hz | −6 | 0.6 | 800 / 1400 | `--orange`, `md` |
 
-Scelta: `i = floor(rng() * 4)`; se `i` coincide con il grunt precedente,
-`i = (i + 1 + floor(rng() * 3)) % 4`. Così la distribuzione resta uniforme sui
-tre grunt ammessi.
+Choice: `i = floor(rng() * 4)`; if `i` matches the previous grunt,
+`i = (i + 1 + floor(rng() * 3)) % 4`. This way the distribution stays uniform over the
+three allowed grunts.
 
 ### 5.3 `alphabet` [R3.4, R3.5, R3.9, R3.10] (D9)
 
-Ogni lettera = attacco consonantico opzionale (rumore filtrato) + vocale
-sintetizzata con un tratto vocale a 3 formanti in cascata.
+Each letter = optional consonant attack (filtered noise) + vowel
+synthesized with a 3-formant cascade vocal tract.
 
-Formanti delle vocali italiane (voce media-acuta, adatta a un'altezza di
-240 Hz), come coppie frequenza / larghezza di banda in Hz:
+Formants of the Italian vowels (medium-high voice, suited to a pitch of
+240 Hz), as frequency / bandwidth pairs in Hz:
 
-| Vocale | F1 | F2 | F3 |
+| Vowel | F1 | F2 | F3 |
 |---|---|---|---|
 | a | 850 / 90 | 1400 / 110 | 2800 / 170 |
 | e | 450 / 80 | 2200 / 110 | 2900 / 170 |
@@ -173,12 +189,12 @@ Formanti delle vocali italiane (voce media-acuta, adatta a un'altezza di
 | u | 340 / 70 | 800 / 100 | 2700 / 170 |
 | schwa | 550 / 90 | 1550 / 110 | 2650 / 170 |
 
-Vocale di ogni lettera:
+Vowel of each letter:
 
-- le vocali `a e i o u` usano **la propria vocale** [R3.9];
-- le consonanti usano la vocale del proprio nome inglese, stile Animalese (D4):
+- the vowels `a e i o u` use **their own vowel** [R3.9];
+- the consonants use the vowel of their English name, Animalese style (D4):
 
-| Consonanti | Vocale |
+| Consonants | Vowel |
 |---|---|
 | b c d g p t v z | i |
 | f l m n s x | e |
@@ -186,86 +202,86 @@ Vocale di ogni lettera:
 | r y | a |
 | q w | u |
 
-Con `n = indice della lettera (a = 0 … z = 25)`:
+With `n = letter index (a = 0 … z = 25)`:
 
-- forma d'onda `sawtooth`, frequenza base `240 × 2^(o / 12)` con
-  `o = ((n × 7) mod 5 − 2) × 0.5` semitoni, quindi `o ∈ {−1, −0.5, 0, 0.5, 1}` [R3.10];
-- `glide` −1.5 semitoni: l'altezza cala leggermente dentro ogni sillaba, come nel parlato;
-- `noiseBurst` solo per le consonanti: `centerHz = 1500 + n × 250`, `durationMs = 12`;
+- `sawtooth` waveform, base frequency `240 × 2^(o / 12)` with
+  `o = ((n × 7) mod 5 − 2) × 0.5` semitones, hence `o ∈ {−1, −0.5, 0, 0.5, 1}` [R3.10];
+- `glide` −1.5 semitones: the pitch drops slightly within each syllable, as in speech;
+- `noiseBurst` only for consonants: `centerHz = 1500 + n × 250`, `durationMs = 12`;
 - `durationRatio = 0.85`, gain 0.4;
-- pallino: `hsl(round(n × 360 / 26), 55%, 55%)`, `md`.
+- dot: `hsl(round(n × 360 / 26), 55%, 55%)`, `md`.
 
-La coppia (vocale, `o`, `centerHz`) è diversa per ogni lettera; un test
-verifica che le 26 `SoundSpec` siano tutte distinte [R3.4].
+The tuple (vowel, `o`, `centerHz`) is different for each letter; a test
+verifies that the 26 `SoundSpec`s are all distinct [R3.4].
 
-Cifre e `other`: schwa, 240 Hz, stesso glide, nessun rumore, pallino grigio
+Digits and `other`: schwa, 240 Hz, same glide, no noise, gray dot
 `--muted` [R3.5].
 
-Verifica di R3.9: per ogni vocale si sintetizza un evento lungo a 100 Hz (a
-240 Hz le armoniche sono troppo rade e il risultato dipende da dove cadono) e si misura
-l'energia (Goertzel, in dB) nelle bande ±100 Hz attorno a F1, F2 e F3 di
-ciascuna delle cinque vocali. Ogni banda si normalizza sottraendo la media
-delle cinque vocali, così si elimina la pendenza spettrale comune (−6 dB/ottava),
-che altrimenti favorirebbe sempre le vocali con formanti bassi. La vocale con
-il punteggio più alto deve essere quella giusta. Il test usa solo la tabella
-dei formanti, non il codice del filtro.
-## 6. Sintesi [R5.5, L2.5] (D6)
+Verification of R3.9: for each vowel a long event is synthesized at 100 Hz (at
+240 Hz the harmonics are too sparse and the result depends on where they fall) and the
+energy (Goertzel, in dB) is measured in the ±100 Hz bands around F1, F2 and F3 of
+each of the five vowels. Each band is normalized by subtracting the mean
+of the five vowels, which removes the common spectral tilt (−6 dB/octave),
+that would otherwise always favor the vowels with low formants. The vowel with
+the highest score must be the right one. The test uses only the formant
+table, not the filter code.
+## 6. Synthesis [R5.5, L2.5] (D6)
 
-Funzione pura: timeline + sample rate → campioni `f32`.
+Pure function: timeline + sample rate → `f32` samples.
 
-- Buffer di `ceil(duration × sampleRate)` campioni. Ogni evento scrive solo
-  nei propri campioni `[start, start + duration)`, quindi il costo è lineare nel
-  numero di campioni sonori.
-- Oscillatore: accumulatore di fase. `square` e `sawtooth` con correzione
-  PolyBLEP contro l'aliasing; `sine` e `triangle` diretti.
-- `glide`: frequenza istantanea esponenziale da `f` a `f × 2^(glide/12)` lungo
-  l'evento.
-- `formants`: due biquad passa-banda in parallelo (RBJ cookbook, guadagno di
-  picco 0 dB, Q = 8), ciascuno × 3 di makeup (D5). Stato dei filtri azzerato a
-  ogni evento.
-- `vocalTract`: risonatori di Klatt in cascata (guadagno unitario in continua,
-  `y = A·x + B·y₁ + C·y₂`), uno per formante, seguiti da un guadagno di
-  calibrazione fisso che porta il livello delle vocali vicino a quello degli
-  altri stili. In cascata le ampiezze relative dei formanti escono già corrette,
-  senza tarare un guadagno per formante (D9).
-- Inviluppo: attacco lineare 3 ms, sustain, rilascio lineare negli ultimi 15 ms
-  (o 30% della durata se più corta), così non ci sono click.
-- `noiseBurst`: rumore bianco da `mulberry32(fnv1a('noise'))` (mai
-  `Math.random`) → passa-banda a `centerHz`, Q = 2 → decadimento esponenziale
-  fino a −60 dB in `durationMs`.
-- Master gain 0.8. Il picco si limita **per suono**: se un suono supera 0.98,
-  si scala quel suono per riportarlo a 0.98 [R5.5] (LD2).
+- Buffer of `ceil(duration × sampleRate)` samples. Each event writes only
+  to its own samples `[start, start + duration)`, so the cost is linear in the
+  number of sounding samples.
+- Oscillator: phase accumulator. `square` and `sawtooth` with PolyBLEP
+  correction against aliasing; `sine` and `triangle` direct.
+- `glide`: exponential instantaneous frequency from `f` to `f × 2^(glide/12)` across
+  the event.
+- `formants`: two band-pass biquads in parallel (RBJ cookbook, peak gain
+  0 dB, Q = 8), each × 3 makeup (D5). Filter state reset at
+  every event.
+- `vocalTract`: Klatt resonators in cascade (unity gain at DC,
+  `y = A·x + B·y₁ + C·y₂`), one per formant, followed by a fixed calibration
+  gain that brings the vowels' level close to that of the
+  other styles. In cascade the relative amplitudes of the formants already come out correct,
+  without tuning a gain per formant (D9).
+- Envelope: linear attack 3 ms, sustain, linear release over the last 15 ms
+  (or 30% of the duration if shorter), so there are no clicks.
+- `noiseBurst`: white noise from `mulberry32(fnv1a('noise'))` (never
+  `Math.random`) → band-pass at `centerHz`, Q = 2 → exponential decay
+  down to −60 dB in `durationMs`.
+- Master gain 0.8. The peak is limited **per sound**: if a sound exceeds 0.98,
+  that sound is scaled to bring it back to 0.98 [R5.5] (LD2).
 ## 7. WAV [R7.1, L2.4]
 
 `encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer`
 
-- Header RIFF/WAVE standard, `fmt ` PCM (formato 1), 1 canale, 16 bit.
-- Conversione: `clamp(x, −1, 1)`, poi `x < 0 ? x × 0x8000 : x × 0x7FFF`, little-endian.
-- Funzione pura, prende direttamente l'output del render.
+- Standard RIFF/WAVE header, `fmt ` PCM (format 1), 1 channel, 16 bit.
+- Conversion: `clamp(x, −1, 1)`, then `x < 0 ? x × 0x8000 : x × 0x7FFF`, little-endian.
+- Pure function, takes the render output directly.
 
-## 8. Cambiamenti rispetto alla prima versione (TypeScript)
+## 8. Changes from the first version (TypeScript)
 
-| # | Cosa | Prima | Ora | Motivo |
+| # | What | Before | Now | Rationale |
 |---|---|---|---|---|
-| LD1 | Seed | `fnv1a(stile + testo)` | `fnv1a(stile) XOR voice.seed` | In modalità macchina da scrivere lo Speaker non conosce il testo che segue [L1.6, L3.2]. Chi vuole varietà tra battute passa un seed diverso, per esempio l'id della battuta. |
-| LD2 | Limitazione del picco | Scala globale del buffer | Ogni suono limitato a 0,98 da solo | Con una scala globale `render` e Speaker non coinciderebbero. Gli eventi non si sovrappongono, quindi R5.5 resta valido. |
-| LD3 | Colore del pallino | Stringa CSS (`var(--teal)`, `hsl(…)`) | `0xRRGGBB` | Neutro rispetto alla piattaforma. I colori dei temi CSS diventano: teal `0x3f8f78`, blue `0x3f6fc4`, olive `0x7d8f45`, orange `0xb85a33`, muted `0x9aa0a6`; `hsl(h 55% 55%)` si converte in RGB. |
-| LD4 | Sample rate di default | 44 100 | 48 000 | Default di Unity e dei dispositivi moderni. |
-| LD5 | Implementazione | TypeScript (nel playground) | Rust | Un'unica implementazione [L1.1]. I test Vitest del core TS diventano test Rust e vettori di conformità. |
+| LD1 | Seed | `fnv1a(style + text)` | `fnv1a(style) XOR voice.seed` | In typewriter mode the Speaker does not know the text that follows [L1.6, L3.2]. Whoever wants variety between lines passes a different seed, for example the line's id. |
+| LD2 | Peak limiting | Global buffer scaling | Each sound limited to 0.98 on its own | With a global scaling `render` and Speaker would not match. Events do not overlap, so R5.5 still holds. |
+| LD3 | Dot color | CSS string (`var(--teal)`, `hsl(…)`) | `0xRRGGBB` | Platform-neutral. The CSS theme colors become: teal `0x3f8f78`, blue `0x3f6fc4`, olive `0x7d8f45`, orange `0xb85a33`, muted `0x9aa0a6`; `hsl(h 55% 55%)` is converted to RGB. |
+| LD4 | Default sample rate | 44,100 | 48,000 | Default of Unity and of modern devices. |
+| LD5 | Implementation | TypeScript (in the playground) | Rust | A single implementation [L1.1]. The Vitest tests of the TS core become Rust tests and conformance vectors. |
 
-## 9. Binding
+## 9. Bindings
 
 ### 9.1 Web: `mumble-wasm` + `@mumble-speech/web` [L4.1, L4.2]
 
-- `wasm-bindgen` (versione fissata) con `--target web`, build con
-  `opt-level = "z"`, LTO e `wasm-opt -Oz`.
-- Gli oggetti attraversano il confine in forma compatta: i campioni come
-  `Float32Array`, gli eventi come `Float64Array` impacchettato. Il wrapper TS li
-  trasforma in oggetti tipizzati. Niente `serde`, per il peso [L4.2].
-- API TS:
+- `wasm-bindgen` (pinned version) with `--target web`, build with
+  `opt-level = "z"`, LTO and `wasm-opt -Oz`.
+- Objects cross the boundary in compact form: samples as
+  `Float32Array`, events as a packed `Float64Array`. The TS wrapper
+  turns them into typed objects. No `serde`, for size [L4.2].
+- TS API:
 
 ```ts
-await init();                        // carica il WASM, idempotente
+await init();                        // loads the WASM, idempotent
 render(text, voice, sampleRate?) → { samples: Float32Array; timeline: Timeline }
 timeline(text, voice) → Timeline
 encodeWav(samples, sampleRate) → Uint8Array
@@ -273,8 +289,8 @@ new Speaker(voice, sampleRate?)  .next(text) → Utterance  .reset()  .free()
 new WebAudioPlayer()  .unlock()  .play(samples, sampleRate)  .stop()  .position()
 ```
 
-- `WebAudioPlayer` è il `Player` del playground, spostato nel pacchetto.
-- Test: Vitest in Node carica il WASM ed esegue i vettori [L5.2]. Una prova di consumo esterno fa `npm pack`, installa il tarball in un progetto vuoto e usa l'API pubblica [L6.2].
+- `WebAudioPlayer` is the playground's `Player`, moved into the package.
+- Tests: Vitest in Node loads the WASM and runs the vectors [L5.2]. An external consumption check runs `npm pack`, installs the tarball in an empty project and uses the public API [L6.2].
 
 ### 9.2 C ABI: `mumble-ffi` [L4.3–L4.5]
 
@@ -285,10 +301,10 @@ typedef struct { uint32_t style; double pitch, speed, variation; uint32_t seed; 
 typedef struct { uint32_t grapheme_index, utf8_start, utf8_len, utf16_start, utf16_len;
                  double start, duration; uint32_t dot_rgb; uint8_t dot_size; } MumbleEvent;
 
-typedef struct MumbleRender MumbleRender;   // opaco, posseduto dal chiamante
+typedef struct MumbleRender MumbleRender;   // opaque, owned by the caller
 int32_t mumble_render(const char *utf8, size_t len, const MumbleVoice *v,
                       uint32_t sample_rate, MumbleRender **out);
-const float *mumble_render_samples(const MumbleRender *r, size_t *len);  // valido fino a free
+const float *mumble_render_samples(const MumbleRender *r, size_t *len);  // valid until free
 size_t mumble_render_event_count(const MumbleRender *r);
 int32_t mumble_render_event(const MumbleRender *r, size_t i, MumbleEvent *out);
 void mumble_render_free(MumbleRender *r);
@@ -296,7 +312,7 @@ void mumble_render_free(MumbleRender *r);
 typedef struct MumbleSpeaker MumbleSpeaker;
 MumbleSpeaker *mumble_speaker_new(const MumbleVoice *v, uint32_t sample_rate);
 int32_t mumble_speaker_next(MumbleSpeaker *s, const char *utf8, size_t len,
-                            const float **samples, size_t *count,   // validi fino alla prossima chiamata
+                            const float **samples, size_t *count,   // valid until the next call
                             double *advance, uint32_t *dot_rgb, uint8_t *dot_size);
 void mumble_speaker_reset(MumbleSpeaker *s);
 void mumble_speaker_free(MumbleSpeaker *s);
@@ -306,88 +322,88 @@ int32_t mumble_encode_wav(const float *samples, size_t len, uint32_t sample_rate
 void mumble_bytes_free(uint8_t *p, size_t len);
 ```
 
-- Codici: `0` ok, `<0` errore (`-1` argomento nullo, `-2` UTF-8 non valido,
-  `-3` voce fuori range, `-99` panic intercettato con `catch_unwind`) [L4.4].
-- Header generato da `cbindgen` in build e committato in `bindings/c/`.
-- Test: programma C (CMake + CTest) che esegue un sottoinsieme dei vettori,
-  incorporati come header generato dal crate di conformità.
+- Codes: `0` ok, `<0` error (`-1` null argument, `-2` invalid UTF-8,
+  `-3` voice out of range, `-99` panic caught with `catch_unwind`) [L4.4].
+- Header generated by `cbindgen` at build time and committed in `bindings/c/`.
+- Tests: C program (CMake + CTest) that runs a subset of the vectors,
+  embedded as a header generated by the conformance crate.
 
 ### 9.3 Godot: `mumble-godot` [L4.6]
 
-- GDExtension scritta in Rust con `gdext`, che usa il core direttamente (non
-  la C ABI): un passaggio in meno, tipi Godot nativi.
-- Classi:
-  - `MumbleVoice` (`Resource`): `style`, `pitch`, `speed`, `variation`, `seed`, modificabili dall'inspector.
-  - `MumbleSpeaker` (`Node`): `voice`, `bus`; `say(text)`, `speak_character(c)`, `stop()`, `render_stream(text) → AudioStreamWAV`; segnali `character_spoken(index)` e `finished`. Al suo interno usa un `AudioStreamPlayer`.
-  - `MumbleTypewriter` (`Node`): `label: NodePath`, `speaker: NodePath`; `type_text(text)` imposta il testo, rivela un carattere alla volta con `visible_characters` usando gli advance e suona ogni carattere; segnale `finished`.
-- Distribuzione: `bindings/godot/addons/mumble_speech/` con il file
-  `.gdextension` e i binari per piattaforma in `bin/`.
-- Test: progetto Godot di test eseguito in CI con `godot --headless`, che
-  verifica i vettori tramite `MumbleSpeaker.render_stream` e il funzionamento del typewriter.
+- GDExtension written in Rust with `gdext`, which uses the core directly (not
+  the C ABI): one fewer layer, native Godot types.
+- Classes:
+  - `MumbleVoice` (`Resource`): `style`, `pitch`, `speed`, `variation`, `seed`, editable from the inspector.
+  - `MumbleSpeaker` (`Node`): `voice`, `bus`; `say(text)`, `speak_character(c)`, `stop()`, `render_stream(text) → AudioStreamWAV`; signals `character_spoken(index)` and `finished`. Internally it uses an `AudioStreamPlayer`.
+  - `MumbleTypewriter` (`Node`): `label: NodePath`, `speaker: NodePath`; `type_text(text)` sets the text, reveals one character at a time with `visible_characters` using the advances and plays each character; signal `finished`.
+- Distribution: `bindings/godot/addons/mumble_speech/` with the
+  `.gdextension` file and the per-platform binaries in `bin/`.
+- Tests: Godot test project run in CI with `godot --headless`, which
+  verifies the vectors via `MumbleSpeaker.render_stream` and the typewriter's behavior.
 
 ### 9.4 Unity [L4.7]
 
-- Pacchetto `com.mumble-speech.unity`:
-  - `Runtime/Native.cs`: `[DllImport("mumble_ffi")]` sulla C ABI.
+- Package `com.mumble-speech.unity`:
+  - `Runtime/Native.cs`: `[DllImport("mumble_ffi")]` over the C ABI.
   - `Runtime/MumbleVoice.cs` (`ScriptableObject`).
-  - `Runtime/MumbleSpeaker.cs` (`MonoBehaviour` con `AudioSource`): `Say(string)` crea un `AudioClip` con `AudioClip.Create` + `SetData`; `SpeakCharacter(string)`; eventi `OnCharacter(int)` e `OnFinished`.
-  - `Runtime/TMP/MumbleTypewriterTMP.cs` in un assembly separato, compilato solo se `com.unity.textmeshpro` è presente (`versionDefines`). Usa `maxVisibleCharacters` e gli advance.
-  - `Plugins/{macOS,Windows,Linux}/`: binari della C ABI.
-  - `Samples~/Basic`: scena di esempio [L4.9].
-  - `Tests/EditMode`: esecuzione dei vettori [L5.2].
-- Verifica: manuale, perché una licenza Unity in CI non è disponibile.
+  - `Runtime/MumbleSpeaker.cs` (`MonoBehaviour` with `AudioSource`): `Say(string)` creates an `AudioClip` with `AudioClip.Create` + `SetData`; `SpeakCharacter(string)`; events `OnCharacter(int)` and `OnFinished`.
+  - `Runtime/TMP/MumbleTypewriterTMP.cs` in a separate assembly, compiled only if `com.unity.textmeshpro` is present (`versionDefines`). Uses `maxVisibleCharacters` and the advances.
+  - `Plugins/{macOS,Windows,Linux}/`: C ABI binaries.
+  - `Samples~/Basic`: example scene [L4.9].
+  - `Tests/EditMode`: execution of the vectors [L5.2].
+- Verification: manual, because a Unity license in CI is not available.
 
-## 10. Build e CI [L4.3, L5.2]
+## 10. Build and CI [L4.3, L5.2]
 
-GitHub Actions, matrice:
+GitHub Actions, matrix:
 
-| Job | Runner | Produce / verifica |
+| Job | Runner | Produces / verifies |
 |---|---|---|
-| core | ubuntu, macos, windows | `cargo test`, vettori nativi, benchmark L2.5 |
-| wasm | ubuntu | build WASM, test Vitest del pacchetto, budget L4.2, consumo esterno L6.2 |
-| ffi | ubuntu, macos, windows | libreria nativa (macOS universal con `lipo`), test CTest |
-| godot | ubuntu | build GDExtension, test headless |
-| release | su tag | artefatti: zip dell'addon Godot, pacchetto Unity, tarball npm, archivio C |
+| core | ubuntu, macos, windows | `cargo test`, native vectors, L2.5 benchmark |
+| wasm | ubuntu | WASM build, package Vitest tests, L4.2 budget, L6.2 external consumption |
+| ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
+| godot | ubuntu | GDExtension build, headless tests |
+| release | on tag | artifacts: Godot addon zip, Unity package, npm tarball, C archive |
 
-## 11. Migrazione
+## 11. Migration
 
-1. Porting del core in Rust con i test del core TS (nel playground) tradotti:
-   stesse proprietà (determinismo, no sovrapposizioni, grunt mai ripetuti,
-   vocali R3.9…).
-2. Snapshot Vitest → vettori di conformità. Gli hash cambiano rispetto al TS
-   per LD1–LD2 e per l'uso di `libm`: è atteso.
-3. Il playground, nel suo repository, passa a `@mumble-speech/web` tramite il
-   tarball o una dipendenza `file:` [L6.2]. Quella migrazione è tracciata nelle
-   spec del playground.
-4. Solo dopo che il playground funziona con il pacchetto si aggiungono C ABI,
-   Godot e Unity.
+1. Port of the core to Rust with the TS core's tests (in the playground) translated:
+   same properties (determinism, no overlaps, grunts never repeated,
+   vowels R3.9…).
+2. Vitest snapshots → conformance vectors. The hashes change compared to TS
+   because of LD1–LD2 and the use of `libm`: this is expected.
+3. The playground, in its own repository, switches to `@mumble-speech/web` via the
+   tarball or a `file:` dependency [L6.2]. That migration is tracked in the
+   playground's specs.
+4. Only after the playground works with the package are C ABI,
+   Godot and Unity added.
 
-## 12. Rischi
+## 12. Risks
 
-| Rischio | Mitigazione |
+| Risk | Mitigation |
 |---|---|
-| Bit-exactness WASM ↔ nativo | `libm` ovunque + vettori in CI su tutte le piattaforme |
-| Quarantena di macOS sui `.dylib` scaricati (Godot, Unity) | Documentare `xattr -d`; firma e notarizzazione fuori scope v1 |
-| Compatibilità `gdext` con le versioni di Godot | Fissare la versione minima (4.3) e testarla in CI |
-| Peso del WASM | Niente `serde`, `opt-level = "z"`, `wasm-opt`, budget verificato in CI |
-| Unity non verificabile in CI | Test EditMode nel pacchetto + checklist manuale |
+| WASM ↔ native bit-exactness | `libm` everywhere + vectors in CI on all platforms |
+| macOS quarantine on downloaded `.dylib`s (Godot, Unity) | Document `xattr -d`; signing and notarization out of scope for v1 |
+| `gdext` compatibility with Godot versions | Pin the minimum version (4.3) and test it in CI |
+| WASM size | No `serde`, `opt-level = "z"`, `wasm-opt`, budget verified in CI |
+| Unity not verifiable in CI | EditMode tests in the package + manual checklist |
 
-## 13. Registro decisioni
+## 13. Decision log
 
-| # | Decisione | Alternativa scartata | Motivo |
+| # | Decision | Rejected alternative | Rationale |
 |---|---|---|---|
-| LD0 | Core unico in Rust + binding | Porting multipli; solo TS | Scelta dell'utente: una sola implementazione, output identico ovunque |
-| LD1–LD5 | Vedi §8 | | |
-| LD6 | Godot tramite `gdext` sul core, non tramite C ABI | GDExtension in C++ sulla C ABI | Meno codice di collegamento, tipi Godot nativi, stesso linguaggio del core |
-| LD7 | Hash dei vettori FNV-1a 64 | SHA-256 | Implementabile in poche righe in C, C#, GDScript e TS |
-| LD8 | Playground in un repository separato | `apps/playground` nel monorepo | Richiesta dell'utente: il repo della libreria contiene solo la libreria [L6.1] |
+| LD0 | Single core in Rust + bindings | Multiple ports; TS only | User's choice: a single implementation, identical output everywhere |
+| LD1–LD5 | See §8 | | |
+| LD6 | Godot via `gdext` on the core, not via the C ABI | C++ GDExtension on the C ABI | Less glue code, native Godot types, same language as the core |
+| LD7 | Vector hash FNV-1a 64 | SHA-256 | Implementable in a few lines in C, C#, GDScript and TS |
+| LD8 | Playground in a separate repository | `apps/playground` in the monorepo | User request: the library repo contains only the library [L6.1] |
 
-Decisioni ereditate dalla prima versione (ID invariati):
+Decisions inherited from the first version (IDs unchanged):
 
-| # | Decisione | Alternativa scartata | Motivo |
+| # | Decision | Rejected alternative | Rationale |
 |---|---|---|---|
-| D3 | Suoni ≤ 0.9 slot | Sovrapposizioni consentite | Niente clipping da somma, timeline più semplice |
-| D4 | Mapping vocale dal nome inglese delle lettere, solo per le consonanti (rivisto da D9) | Mapping arbitrario | Più vicino ad Animalese, regola spiegabile |
-| D5 | Makeup ×3 sui formanti | Nessuna compensazione | Un passa-banda stretto lascia passare circa un'armonica: senza makeup `grunt` e `alphabet` sono molto più bassi di `beep` |
-| D6 | Sintesi DSP in TypeScript (sostituisce il grafo `OfflineAudioContext`) | `OfflineAudioContext` | Misurato su Chrome: 1,4–9,5 s per 500 caratteri, perché i nodi restano attivi per tutta la durata (costo O(eventi × durata)), quindi violava il requisito di latenza del playground (R5.4). La sintesi diretta è lineare, testabile in Node e identica tra browser |
-| D9 | `alphabet`: vocali con 3 formanti in cascata, ogni vocale suona sé stessa, altezza quasi costante | 2 passa-banda stretti in parallelo, vocali dal nome inglese, ±6 semitoni tra lettere | Feedback all'ascolto: non sembrava Animal Crossing e le vocali non erano riconoscibili (la `a` suonava "e", la `i` suonava "a"). I passa-banda stretti fischiano, la cascata dà vocali credibili; i salti di nota facevano sembrare il risultato una melodia |
+| D3 | Sounds ≤ 0.9 slot | Overlaps allowed | No clipping from summing, simpler timeline |
+| D4 | Vowel mapping from the English name of the letters, only for consonants (revised by D9) | Arbitrary mapping | Closer to Animalese, explainable rule |
+| D5 | ×3 makeup on the formants | No compensation | A narrow band-pass lets through about one harmonic: without makeup `grunt` and `alphabet` are much quieter than `beep` |
+| D6 | DSP synthesis in TypeScript (replaces the `OfflineAudioContext` graph) | `OfflineAudioContext` | Measured on Chrome: 1.4–9.5 s for 500 characters, because the nodes stay active for the whole duration (cost O(events × duration)), so it violated the playground's latency requirement (R5.4). Direct synthesis is linear, testable in Node and identical across browsers |
+| D9 | `alphabet`: vowels with 3 cascaded formants, each vowel sounds as itself, nearly constant pitch | 2 narrow band-passes in parallel, vowels from the English name, ±6 semitones between letters | Listening feedback: it did not sound like Animal Crossing and the vowels were not recognizable (the `a` sounded like "e", the `i` sounded like "a"). Narrow band-passes whistle, the cascade gives believable vowels; the note jumps made the result sound like a melody |

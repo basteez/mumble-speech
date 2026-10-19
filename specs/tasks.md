@@ -1,81 +1,81 @@
-# Piano di implementazione
+# Implementation plan
 
-Stato: **approvato il 2026-10-19.** Ogni fase si chiude con la CI verde; ogni
-task cita i requisiti che copre.
+Status: **approved on 2026-10-19.** Each phase closes with green CI; each
+task cites the requirements it covers.
 
-## Fase A — Fondamenta
+## Phase A — Foundations
 
-- [x] **A1** `git init`, struttura monorepo (design §1), workspace Cargo e npm. Il playground è spostato in un repository separato (`../mumble-speech-playground`) insieme alle sue spec. — L6.1, LD8
-  - Fatto quando: il playground passa test e build nella nuova posizione e il repo della libreria non contiene app.
-- [ ] **A2** Repository GitHub e CI minima (job core). — LQ3
-  - Fatto quando: la CI è verde sul primo push.
+- [x] **A1** `git init`, monorepo structure (design §1), Cargo and npm workspaces. The playground is moved to a separate repository (`../mumble-speech-playground`) together with its specs. — L6.1, LD8
+  - Done when: the playground passes tests and build in the new location and the library repo contains no apps.
+- [ ] **A2** GitHub repository and minimal CI (core job). — LQ3
+  - Done when: CI is green on the first push.
 
-## Fase B — Core Rust
+## Phase B — Rust core
 
-- [ ] **B1** `mumble-core`: tipi, normalizzazione, tokenizzazione per grafemi, RNG. — L1.2 (R1.4, R1.5), L1.3
-- [ ] **B2** Stili `beep`, `grunt`, `alphabet` e scheduling, con seed da voce. — L1.2 (R3.x, R4.2, R4.3), L1.6, LD1
-- [ ] **B3** Sintesi con `libm`, limitazione del picco per suono, WAV. — L1.2 (R5.5, R7.1, R7.4), L1.4, L1.5, LD2
-- [ ] **B4** `Speaker` e `render` costruito sopra lo Speaker. — L2.1–L2.3, L3.1–L3.4
-  - Fatto quando: un test di proprietà su 200 testi casuali conferma L3.2 bit per bit.
-- [ ] **B5** Porting di tutti i test Vitest del core in Rust, più il benchmark di L2.5.
-  - Fatto quando: ogni test TS ha un corrispettivo Rust (tabella in fondo al file del test).
+- [x] **B1** `mumble-core`: types, normalization, tokenization by grapheme, RNG. — L1.2 (R1.4, R1.5), L1.3
+- [x] **B2** Styles `beep`, `grunt`, `alphabet` and scheduling, with seed from voice. — L1.2 (R3.x, R4.2, R4.3), L1.6, LD1
+- [x] **B3** Synthesis with `libm`, per-sound peak limiting, WAV. — L1.2 (R5.5, R7.1, R7.4), L1.4, L1.5, LD2
+- [x] **B4** `Speaker` and `render` built on top of the Speaker. — L2.1–L2.3, L3.1–L3.4
+  - Done when: a property test on 200 random texts confirms L3.2 bit for bit.
+- [x] **B5** Port of all the core's Vitest tests to Rust, plus the L2.5 benchmark.
+  - Done when: every TS test has a Rust counterpart (table at the bottom of the test file).
 
-## Fase C — Conformità
+## Phase C — Conformance
 
-- [ ] **C1** `mumble-conformance`: elenco di casi, generazione di `conformance/vectors.json` e dell'header C dei vettori. — L5.1, LD7
-- [ ] **C2** CI core su Linux, macOS e Windows con verifica dei vettori. — L1.4
+- [ ] **C1** `mumble-conformance`: list of cases, generation of `conformance/vectors.json` and of the vectors' C header. — L5.1, LD7
+- [ ] **C2** Core CI on Linux, macOS and Windows with vector verification. — L1.4
 
-## Fase D — Web
+## Phase D — Web
 
-- [ ] **D1** `mumble-wasm` + `@mumble-speech/web` (API di design §5.1, `WebAudioPlayer`). — L4.1
-- [ ] **D2** Test Vitest del pacchetto: vettori in Node, budget di peso. — L1.4, L4.2, L5.2
-- [ ] **D3** Prova di consumo esterno in CI: `npm pack`, installazione del tarball in un progetto vuoto, uso dell'API pubblica. — L6.2
-  - Dopo D3, il playground (nel suo repo) migra al pacchetto: task P1–P3 delle sue spec.
+- [ ] **D1** `mumble-wasm` + `@mumble-speech/web` (API from design §9.1, `WebAudioPlayer`). — L4.1
+- [ ] **D2** Vitest tests of the package: vectors in Node, size budget. — L1.4, L4.2, L5.2
+- [ ] **D3** External consumption check in CI: `npm pack`, installation of the tarball in an empty project, use of the public API. — L6.2
+  - After D3, the playground (in its own repo) migrates to the package: tasks P1–P3 of its specs.
 
-## Fase E — C ABI
+## Phase E — C ABI
 
-- [ ] **E1** `mumble-ffi` con `catch_unwind`, codici di errore, header `cbindgen`. — L4.3–L4.5
-- [ ] **E2** Esempio C e test CTest sui vettori; build in CI per le tre piattaforme (macOS universal). — L4.3, L5.2
+- [ ] **E1** `mumble-ffi` with `catch_unwind`, error codes, `cbindgen` header. — L4.3–L4.5
+- [ ] **E2** C example and CTest tests on the vectors; CI build for the three platforms (macOS universal). — L4.3, L5.2
 
-## Fase F — Godot
+## Phase F — Godot
 
-- [ ] **F1** `mumble-godot` con `gdext`: `MumbleVoice`, `MumbleSpeaker`, `MumbleTypewriter`. — L4.6
-- [ ] **F2** Addon in `bindings/godot`, progetto di esempio e test headless in CI. — L4.6, L4.9, L5.2
-- [ ] **F3** Verifica manuale in Godot 4.3 desktop: esempio, inspector, typewriter (checklist G1–G3). — L4.6
+- [ ] **F1** `mumble-godot` with `gdext`: `MumbleVoice`, `MumbleSpeaker`, `MumbleTypewriter`. — L4.6
+- [ ] **F2** Addon in `bindings/godot`, example project and headless tests in CI. — L4.6, L4.9, L5.2
+- [ ] **F3** Manual verification in Godot 4.3 desktop: example, inspector, typewriter (checklist G1–G3). — L4.6
 
-## Fase G — Unity
+## Phase G — Unity
 
-- [ ] **G1** Pacchetto UPM: `Native.cs`, `MumbleVoice`, `MumbleSpeaker`, typewriter TMP opzionale. — L4.7
-- [ ] **G2** Sample `Basic` e test EditMode sui vettori. — L4.9, L5.2
-- [ ] **G3** Verifica manuale in Unity 2022.3 LTS (checklist U1–U3). — L4.7
+- [ ] **G1** UPM package: `Native.cs`, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter. — L4.7
+- [ ] **G2** `Basic` sample and EditMode tests on the vectors. — L4.9, L5.2
+- [ ] **G3** Manual verification in Unity 2022.3 LTS (checklist U1–U3). — L4.7
 
-## Fase H — Rilascio
+## Phase H — Release
 
-- [ ] **H1** Job `release` su tag: zip dell'addon Godot, pacchetto Unity, tarball npm, archivio C. — L5.3
-- [ ] **H2** README per ogni binding con un esempio di 10 righe. — L4.8, L4.9
+- [ ] **H1** `release` job on tag: Godot addon zip, Unity package, npm tarball, C archive. — L5.3
+- [ ] **H2** README for each binding with a 10-line example. — L4.8, L4.9
 
-## Checklist manuale
+## Manual checklist
 
-| ID | Passi | Atteso | Requisiti |
+| ID | Steps | Expected | Requirements |
 |---|---|---|---|
-| G1 | Aprire `bindings/godot/example` in Godot 4.3, premere Play | Una battuta compare lettera per lettera con il suono sincronizzato | L4.6, L4.9 |
-| G2 | Creare una risorsa `MumbleVoice` dall'inspector e assegnarla | I parametri cambiano il suono senza scrivere codice | L4.6 |
-| G3 | Chiamare `say()` su un `MumbleSpeaker` da GDScript | Suona la frase, poi emette `finished` | L4.6 |
-| U1 | Importare il pacchetto da percorso locale in Unity 2022.3, aprire il sample `Basic` | Il sample suona senza errori in console | L4.7, L4.9 |
-| U2 | Eseguire i test EditMode | Tutti i vettori passano | L5.2 |
-| U3 | Con TextMeshPro installato, usare il typewriter | Testo e suono sincronizzati | L4.7 |
+| G1 | Open `bindings/godot/example` in Godot 4.3, press Play | A line of dialogue appears letter by letter with synchronized sound | L4.6, L4.9 |
+| G2 | Create a `MumbleVoice` resource from the inspector and assign it | The parameters change the sound without writing code | L4.6 |
+| G3 | Call `say()` on a `MumbleSpeaker` from GDScript | The sentence plays, then `finished` is emitted | L4.6 |
+| U1 | Import the package from a local path in Unity 2022.3, open the `Basic` sample | The sample plays without errors in the console | L4.7, L4.9 |
+| U2 | Run the EditMode tests | All vectors pass | L5.2 |
+| U3 | With TextMeshPro installed, use the typewriter | Text and sound synchronized | L4.7 |
 
-## Verificabilità su questa macchina
+## Verifiability on this machine
 
-- Disponibili: Rust 1.97, Node 26, CMake, clang. Da installare: target
+- Available: Rust 1.97, Node 26, CMake, clang. To install: target
   `wasm32-unknown-unknown`, `wasm-bindgen-cli`, `cbindgen`.
-- Non disponibili: Godot, Unity, .NET. Godot si verifica in CI (headless) e
-  con G1–G3 da parte tua; Unity solo con U1–U3 da parte tua.
-- Windows e Linux si verificano solo in CI.
+- Not available: Godot, Unity, .NET. Godot is verified in CI (headless) and
+  with G1–G3 by you; Unity only with U1–U3 by you.
+- Windows and Linux are verified only in CI.
 
-## Tracciabilità
+## Traceability
 
-| Requisito | Task |
+| Requirement | Task |
 |---|---|
 | L1 | B1–B5, C2 |
 | L2 | B4, B5 |
