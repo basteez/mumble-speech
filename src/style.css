@@ -1,0 +1,280 @@
+/* Theme: specs/design.md §7.5 (R8.7) */
+:root {
+  --bg: #000;
+  --card: #0b0d0f;
+  --border: #2a2d31;
+  --text: #f2f2f2;
+  --muted: #9aa0a6;
+  --teal: #3f8f78;
+  --blue: #3f6fc4;
+  --olive: #7d8f45;
+  --orange: #b85a33;
+  --accent: #5fb89e;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+  display: grid;
+  gap: 24px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  letter-spacing: -0.01em;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+legend,
+.field > label {
+  color: var(--muted);
+  font-size: 0.875rem;
+  margin-bottom: 8px;
+  padding: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Text (R1.1, R1.2) */
+.field {
+  display: grid;
+  position: relative;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 12px 14px 28px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.counter {
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Style cards (R2.1) */
+.style-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .style-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.style-card {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.style-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.style-card:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.style-card:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.style-card__num {
+  color: var(--accent);
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.style-card__label {
+  font-weight: 600;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.style-card__desc,
+.style-card__ref {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+/* Voice sliders (R4.1) */
+.voice {
+  display: grid;
+  gap: 8px;
+}
+
+.slider {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 4.5rem;
+  align-items: center;
+  gap: 12px;
+}
+
+.slider input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Visualizer (R6.1–R6.5) */
+.viz {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 16px;
+  min-height: 96px;
+  padding: 24px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'Pixelify Sans', ui-monospace, monospace;
+  font-size: 1.75rem;
+}
+
+.word {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  row-gap: 16px;
+}
+
+.tok {
+  display: grid;
+  grid-template-rows: 2.25rem 28px;
+  justify-items: center;
+  align-items: center;
+  width: 2.25ch;
+  color: var(--muted);
+}
+
+.tok--sound {
+  color: var(--text);
+}
+
+.tok--space {
+  width: 1.25ch;
+}
+
+.tok--break {
+  flex-basis: 100%;
+  width: auto;
+  height: 0;
+  grid-template-rows: 0;
+}
+
+.dot {
+  display: block;
+  border-radius: 50%;
+  background: var(--dot-color);
+  opacity: 0.85;
+  transition: transform 80ms ease-out, opacity 80ms;
+}
+
+.dot--sm { width: 12px; height: 12px; }
+.dot--md { width: 16px; height: 16px; }
+.dot--lg { width: 24px; height: 24px; }
+
+.tok[data-active] {
+  color: var(--accent);
+}
+
+.tok[data-active] .dot {
+  opacity: 1;
+  transform: scale(1.4);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dot-color) 35%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    transition: none;
+  }
+
+  .tok[data-active] .dot {
+    transform: none;
+  }
+}
+
+/* Message and actions (R1.3, R5) */
+.message {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+button {
+  padding: 12px 20px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button#play {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #04110d;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
