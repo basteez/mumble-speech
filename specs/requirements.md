@@ -1,16 +1,20 @@
 # Requisiti
 
-> **Nota (libreria):** il motore descritto qui viene estratto nella libreria
-> ([`library/requirements.md`](library/requirements.md)). R1.4, R1.5, R3.x,
-> R4.2, R4.3, R5.5, R7.1 e R7.4 diventano responsabilità del core (L1.2); la
-> pagina li verifica tramite il pacchetto npm. R3.8 cambia con LD1 (seed
-> esplicito invece che derivato dal testo) e R8.6 con L6.2.
+Stato: **approvato il 2026-10-19.**
 
 ## 1. Obiettivo
 
-Permettere a chiunque di scrivere una frase, scegliere uno stile di mumble
-speech, ascoltarla con una visualizzazione lettera-per-lettera e scaricarla
-come file WAV. Tutto gira nel browser, senza backend.
+Generare "mumble speech" (il parlato finto dei videogiochi) in tre stili con
+una libreria che ha **un'unica implementazione in Rust**, usabile:
+
+- sul web, tramite WebAssembly e un pacchetto npm;
+- in Godot 4, tramite un addon GDExtension;
+- in Unity, tramite un pacchetto UPM con libreria nativa;
+- da qualunque altro linguaggio, tramite un'interfaccia C (C ABI).
+
+La pagina web di prova (*playground*) è un progetto separato,
+`mumble-speech-playground`, che usa la libreria solo tramite il pacchetto npm
+(L6).
 
 ## 2. Glossario
 
@@ -21,9 +25,15 @@ come file WAV. Tutto gira nel browser, senza backend.
 | **Pausa** | Silenzio prodotto da spazi, punteggiatura e a capo. |
 | **Slot** | Unità di tempo base: `1 / velocità` secondi. Ogni carattere occupa uno o più slot. |
 | **Timeline** | Sequenza ordinata di eventi sonori calcolata dal testo. È identica per riproduzione, visualizzazione ed export. |
-| **Voce** | L'insieme di parametri regolabili: altezza, velocità, variazione. |
+| **Core** | Il crate Rust con tutta la logica: tokenizzazione, stili, timeline, sintesi, WAV. |
+| **Binding** | Strato sottile che espone il core a una piattaforma (WASM/npm, C ABI, Godot, Unity). Nessuna logica di mumble speech. |
+| **Voice** | Stile + altezza + velocità + variazione + seed. |
+| **Render** | Audio di un testo intero, più la sua timeline. |
+| **Speaker** | Oggetto con stato che produce il suono di un carattere alla volta (modalità macchina da scrivere). |
+| **Advance** | Secondi da attendere dopo un carattere prima del successivo (1 slot, 2 o 4 per le pause). |
+| **Vettore di conformità** | Caso di test condiviso (input → timeline attesa + hash del PCM) che ogni binding deve superare. |
 
-## 3. Stili (riferimento)
+## 3. Stili
 
 | ID | Nome UI | Regola | Riferimento |
 |---|---|---|---|
@@ -33,30 +43,26 @@ come file WAV. Tutto gira nel browser, senza backend.
 
 ## 4. Requisiti
 
-Formato EARS: *QUANDO / MENTRE / SE … il sistema DEVE …*. I criteri marcati
-**[auto]** vanno coperti da test automatici; quelli **[man]** da verifica
-manuale (checklist in `tasks.md`).
+Formato EARS. **[auto]** = test automatico in CI, **[man]** = verifica
+manuale, **[rev]** = verifica in code review.
 
-### R1 — Inserimento testo
+### L1 — Core
 
-*Come utente voglio scrivere la frase da far "parlare".*
+- **L1.1** Tutta la logica di mumble speech DEVE stare nel core Rust. I binding NON DEVONO reimplementarne nessuna parte. [rev]
+- **L1.2** Il core DEVE implementare i comportamenti R (sezione successiva). [auto]
+- **L1.3** Il core DEVE compilare sia per `wasm32-unknown-unknown` sia per i target nativi, senza I/O, thread o clock. [auto]
+- **L1.4** A parità di input, il PCM prodotto DEVE essere identico bit per bit su tutte le piattaforme supportate e in WASM. [auto]
+- **L1.5** Il sample rate DEVE essere configurabile tra 8 000 e 192 000 Hz, con default 48 000. [auto]
+- **L1.6** La `Voice` DEVE includere un `seed` intero (default 0). A parità di stile, voce e seed, la sequenza di suoni DEVE dipendere solo dai caratteri, non dal testo che segue. [auto]
+- **L1.7** Il core DEVE rifiutare una voce fuori range: altezza da −12 a +12 semitoni, velocità da 5 a 30 caratteri/s, variazione da 0 a 1. [auto]
 
-- **R1.1** Il sistema DEVE offrire un campo di testo multilinea precompilato con `Hello`. [man]
-- **R1.2** Il sistema DEVE accettare al massimo 500 caratteri e mostrare un contatore `n/500`. [man]
-- **R1.3** SE il testo non contiene caratteri sonori, il sistema DEVE disabilitare *Play* ed *Export* e mostrare il motivo. [auto]
+### R — Comportamento
+
+Questi ID vengono dalla prima versione della pagina e restano invariati, così
+test e commit esistenti continuano a riferirsi a loro.
+
 - **R1.4** Il sistema DEVE trattare le lettere accentate come la lettera base (`è` → `e`, `ñ` → `n`). [auto]
 - **R1.5** Il sistema DEVE classificare ogni carattere in esattamente una categoria: `letter`, `digit`, `space`, `pause-short` (`, ; :`), `pause-long` (`. ! ? …` e a capo), `other`. [auto]
-
-### R2 — Scelta dello stile
-
-*Come utente voglio scegliere tra i tre stili e capire cosa fa ciascuno.*
-
-- **R2.1** Il sistema DEVE mostrare i tre stili come opzioni mutuamente esclusive, ciascuna con nome, descrizione di una riga e gioco di riferimento. [man]
-- **R2.2** Lo stile predefinito DEVE essere `beep`. [man]
-- **R2.3** QUANDO l'utente cambia stile, il sistema DEVE ricalcolare la visualizzazione senza ricaricare la pagina. [man]
-
-### R3 — Comportamento degli stili
-
 - **R3.1** (`beep`) Ogni carattere sonoro DEVE produrre lo stesso suono; con variazione = 0 tutti gli eventi DEVONO avere frequenza identica. [auto]
 - **R3.2** (`grunt`) La voce DEVE avere esattamente 4 grunt distinti per altezza, durata e timbro. [auto]
 - **R3.3** (`grunt`) Ogni carattere sonoro DEVE suonare uno dei 4 grunt, scelto in modo pseudo-casuale ma deterministico, e DUE caratteri sonori consecutivi NON DEVONO usare lo stesso grunt. [auto]
@@ -64,70 +70,61 @@ manuale (checklist in `tasks.md`).
 - **R3.5** (`alphabet`) Cifre e caratteri `other` DEVONO produrre un unico suono neutro comune. [auto]
 - **R3.6** (tutti) Spazi DEVONO produrre 1 slot di silenzio, `pause-short` 2 slot, `pause-long` 4 slot. [auto]
 - **R3.7** (tutti) Nessun suono DEVE superare il proprio slot: gli eventi non si sovrappongono. [auto]
-- **R3.8** (tutti) A parità di testo, stile e voce, la timeline DEVE essere identica tra esecuzioni diverse (determinismo). [auto]
+- **R3.8** (tutti) A parità di testo e voce (seed incluso), la timeline DEVE essere identica tra esecuzioni diverse (determinismo). Il seed è esplicito, non derivato dal testo (LD1). [auto]
 - **R3.9** (`alphabet`) Le lettere `a e i o u` DEVONO suonare come le vocali italiane corrispondenti: lo spettro di ciascuna DEVE essere più vicino ai formanti della propria vocale che a quelli delle altre quattro. [auto] [man]
 - **R3.10** (`alphabet`) L'altezza di base DEVE variare al massimo di ±1 semitono tra lettere diverse: a distinguere le lettere è il timbro, non la nota. [auto]
-
-### R4 — Parametri della voce
-
-*Come utente voglio regolare la voce per dare carattere al personaggio.*
-
-- **R4.1** Il sistema DEVE offrire tre slider con valore visibile:
-  - **Altezza**: da −12 a +12 semitoni, passo 1, default 0. [man]
-  - **Velocità**: da 5 a 30 caratteri/secondo, passo 1, default 15. [man]
-  - **Variazione**: da 0 a 1, passo 0,05, default 0. [man]
 - **R4.2** L'altezza DEVE trasporre tutte le frequenze dello stile di `2^(semitoni/12)`. [auto]
 - **R4.3** La variazione DEVE aggiungere a ogni evento uno scostamento di altezza casuale (deterministico) nell'intervallo `±variazione × 2` semitoni. [auto]
-- **R4.4** I parametri DEVONO essere condivisi tra stili: cambiare stile non li reimposta. [man]
-- **R4.5** QUANDO l'utente modifica un parametro durante la riproduzione, il sistema DEVE fermare la riproduzione. [man]
+- **R5.5** Il core NON DEVE produrre clipping: tutti i campioni DEVONO restare in `[−1, 1]`. [auto]
+- **R7.1** `encodeWav` DEVE produrre un file WAV PCM 16 bit, mono, al sample rate richiesto. [auto]
+- **R7.4** La durata del render DEVE essere la fine dell'ultimo suono più 50 ms di coda; le pause finali sono escluse. [auto]
 
-### R5 — Riproduzione
+### L2 — API "frase intera"
 
-- **R5.1** QUANDO l'utente preme *Play*, il sistema DEVE riprodurre la timeline dall'inizio. [man]
-- **R5.2** MENTRE è in riproduzione, il pulsante DEVE diventare *Stop* e fermare l'audio immediatamente se premuto. [man]
-- **R5.3** QUANDO l'utente preme *Play* durante una riproduzione, o modifica testo/stile, il sistema DEVE fermare la riproduzione in corso prima di fare altro. [man]
-- **R5.4** Il primo suono DEVE partire entro 300 ms dal click con testi fino a 500 caratteri, su un laptop di fascia media. [man]
-- **R5.5** Il sistema NON DEVE produrre clipping: tutti i campioni DEVONO restare in `[−1, 1]`. [auto]
+- **L2.1** Il core DEVE offrire `render(testo, voice, sampleRate)`, che restituisce il PCM mono `f32` e la timeline. [auto]
+- **L2.2** Il core DEVE offrire `timeline(testo, voice)` senza sintetizzare audio. [auto]
+- **L2.3** Ogni evento della timeline DEVE riportare: indice del grafema, intervallo in byte UTF-8, intervallo in unità UTF-16, inizio, durata, colore del pallino (sRGB `#rrggbb`) e dimensione (`sm`/`md`/`lg`). [auto]
+- **L2.4** Il core DEVE offrire `encodeWav(pcm, sampleRate)`, che produce un WAV PCM a 16 bit mono. [auto]
+- **L2.5** `render` su 500 caratteri a velocità 5 DEVE impiegare meno di 50 ms in nativo e meno di 150 ms in WASM, su un laptop di fascia media. [auto]
 
-### R6 — Visualizzazione
+### L3 — API "carattere per carattere" (Speaker)
 
-*Come utente voglio vedere quale lettera sta "parlando", come nell'immagine di riferimento.*
+- **L3.1** Il core DEVE offrire uno `Speaker` creato da `voice` e `sampleRate`, con `next(grafema)` che restituisce: campioni (vuoti per spazi e pause), advance in secondi, pallino (assente per spazi e pause). [auto]
+- **L3.2** Se si posizionano i campioni restituiti da `next` per ogni grafema di un testo ai rispettivi advance cumulati, il risultato DEVE essere identico bit per bit a `render` dello stesso testo. [auto]
+- **L3.3** SE `next` riceve una stringa con più grafemi, DEVE elaborarli in ordine e restituire suoni concatenati e l'advance totale. [auto]
+- **L3.4** `reset()` DEVE riportare lo Speaker allo stato iniziale. [auto]
 
-- **R6.1** Il sistema DEVE mostrare il testo come riga di caratteri in font pixel/monospace, con sotto ogni carattere sonoro un pallino. Spazi e punteggiatura NON hanno pallino. [man]
-- **R6.2** Colore e dimensione dei pallini DEVONO dipendere dallo stile:
-  - `beep`: tutti dello stesso colore e dimensione;
-  - `grunt`: colore e dimensione determinati dal grunt suonato (4 combinazioni);
-  - `alphabet`: colore determinato dalla lettera (26 colori distinti), dimensione costante. [auto]
-- **R6.3** MENTRE l'audio suona, il carattere e il pallino dell'evento corrente DEVONO essere evidenziati, con uno scarto percepito non superiore a 50 ms rispetto al suono. [man]
-- **R6.4** La visualizzazione DEVE andare a capo senza scroll orizzontale da 320 px di larghezza in su. [man]
-- **R6.5** SE l'utente ha `prefers-reduced-motion`, l'evidenziazione DEVE essere un cambio di colore senza animazioni di scala. [man]
+### L4 — Binding
 
-### R7 — Export WAV
+- **L4.1** (Web) Un pacchetto npm `@mumble-speech/web`, ESM con tipi TypeScript, DEVE esporre L2 e L3 e un helper `WebAudioPlayer`. Deve funzionare nelle ultime 2 versioni di Chrome, Firefox, Safari desktop e Safari iOS, e in Node ≥ 20. [auto]
+- **L4.2** (Web) Il pacchetto, WASM incluso, DEVE pesare meno di 60 KB gzip. [auto]
+- **L4.3** (C ABI) La libreria DEVE fornire un header `mumble.h` generato automaticamente e librerie precompilate per macOS (universal arm64 + x86_64), Windows x64 e Linux x64. [auto]
+- **L4.4** (C ABI) Nessuna funzione DEVE propagare un panic oltre il confine C: gli errori DEVONO essere codici di ritorno. La proprietà di ogni puntatore DEVE essere documentata nell'header. [auto] [rev]
+- **L4.5** (C ABI) L'header DEVE esporre `mumble_abi_version()`. Un cambio incompatibile DEVE incrementare la versione. [rev]
+- **L4.6** (Godot) Un addon per Godot ≥ 4.3 DEVE offrire una risorsa `MumbleVoice` configurabile dall'inspector, un nodo `MumbleSpeaker` che riproduce frasi o singoli caratteri, e un nodo `MumbleTypewriter` che rivela un `Label` o `RichTextLabel` carattere per carattere sincronizzato con l'audio. Piattaforme: desktop (Windows, macOS, Linux). [auto] [man]
+- **L4.7** (Unity) Un pacchetto UPM per Unity ≥ 2022.3 LTS DEVE offrire un `ScriptableObject` `MumbleVoice`, un componente `MumbleSpeaker` (`Say`, `SpeakCharacter`, eventi per carattere e per fine frase) e un helper typewriter per `TMP_Text`, opzionale se TextMeshPro è presente. Piattaforme: desktop. [man]
+- **L4.8** Ogni binding DEVE usare gli stessi concetti (Voice, render, timeline, Speaker, advance) con nomi adattati alle convenzioni della piattaforma. [rev]
+- **L4.9** Ogni binding DEVE includere un esempio minimo eseguibile. [man]
 
-- **R7.1** QUANDO l'utente preme *Export WAV*, il sistema DEVE scaricare un file WAV PCM 16 bit, mono, 44 100 Hz. [auto]
-- **R7.2** L'audio esportato DEVE essere identico campione per campione a quello riprodotto con gli stessi input. [auto]
-- **R7.3** Il nome del file DEVE essere `mumble-<stile>-<YYYYMMDD-HHmmss>.wav`. [auto]
-- **R7.4** La durata del file DEVE essere la fine dell'ultimo suono più 50 ms di coda; le pause finali sono escluse. [auto]
+### L5 — Conformità e qualità
 
-### R8 — Requisiti non funzionali
+- **L5.1** Il repository DEVE contenere almeno 30 vettori di conformità (stili, voci, seed, sample rate, testi limite). L'hash del PCM è FNV-1a a 64 bit sui byte `f32` little-endian, facile da implementare in ogni linguaggio. [auto]
+- **L5.2** Le suite di test di core, Web, C ABI e Godot DEVONO superare tutti i vettori in CI. Quella Unity DEVE superarli in esecuzione manuale (in CI servirebbe una licenza Unity). [auto] [man]
+- **L5.3** Tutti i pacchetti DEVONO condividere la stessa versione semver. [rev]
 
-- **R8.1** L'app DEVE essere un sito statico, senza backend né chiamate di rete dopo il caricamento. [man]
-- **R8.2** L'app DEVE funzionare nelle ultime 2 versioni di Chrome, Firefox, Safari desktop e Safari iOS. [man]
-- **R8.3** Tutti i controlli DEVONO essere usabili da tastiera, con etichette accessibili e focus visibile. [man]
-- **R8.4** L'`AudioContext` DEVE essere creato o ripreso solo in risposta a un gesto dell'utente (policy autoplay). [man]
-- **R8.5** La logica che va dal testo alla timeline e il codificatore WAV DEVONO essere funzioni pure, testabili senza browser. [auto]
-- **R8.6** Il bundle di produzione (JS + CSS, gzip, escluso il font) DEVE restare sotto i 50 KB. [man]
-- **R8.7** Tema scuro come nel riferimento, con contrasto testo/sfondo almeno WCAG AA. [man]
+### L6 — Uso da progetti esterni
+
+- **L6.1** Il repository della libreria NON DEVE contenere il playground né altre app dimostrative oltre agli esempi minimi di L4.9. [rev]
+- **L6.2** Il pacchetto `@mumble-speech/web` DEVE poter essere installato da un progetto esterno prima della pubblicazione, come tarball (`npm pack`) o dipendenza `file:`. Una prova in CI installa il tarball in un progetto vuoto e ne usa l'API pubblica. [auto]
 
 ## 5. Fuori scope (v1)
 
-- Text-to-speech reale o riconoscimento di sillabe.
-- Suoni basati su campioni audio o caricati dall'utente.
-- Più voci/personaggi per stile, preset salvabili.
-- Link condivisibili, persistenza delle impostazioni.
-- Intonazione automatica (per esempio altezza crescente su `?`).
-- Riproduzione mentre si digita.
-- Export in formati diversi da WAV.
+- Librerie precompilate per iOS, Android e console (la C ABI le rende possibili in seguito).
+- Export web di Godot con GDExtension e Unity WebGL.
+- Plugin Unreal dedicato (usabile tramite C ABI, senza wrapper).
+- Stili personalizzati o definiti da dati.
+- Sintesi in streaming nel thread audio.
+- Pubblicazione sui registry (npm, Godot Asset Library, OpenUPM).
 
 ## 6. Domande risolte
 
@@ -135,7 +132,8 @@ Chiuse con i default proposti, approvati insieme alle spec il 2026-10-19.
 
 | # | Domanda | Decisione |
 |---|---|---|
-| Q1 | Lingua della UI? | Inglese, coerente con i nomi degli stili. |
-| Q2 | 4 grunt sono il numero giusto per `grunt`? | 4, coerente con l'esempio (3–4 pallini diversi). |
-| Q3 | Le cifre in `alphabet` vanno lette come nome (`1` → "one")? | No, suono neutro (R3.5). |
-| Q4 | Deploy previsto (GitHub Pages, Netlify…)? | GitHub Pages; influenza solo il `base` di Vite. |
+| LQ1 | Nomi dei pacchetti (`@mumble-speech/web`, `com.mumble-speech.unity`, crate `mumble-speech`)? | Questi, previa verifica di disponibilità. |
+| LQ2 | Licenza? | MIT OR Apache-2.0, convenzione Rust. |
+| LQ3 | Hosting e CI? | GitHub + GitHub Actions. Serve inizializzare git e creare il repo. |
+| LQ4 | Il cambio di seed (L1.6) cambia leggermente il comportamento di R3.8: il seed non deriva più dal testo. Va bene? | Sì: è necessario per L3.2. |
+| LQ5 | Dove sta il playground? | In un progetto separato, `mumble-speech-playground` (richiesta dell'utente, 2026-10-19). |

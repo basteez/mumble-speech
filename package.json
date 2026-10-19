@@ -2,7 +2,6 @@
   "name": "mumble-speech",
   "private": true,
   "workspaces": [
-    "apps/*",
     "packages/*"
   ],
   "scripts": {

@@ -1,131 +1,90 @@
 # Design
 
-Riferimenti ai requisiti tra parentesi quadre, per esempio [R3.8].
+Stato: **approvato il 2026-10-19.** Riferimenti ai requisiti tra parentesi
+quadre, per esempio [L3.2]. Gli algoritmi (§4–§7) vengono dalla prima versione
+in TypeScript; i punti cambiati sono in §8.
 
-## 1. Stack
+## 1. Struttura del repository
 
-| Ambito | Scelta | Motivo |
-|---|---|---|
-| Build | Vite, template `vanilla-ts` | Zero framework, bundle piccolo [R8.6] |
-| Linguaggio | TypeScript `strict` | Modello dati esplicito |
-| Test | Vitest (ambiente `node` per core e sintesi) | Core e sintesi sono puri [R8.5] |
-| Audio | Sintesi DSP in TypeScript + `AudioContext` solo per la riproduzione | Nessun asset [R8.1], costo lineare [R5.4] (D6) |
-| Font | Pixelify Sans self-hosted via `@fontsource` (D8) | Nessuna rete a runtime [R8.1] |
-
-Nessuna dipendenza runtime oltre al font.
-
-## 2. Architettura
-
-Pipeline a senso unico. Tutto ciò che sta a sinistra di `Player` e del download
-è puro e testabile in Node.
+Monorepo con workspace Cargo e npm.
 
 ```
-testo ──► normalize ──► tokenize ──► buildTimeline(style, voice, seed) ──► Timeline
-                                                                            │
-                                     ┌──────────────────────────────────────┤
-                                     ▼                                      ▼
-                     synthesize(Timeline) → Float32Array              Visualizer
-                           │            │                        (pallini, highlight)
-                           ▼            ▼
-                        Player       encodeWav → Blob → download
+crates/
+  mumble-core/        # tutta la logica, #![no_std] + alloc [L1.1, L1.3]
+  mumble-ffi/         # C ABI: cdylib + staticlib, header via cbindgen [L4.3–L4.5]
+  mumble-wasm/        # export wasm-bindgen [L4.1]
+  mumble-godot/       # GDExtension via godot-rust (gdext) [L4.6]
+  mumble-conformance/ # generatore dei vettori [L5.1]
+packages/
+  web/                # @mumble-speech/web: wrapper TS + WebAudioPlayer [L4.1]
+bindings/
+  c/                  # mumble.h generato, esempio e test CMake
+  godot/              # addons/mumble_speech + progetto di esempio e test
+  unity/              # pacchetto UPM: Runtime/, Plugins/, Samples~/, Tests/
+conformance/
+  vectors.json        # [L5.1]
+specs/
 ```
 
-Decisione chiave: **riproduzione ed export usano gli stessi campioni**,
-generati una sola volta da `synthesize` (D1, D6). Il `Player` li copia in un
-`AudioBuffer` e li suona con un `AudioBufferSourceNode`. Questo garantisce [R7.2] per costruzione e rende la
-sincronizzazione visiva [R6.3] un semplice confronto tra `currentTime` e gli
-`start` degli eventi.
+## 2. API del core (Rust)
 
-### Struttura dei moduli
+```rust
+pub enum StyleId { Beep, Grunt, Alphabet }
 
-```
-src/
-  core/
-    types.ts        # tipi condivisi (sezione 3)
-    normalize.ts    # NFD + rimozione diacritici [R1.4]
-    tokenize.ts     # classificazione caratteri [R1.5]
-    rng.ts          # hash FNV-1a + PRNG mulberry32 [R3.8]
-    timeline.ts     # scheduling slot/pause + applicazione voce [R3.6–R3.8, R4.2–R4.3]
-  styles/
-    index.ts        # registry: StyleId → Style
-    beep.ts
-    grunt.ts
-    alphabet.ts
-  audio/
-    synth.ts        # Timeline → Float32Array, DSP puro (D6)
-    cache.ts        # memoizza la sintesi della timeline corrente [R7.2]
-    player.ts       # play/stop, posizione compensata dalla latenza (D7)
-    wav.ts          # AudioBuffer-like → ArrayBuffer WAV [R7.1]
-  ui/
-    controls.ts     # textarea, stili, slider, pulsanti
-    visualizer.ts   # griglia lettere + pallini + highlight
-    filename.ts     # nome file export [R7.3]
-  main.ts           # composizione e stato
-  style.css
-tests/              # specchio di src/core, src/styles, src/audio (tranne player)
-```
-
-## 3. Modello dati
-
-```ts
-type StyleId = 'beep' | 'grunt' | 'alphabet';
-
-type TokenKind = 'letter' | 'digit' | 'space' | 'pause-short' | 'pause-long' | 'other';
-
-interface Token {
-  index: number;      // posizione nel testo originale (per la UI)
-  char: string;       // carattere originale, mostrato nella UI
-  base: string;       // carattere normalizzato minuscolo, usato dagli stili
-  kind: TokenKind;
+pub struct Voice {
+    pub style: StyleId,
+    pub pitch: f64,      // semitoni, −12..12
+    pub speed: f64,      // caratteri/s, 5..30
+    pub variation: f64,  // 0..1
+    pub seed: u32,       // [L1.6]
 }
 
-interface Voice {
-  pitch: number;      // semitoni, −12..12
-  speed: number;      // caratteri/secondo, 5..30
-  variation: number;  // 0..1
+pub enum DotSize { Sm, Md, Lg }
+pub struct Dot { pub rgb: u32, pub size: DotSize }        // 0xRRGGBB [L2.3]
+
+pub struct Event {
+    pub grapheme_index: u32,
+    pub utf8: Range<u32>,
+    pub utf16: Range<u32>,                                // per JS e C# [L2.3]
+    pub start: f64, pub duration: f64,                    // secondi
+    pub dot: Dot,
 }
 
-// Cosa suonare: descrizione astratta, indipendente da Web Audio.
-interface SoundSpec {
-  waveform: 'square' | 'sawtooth' | 'triangle' | 'sine';
-  frequency: number;          // Hz, prima di pitch/variazione
-  glide?: number;             // semitoni di glissando su tutta la durata
-  durationRatio: number;      // frazione dello slot, (0, 0.9]
-  formants?: [number, number];// Hz, passa-banda in parallelo (timbro dei grunt)
-  vocalTract?: Resonance[];   // risonatori in cascata (vocali) [R3.9]
-  noiseBurst?: { centerHz: number; durationMs: number }; // attacco consonantico
-  gain: number;               // 0..1
+pub struct Timeline { pub events: Vec<Event>, pub duration: f64 }
+
+pub fn timeline(text: &str, voice: &Voice) -> Timeline;                    // [L2.2]
+pub fn render(text: &str, voice: &Voice, sample_rate: u32) -> Render;     // [L2.1]
+pub struct Render { pub samples: Vec<f32>, pub timeline: Timeline }
+pub fn encode_wav(samples: &[f32], sample_rate: u32) -> Vec<u8>;         // [L2.4]
+
+pub struct Speaker { /* voice, rng, prev, sample_rate */ }                // [L3]
+impl Speaker {
+    pub fn new(voice: Voice, sample_rate: u32) -> Self;
+    pub fn next(&mut self, text: &str) -> Utterance;
+    pub fn reset(&mut self);
 }
-
-interface Resonance { frequency: number; bandwidth: number } // Hz
-
-interface Dot { color: string; size: 'sm' | 'md' | 'lg' }
-
-interface SoundEvent {
-  tokenIndex: number;
-  start: number;      // secondi dall'inizio
-  duration: number;   // secondi
-  sound: SoundSpec;   // con frequency già trasposta e variata
-  dot: Dot;
-}
-
-interface Timeline {
-  tokens: Token[];
-  events: SoundEvent[];
-  duration: number;   // fine ultimo evento + 0.05 [R7.4]
-}
-
-interface Style {
-  id: StyleId;
-  label: string;
-  description: string;
-  reference: string;
-  // Puro: stesso input → stesso output. `prev` serve al vincolo di R3.3.
-  voice(token: Token, rng: () => number, prev: SoundSpec | null): { sound: SoundSpec; dot: Dot };
-}
+pub struct Utterance { pub samples: Vec<f32>, pub advance: f64, pub dot: Option<Dot> }
 ```
 
-## 4. Algoritmi del core
+`render` è implementato sopra `Speaker`: per ogni grafema chiama `next` e
+scrive i campioni a `round(t × sampleRate)`, con `t` pari agli advance
+cumulati. Così L3.2 vale per costruzione, ed è comunque verificato da un test.
+
+Dipendenze del core: `libm` (matematica deterministica [L1.4]) e
+`unicode-segmentation` (grafemi, `no_std`). Nient'altro.
+
+## 3. Determinismo cross-platform [L1.4]
+
+- Tutti i calcoli interni in `f64`, uscita convertita in `f32` solo alla fine.
+- Funzioni trascendenti (`sin`, `cos`, `exp`, `pow`, `log2`) solo da `libm`,
+  mai da `std` o dalla libm di sistema, che differiscono tra piattaforme.
+- Rust non fonde le operazioni in FMA in automatico; non si usa `mul_add`.
+- Nessuna iterazione su `HashMap`; le tabelle sono array.
+- Posizioni in campioni con `round` di `libm`.
+- Verifica: gli stessi vettori di conformità girano su nativo (macOS, Windows,
+  Linux) e su WASM in CI, confrontando l'hash del PCM.
+
+## 4. Algoritmi
 
 ### 4.1 Normalizzazione e tokenizzazione [R1.4, R1.5]
 
@@ -141,9 +100,9 @@ interface Style {
 
 ### 4.2 Determinismo [R3.8]
 
-- `seed = fnv1a(styleId + '\u0000' + text)`.
+- `seed = fnv1a(styleId) XOR voice.seed` (LD1; nella prima versione derivava dal testo).
 - `rng = mulberry32(seed)`: unica sorgente di casualità, consumata in ordine di token.
-- Vietato usare `Math.random()` nel core (verificato da un test che lo sostituisce con una funzione che lancia errore).
+- Nessuna altra sorgente di casualità nel core.
 
 ### 4.3 Scheduling [R3.6, R3.7, R7.4]
 
@@ -250,12 +209,9 @@ delle cinque vocali, così si elimina la pendenza spettrale comune (−6 dB/otta
 che altrimenti favorirebbe sempre le vocali con formanti bassi. La vocale con
 il punteggio più alto deve essere quella giusta. Il test usa solo la tabella
 dei formanti, non il codice del filtro.
+## 6. Sintesi [R5.5, L2.5] (D6)
 
-## 6. Audio
-
-### 6.1 Sintesi [R5.4, R5.5, R7.2] (D6)
-
-`synthesize(timeline, sampleRate = 44100): Float32Array`, funzione pura.
+Funzione pura: timeline + sample rate → campioni `f32`.
 
 - Buffer di `ceil(duration × sampleRate)` campioni. Ogni evento scrive solo
   nei propri campioni `[start, start + duration)`, quindi il costo è lineare nel
@@ -277,126 +233,161 @@ dei formanti, non il codice del filtro.
 - `noiseBurst`: rumore bianco da `mulberry32(fnv1a('noise'))` (mai
   `Math.random`) → passa-banda a `centerHz`, Q = 2 → decadimento esponenziale
   fino a −60 dB in `durationMs`.
-- Master gain 0.8. Alla fine si misura il picco: se > 0.98, si scala l'intero
-  buffer per riportarlo a 0.98 [R5.5].
-
-### 6.2 Player [R5.1–R5.4, R8.4]
-
-- Un solo `AudioContext`, creato o ripreso con `unlock()` in modo sincrono
-  dentro il click su *Play*, prima di qualunque `await` (Safari perde il gesto
-  dopo un `await`).
-- `play(samples)`: ferma eventuale sorgente attiva, copia i campioni in un
-  `AudioBuffer`, crea `AudioBufferSourceNode`, memorizza
-  `startTime = ctx.currentTime + 0.02`, avvia.
-- `position()`: `ctx.currentTime − startTime − latenza`, dove latenza è
-  `outputLatency` (o `baseLatency` dove manca), usato dal visualizer (D7).
-- Evento `ended` → stato `idle`.
-- Cache (`cache.ts`): i campioni della timeline corrente restano validi finché
-  testo, stile e voce non cambiano; l'export li riusa.
-
-### 6.3 WAV [R7.1]
+- Master gain 0.8. Il picco si limita **per suono**: se un suono supera 0.98,
+  si scala quel suono per riportarlo a 0.98 [R5.5] (LD2).
+## 7. WAV [R7.1, L2.4]
 
 `encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer`
 
 - Header RIFF/WAVE standard, `fmt ` PCM (formato 1), 1 canale, 16 bit.
 - Conversione: `clamp(x, −1, 1)`, poi `x < 0 ? x × 0x8000 : x × 0x7FFF`, little-endian.
-- Funzione pura, prende direttamente l'output di `synthesize`.
+- Funzione pura, prende direttamente l'output del render.
 
-## 7. UI
+## 8. Cambiamenti rispetto alla prima versione (TypeScript)
 
-### 7.1 Layout
+| # | Cosa | Prima | Ora | Motivo |
+|---|---|---|---|---|
+| LD1 | Seed | `fnv1a(stile + testo)` | `fnv1a(stile) XOR voice.seed` | In modalità macchina da scrivere lo Speaker non conosce il testo che segue [L1.6, L3.2]. Chi vuole varietà tra battute passa un seed diverso, per esempio l'id della battuta. |
+| LD2 | Limitazione del picco | Scala globale del buffer | Ogni suono limitato a 0,98 da solo | Con una scala globale `render` e Speaker non coinciderebbero. Gli eventi non si sovrappongono, quindi R5.5 resta valido. |
+| LD3 | Colore del pallino | Stringa CSS (`var(--teal)`, `hsl(…)`) | `0xRRGGBB` | Neutro rispetto alla piattaforma. I colori dei temi CSS diventano: teal `0x3f8f78`, blue `0x3f6fc4`, olive `0x7d8f45`, orange `0xb85a33`, muted `0x9aa0a6`; `hsl(h 55% 55%)` si converte in RGB. |
+| LD4 | Sample rate di default | 44 100 | 48 000 | Default di Unity e dei dispositivi moderni. |
+| LD5 | Implementazione | TypeScript (nel playground) | Rust | Un'unica implementazione [L1.1]. I test Vitest del core TS diventano test Rust e vettori di conformità. |
 
-```
-┌───────────────────────────────────────────────┐
-│ Mumble Speech                                 │
-│ ┌───────────────────────────────────────────┐ │
-│ │ Hello                              5/500  │ │
-│ └───────────────────────────────────────────┘ │
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐        │
-│ │1 Beep    │ │2 Grunt   │ │3 Alphabet│  ← radio│
-│ │Undertale │ │Banjo-K.  │ │Animal C. │        │
-│ └──────────┘ └──────────┘ └──────────┘        │
-│ Pitch  ───●───  0 st                          │
-│ Speed  ────●──  15 c/s                        │
-│ Var.   ●──────  0.00                          │
-│                                               │
-│    H   e   l   l   o                          │
-│    ●   ●   ●   ●   ●                          │
-│                                               │
-│ [ ▶ Play ]   [ ⤓ Export WAV ]                 │
-└───────────────────────────────────────────────┘
-```
+## 9. Binding
 
-Su schermi stretti le card degli stili vanno in colonna [R6.4].
+### 9.1 Web: `mumble-wasm` + `@mumble-speech/web` [L4.1, L4.2]
 
-### 7.2 Stato applicativo
+- `wasm-bindgen` (versione fissata) con `--target web`, build con
+  `opt-level = "z"`, LTO e `wasm-opt -Oz`.
+- Gli oggetti attraversano il confine in forma compatta: i campioni come
+  `Float32Array`, gli eventi come `Float64Array` impacchettato. Il wrapper TS li
+  trasforma in oggetti tipizzati. Niente `serde`, per il peso [L4.2].
+- API TS:
 
 ```ts
-interface AppState {
-  text: string;
-  style: StyleId;
-  voice: Voice;
-  timeline: Timeline;          // derivato, ricalcolato a ogni input
-  playback: 'idle' | 'rendering' | 'playing';
-}
+await init();                        // carica il WASM, idempotente
+render(text, voice, sampleRate?) → { samples: Float32Array; timeline: Timeline }
+timeline(text, voice) → Timeline
+encodeWav(samples, sampleRate) → Uint8Array
+new Speaker(voice, sampleRate?)  .next(text) → Utterance  .reset()  .free()
+new WebAudioPlayer()  .unlock()  .play(samples, sampleRate)  .stop()  .position()
 ```
 
-Ogni modifica di `text`, `style` o `voice` → stop [R4.5, R5.3] → nuova
-`timeline` → invalidazione della cache audio → ridisegno del visualizer.
-Il ricalcolo della timeline è sincrono e costa O(n) su 500 caratteri, quindi
-nessun debounce. La sintesi avviene solo su *Play* o *Export*.
+- `WebAudioPlayer` è il `Player` del playground, spostato nel pacchetto.
+- Test: Vitest in Node carica il WASM ed esegue i vettori [L5.2]. Una prova di consumo esterno fa `npm pack`, installa il tarball in un progetto vuoto e usa l'API pubblica [L6.2].
 
-### 7.3 Visualizer [R6.1–R6.5]
+### 9.2 C ABI: `mumble-ffi` [L4.3–L4.5]
 
-- Ogni token è un `<span>`; i token consecutivi non-spazio sono raggruppati in
-  una `.word` così l'a capo avviene tra parole (una parola più lunga della riga
-  va comunque a capo al suo interno). I token sonori contengono un pallino
-  (`<i>`) con `--dot-color` e classe di dimensione.
-- Highlight: un loop `requestAnimationFrame` attivo solo durante `playing`
-  trova l'evento con `start ≤ position() < start + duration` (ricerca binaria) e
-  imposta `data-active` sul token. Gli spazi restano visibili come gap.
-- Con `prefers-reduced-motion: reduce` niente `transform: scale`, solo colore.
-- Il contenitore ha `aria-hidden="true"`: il testo è già nella textarea, e la
-  visualizzazione è decorativa.
+```c
+uint32_t mumble_abi_version(void);
 
-### 7.4 Accessibilità [R8.3]
+typedef struct { uint32_t style; double pitch, speed, variation; uint32_t seed; } MumbleVoice;
+typedef struct { uint32_t grapheme_index, utf8_start, utf8_len, utf16_start, utf16_len;
+                 double start, duration; uint32_t dot_rgb; uint8_t dot_size; } MumbleEvent;
 
-- Stili come `<fieldset>` di radio nativi con card come `<label>`.
-- Slider `<input type="range">` con `<output>` associato.
-- Pulsante Play/Stop con `aria-pressed` e testo che cambia.
-- Messaggio di R1.3 in una regione `aria-live="polite"`.
+typedef struct MumbleRender MumbleRender;   // opaco, posseduto dal chiamante
+int32_t mumble_render(const char *utf8, size_t len, const MumbleVoice *v,
+                      uint32_t sample_rate, MumbleRender **out);
+const float *mumble_render_samples(const MumbleRender *r, size_t *len);  // valido fino a free
+size_t mumble_render_event_count(const MumbleRender *r);
+int32_t mumble_render_event(const MumbleRender *r, size_t i, MumbleEvent *out);
+void mumble_render_free(MumbleRender *r);
 
-### 7.5 Tema [R8.7]
+typedef struct MumbleSpeaker MumbleSpeaker;
+MumbleSpeaker *mumble_speaker_new(const MumbleVoice *v, uint32_t sample_rate);
+int32_t mumble_speaker_next(MumbleSpeaker *s, const char *utf8, size_t len,
+                            const float **samples, size_t *count,   // validi fino alla prossima chiamata
+                            double *advance, uint32_t *dot_rgb, uint8_t *dot_size);
+void mumble_speaker_reset(MumbleSpeaker *s);
+void mumble_speaker_free(MumbleSpeaker *s);
 
-Variabili CSS: `--bg #000`, `--card #0b0d0f`, `--border #2a2d31`,
-`--text #f2f2f2`, `--muted #9aa0a6`, `--teal #3f8f78`, `--blue #3f6fc4`,
-`--olive #7d8f45`, `--orange #b85a33`.
+int32_t mumble_encode_wav(const float *samples, size_t len, uint32_t sample_rate,
+                          uint8_t **out, size_t *out_len);
+void mumble_bytes_free(uint8_t *p, size_t len);
+```
 
-## 8. Strategia di test
+- Codici: `0` ok, `<0` errore (`-1` argomento nullo, `-2` UTF-8 non valido,
+  `-3` voce fuori range, `-99` panic intercettato con `catch_unwind`) [L4.4].
+- Header generato da `cbindgen` in build e committato in `bindings/c/`.
+- Test: programma C (CMake + CTest) che esegue un sottoinsieme dei vettori,
+  incorporati come header generato dal crate di conformità.
 
-| Livello | Cosa | Requisiti |
+### 9.3 Godot: `mumble-godot` [L4.6]
+
+- GDExtension scritta in Rust con `gdext`, che usa il core direttamente (non
+  la C ABI): un passaggio in meno, tipi Godot nativi.
+- Classi:
+  - `MumbleVoice` (`Resource`): `style`, `pitch`, `speed`, `variation`, `seed`, modificabili dall'inspector.
+  - `MumbleSpeaker` (`Node`): `voice`, `bus`; `say(text)`, `speak_character(c)`, `stop()`, `render_stream(text) → AudioStreamWAV`; segnali `character_spoken(index)` e `finished`. Al suo interno usa un `AudioStreamPlayer`.
+  - `MumbleTypewriter` (`Node`): `label: NodePath`, `speaker: NodePath`; `type_text(text)` imposta il testo, rivela un carattere alla volta con `visible_characters` usando gli advance e suona ogni carattere; segnale `finished`.
+- Distribuzione: `bindings/godot/addons/mumble_speech/` con il file
+  `.gdextension` e i binari per piattaforma in `bin/`.
+- Test: progetto Godot di test eseguito in CI con `godot --headless`, che
+  verifica i vettori tramite `MumbleSpeaker.render_stream` e il funzionamento del typewriter.
+
+### 9.4 Unity [L4.7]
+
+- Pacchetto `com.mumble-speech.unity`:
+  - `Runtime/Native.cs`: `[DllImport("mumble_ffi")]` sulla C ABI.
+  - `Runtime/MumbleVoice.cs` (`ScriptableObject`).
+  - `Runtime/MumbleSpeaker.cs` (`MonoBehaviour` con `AudioSource`): `Say(string)` crea un `AudioClip` con `AudioClip.Create` + `SetData`; `SpeakCharacter(string)`; eventi `OnCharacter(int)` e `OnFinished`.
+  - `Runtime/TMP/MumbleTypewriterTMP.cs` in un assembly separato, compilato solo se `com.unity.textmeshpro` è presente (`versionDefines`). Usa `maxVisibleCharacters` e gli advance.
+  - `Plugins/{macOS,Windows,Linux}/`: binari della C ABI.
+  - `Samples~/Basic`: scena di esempio [L4.9].
+  - `Tests/EditMode`: esecuzione dei vettori [L5.2].
+- Verifica: manuale, perché una licenza Unity in CI non è disponibile.
+
+## 10. Build e CI [L4.3, L5.2]
+
+GitHub Actions, matrice:
+
+| Job | Runner | Produce / verifica |
 |---|---|---|
-| Unit (Vitest, node) | normalize, tokenize, rng, timeline, tre stili, synthesize, cache, encodeWav, filename | R1.3–R1.5, R3.x, R4.2–R4.3, R5.5, R6.2, R7.1–R7.4, R8.5 |
-| Performance (Vitest) | `synthesize` su 500 caratteri a velocità 5, tutti gli stili, sotto 250 ms | R5.4 |
-| Smoke (Chrome headless, non nel repo) | play, highlight, stop su modifica, export, layout 320 px | R5, R6, R7, M2, M6, M9 |
-| Property-based leggero | per 200 testi casuali: nessuna sovrapposizione, determinismo, nessun grunt ripetuto | R3.3, R3.7, R3.8 |
-| Snapshot | timeline di `"Hello, world!"` per ogni stile | regressioni |
-| Manuale | checklist in `tasks.md` (audio, sync, browser, a11y) | resto |
+| core | ubuntu, macos, windows | `cargo test`, vettori nativi, benchmark L2.5 |
+| wasm | ubuntu | build WASM, test Vitest del pacchetto, budget L4.2, consumo esterno L6.2 |
+| ffi | ubuntu, macos, windows | libreria nativa (macOS universal con `lipo`), test CTest |
+| godot | ubuntu | build GDExtension, test headless |
+| release | su tag | artefatti: zip dell'addon Godot, pacchetto Unity, tarball npm, archivio C |
 
-Solo il `Player` non si testa in Node. R7.2 è garantito dall'architettura
-(stessi campioni) e verificato con un test che controlla che l'export usi i
-campioni in cache.
+## 11. Migrazione
 
-## 9. Registro decisioni
+1. Porting del core in Rust con i test del core TS (nel playground) tradotti:
+   stesse proprietà (determinismo, no sovrapposizioni, grunt mai ripetuti,
+   vocali R3.9…).
+2. Snapshot Vitest → vettori di conformità. Gli hash cambiano rispetto al TS
+   per LD1–LD2 e per l'uso di `libm`: è atteso.
+3. Il playground, nel suo repository, passa a `@mumble-speech/web` tramite il
+   tarball o una dipendenza `file:` [L6.2]. Quella migrazione è tracciata nelle
+   spec del playground.
+4. Solo dopo che il playground funziona con il pacchetto si aggiungono C ABI,
+   Godot e Unity.
+
+## 12. Rischi
+
+| Rischio | Mitigazione |
+|---|---|
+| Bit-exactness WASM ↔ nativo | `libm` ovunque + vettori in CI su tutte le piattaforme |
+| Quarantena di macOS sui `.dylib` scaricati (Godot, Unity) | Documentare `xattr -d`; firma e notarizzazione fuori scope v1 |
+| Compatibilità `gdext` con le versioni di Godot | Fissare la versione minima (4.3) e testarla in CI |
+| Peso del WASM | Niente `serde`, `opt-level = "z"`, `wasm-opt`, budget verificato in CI |
+| Unity non verificabile in CI | Test EditMode nel pacchetto + checklist manuale |
+
+## 13. Registro decisioni
 
 | # | Decisione | Alternativa scartata | Motivo |
 |---|---|---|---|
-| D1 | Render offline anche per la riproduzione | Scheduling live su `AudioContext` | Un solo percorso di codice, export identico, sync semplice |
-| D2 | Seed derivato da stile + testo | Seed casuale per sessione | Determinismo e test riproducibili |
+| LD0 | Core unico in Rust + binding | Porting multipli; solo TS | Scelta dell'utente: una sola implementazione, output identico ovunque |
+| LD1–LD5 | Vedi §8 | | |
+| LD6 | Godot tramite `gdext` sul core, non tramite C ABI | GDExtension in C++ sulla C ABI | Meno codice di collegamento, tipi Godot nativi, stesso linguaggio del core |
+| LD7 | Hash dei vettori FNV-1a 64 | SHA-256 | Implementabile in poche righe in C, C#, GDScript e TS |
+| LD8 | Playground in un repository separato | `apps/playground` nel monorepo | Richiesta dell'utente: il repo della libreria contiene solo la libreria [L6.1] |
+
+Decisioni ereditate dalla prima versione (ID invariati):
+
+| # | Decisione | Alternativa scartata | Motivo |
+|---|---|---|---|
 | D3 | Suoni ≤ 0.9 slot | Sovrapposizioni consentite | Niente clipping da somma, timeline più semplice |
 | D4 | Mapping vocale dal nome inglese delle lettere, solo per le consonanti (rivisto da D9) | Mapping arbitrario | Più vicino ad Animalese, regola spiegabile |
 | D5 | Makeup ×3 sui formanti | Nessuna compensazione | Un passa-banda stretto lascia passare circa un'armonica: senza makeup `grunt` e `alphabet` sono molto più bassi di `beep` |
-| D6 | Sintesi DSP in TypeScript (sostituisce il grafo `OfflineAudioContext`) | `OfflineAudioContext` | Misurato su Chrome: 1,4–9,5 s per 500 caratteri, perché i nodi restano attivi per tutta la durata (costo O(eventi × durata)), quindi viola R5.4. La sintesi diretta è lineare, testabile in Node e identica tra browser |
-| D7 | Highlight compensato da `outputLatency` | `currentTime` grezzo | Con cuffie Bluetooth la latenza arriva a 100–200 ms, oltre il limite di R6.3 |
-| D8 | Pixelify Sans al posto di Silkscreen | Silkscreen | Silkscreen ha solo maiuscole e maiuscoletto; il riferimento mostra minuscole vere |
+| D6 | Sintesi DSP in TypeScript (sostituisce il grafo `OfflineAudioContext`) | `OfflineAudioContext` | Misurato su Chrome: 1,4–9,5 s per 500 caratteri, perché i nodi restano attivi per tutta la durata (costo O(eventi × durata)), quindi violava il requisito di latenza del playground (R5.4). La sintesi diretta è lineare, testabile in Node e identica tra browser |
 | D9 | `alphabet`: vocali con 3 formanti in cascata, ogni vocale suona sé stessa, altezza quasi costante | 2 passa-banda stretti in parallelo, vocali dal nome inglese, ±6 semitoni tra lettere | Feedback all'ascolto: non sembrava Animal Crossing e le vocali non erano riconoscibili (la `a` suonava "e", la `i` suonava "a"). I passa-banda stretti fischiano, la cascata dà vocali credibili; i salti di nota facevano sembrare il risultato una melodia |
