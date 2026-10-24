@@ -12,8 +12,8 @@ characters speak in games, in three styles.
 One implementation in Rust, deterministic and bit-identical across platforms,
 with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
 
-> **Status:** early development. The Rust core is done; bindings are in
-> progress. Nothing is published yet.
+> **Status:** early development, nothing published to package registries yet.
+> Documentation and playground: **https://mumble-speech.github.io/**
 
 ## Repository layout
 
@@ -27,6 +27,7 @@ crates/mumble-godot/  Godot 4 GDExtension
 bindings/godot/       Godot addon, example scene and headless tests
 bindings/unity/       Unity package (UPM): C# interop, components, EditMode tests
 apps/playground/      web playground to try the styles (private, not published)
+docs/                 documentation site (VitePress), published with the playground
 specs/                requirements, design and plan (spec-driven: start here)
 ```
 

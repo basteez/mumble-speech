@@ -127,6 +127,38 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: dotnet run -c Release --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj"
 
+  site:
+    # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build the site (fails on dead links)
+        run: npm run build:site
+      - name: Deploy to mumble-speech.github.io
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.SITE_DEPLOY_KEY }}
+          external_repository: mumble-speech/mumble-speech.github.io
+          publish_branch: main
+          publish_dir: docs/.vitepress/dist
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          full_commit_message: Deploy basteez/mumble-speech@${{ github.sha }}
+
   web:
     runs-on: ubuntu-latest
     steps:

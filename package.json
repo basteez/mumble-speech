@@ -3,10 +3,13 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "docs"
   ],
   "scripts": {
     "test": "npm test --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present"
+    "build": "npm run build --workspaces --if-present",
+    "build:site": "npm run build -w @mumble-speech/web && npm run build -w @mumble-speech/playground -- --base /playground/ && npm run build -w @mumble-speech/docs && node docs/scripts/assemble-site.mjs",
+    "dev:docs": "npm run dev -w @mumble-speech/docs"
   }
 }

@@ -57,8 +57,8 @@ task cites the requirements it covers.
 - [x] **I2** Bindings follow LD14: web (`sound`), C ABI version 2, Godot (`style`, `variant`), Unity (`Style`, `Variant`, `HasSound`); the playground maps variants to colors (`src/ui/dots.ts`). — L4.x, R6.2
   - Done when: every suite passes the format-2 vectors and the playground looks as before (headless smoke test).
 - [x] **H2** README for each binding with a short example, and a test guide for the Unity checklist U1–U3 (for whoever runs G3). — L4.8, L4.9
-- [ ] **J1** VitePress site in `docs/`: home, guide, one page per binding, reference, contributing. — L7.1
-- [ ] **J2** `npm run build:site` (docs at `/`, playground at `/playground/`); CI `site` job on every PR, required. — L7.2, L7.3
+- [x] **J1** VitePress site in `docs/`: home, guide, one page per binding, reference, contributing. — L7.1
+- [x] **J2** `npm run build:site` (docs at `/`, playground at `/playground/`); CI `site` job on every PR, required. — L7.2, L7.3
 - [ ] **J3** Organization `mumble-speech` (created by the user), repository `mumble-speech.github.io`, deploy key and secret, Pages enabled, deploy on push to `main`. — L7.4, LD15
   - Done when: `https://mumble-speech.github.io/` and `/playground/` serve the latest `main`.
 - [ ] **H1** `release.yml`: version check, native builds, web package, four archives, GitHub Release; manual dry run. — L8.1, L8.2

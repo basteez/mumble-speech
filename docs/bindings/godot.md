@@ -1,0 +1,53 @@
+# Godot
+
+A GDExtension addon for **Godot 4.3 and later** on Windows, macOS and Linux. Audio is
+generated at runtime; nothing is drawn by the addon.
+
+## Install
+
+Build the addon (needs Rust), then copy `addons/mumble_speech/` into your project:
+
+```sh
+bindings/godot/build.sh
+```
+
+## Use
+
+```gdscript
+var voice := MumbleVoice.new()          # or create one in the inspector
+voice.style = MumbleVoice.ALPHABET
+voice.pitch = 2.0
+
+$MumbleSpeaker.voice = voice
+$MumbleSpeaker.character_spoken.connect(func(i): print("now: ", i))
+$MumbleSpeaker.say("Hello there!")
+
+# Typewriter dialogue: reveals a Label or RichTextLabel in sync with the voice.
+$MumbleTypewriter.label = $Label.get_path()
+$MumbleTypewriter.speaker = $MumbleSpeaker.get_path()
+$MumbleTypewriter.type_text("Guh-huh! Did you bring the honey?")
+```
+
+## Classes
+
+| Class | Members |
+|---|---|
+| `MumbleVoice` (Resource) | `style` (`BEEP`, `GRUNT`, `ALPHABET`), `pitch`, `speed`, `variation`, `seed` |
+| `MumbleSpeaker` (Node) | `voice`, `bus`, `volume_db`; `say(text)`, `speak_character(text) → float` (seconds to wait), `reset()`, `stop()`, `is_speaking()`, `render_stream(text) → AudioStreamWAV`; signals `character_spoken(char_index)`, `finished` |
+| `MumbleTypewriter` (Node) | `label`, `speaker`; `type_text(text)`, `skip()`, `is_typing()`; signal `finished` |
+| `Mumble` (static) | `render(text, voice, sample_rate) → { samples, duration, events }` (or `{ error }`), `encode_wav(samples, sample_rate)` |
+
+Indices are code point indices of the Godot `String`, which is how
+`visible_characters` counts. `Mumble.render` events carry `style` and `variant`.
+
+`character_spoken` and `finished` follow the audio clock (playback position, time since
+the last mix, output latency), so they match what the player hears.
+
+## Example project
+
+`bindings/godot` is itself a Godot project: open it and press Play for a three-line
+dialogue. Its headless tests run every conformance vector:
+
+```sh
+godot --headless --path bindings/godot -s res://tests/run_tests.gd
+```

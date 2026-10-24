@@ -608,8 +608,11 @@ defaults to 1 (LD10).
   the `SITE_DEPLOY_KEY` secret of `basteez/mumble-speech`. A `.nojekyll` file
   disables Jekyll processing.
 - One-time setup: the user creates the free organization (it cannot be created
-  from the CLI); the rest (repository, deploy key, secret, Pages source) is
-  scripted with `gh`.
+  from the CLI); the rest is scripted with `gh`: the repository (Pages is enabled
+  automatically for `<org>.github.io`, branch `main`, HTTPS), the org policy
+  allowing deploy keys (new organizations disable them), the deploy key and the
+  secret. Each deploy is a single orphan commit (`force_orphan`), so the site
+  repository does not grow with history.
 
 ## 13. Release [L8]
 
