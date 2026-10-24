@@ -83,7 +83,10 @@ impl MumbleSpeaker {
         let sample_rate = mix_rate();
         let render = match core::render(&text, &core_voice(&self.voice), sample_rate) {
             Ok(r) => r,
-            Err(e) => return godot_error!("MumbleSpeaker.say: {}", error_name(e)),
+            Err(e) => {
+                godot_error!("MumbleSpeaker.say: {}", error_name(e));
+                return;
+            }
         };
         self.events = render.timeline.events.iter().map(|e| (e.start, char_index(&text, e.utf8_start))).collect();
         self.next_event = 0;
