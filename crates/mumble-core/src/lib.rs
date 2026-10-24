@@ -16,6 +16,7 @@
 extern crate alloc;
 
 mod render;
+mod fold_tables;
 mod rng;
 mod speaker;
 mod style;
@@ -39,6 +40,6 @@ pub mod internals {
     //! Exposed for tests and the conformance generator only. Not part of the stable API.
     pub use crate::rng::{fnv1a, Mulberry32};
     pub use crate::style::{alphabet, grunt, NoiseBurst, Resonance, SoundSpec, Waveform};
-    pub use crate::text::{classify, normalize};
+    pub use crate::text::classify;
     pub use crate::synth::sound;
 }

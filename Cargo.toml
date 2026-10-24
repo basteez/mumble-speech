@@ -11,3 +11,9 @@ rust-version = "1.85"
 [profile.release]
 lto = true
 codegen-units = 1
+
+# Size-optimized build for the WebAssembly package (L4.2).
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+panic = "abort"

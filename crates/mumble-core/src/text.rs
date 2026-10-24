@@ -1,11 +1,12 @@
-//! Normalization and grapheme classification (R1.4, R1.5).
+//! Grapheme classification (R1.4, R1.5).
+//!
+//! Diacritics are folded through generated tables equivalent to "NFD, remove marks,
+//! lowercase" (specs/design.md §4.1, LD11).
 
-use alloc::string::String;
-use unicode_normalization::char::is_combining_mark;
-use unicode_normalization::UnicodeNormalization;
+use crate::fold_tables::{FOLD, IGNORABLE};
 
 /// Category of a grapheme. Letters carry their index, `a` = 0 … `z` = 25.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     Letter(u8),
     Digit,
@@ -31,9 +32,38 @@ impl TokenKind {
     }
 }
 
-/// Strips diacritics and lowercases: `è` → `e`, `Ñ` → `n` (R1.4).
-pub fn normalize(grapheme: &str) -> String {
-    grapheme.nfd().filter(|c| !is_combining_mark(*c)).flat_map(char::to_lowercase).collect()
+/// Folds one character to `a–z` (0–25) or `0–9` (26–35) if it is one, accents and case aside (R1.4).
+fn fold(c: char) -> Option<u8> {
+    match c {
+        'a'..='z' => Some(c as u8 - b'a'),
+        'A'..='Z' => Some(c as u8 - b'A'),
+        '0'..='9' => Some(26 + c as u8 - b'0'),
+        _ if c.is_ascii() => None,
+        _ => {
+            let key = (c as u32) << 6;
+            let i = FOLD.partition_point(|&entry| entry < key);
+            FOLD.get(i).filter(|&&entry| entry >> 6 == c as u32).map(|&entry| (entry & 0x3f) as u8)
+        }
+    }
+}
+
+/// Combining marks and other characters that vanish when folding.
+fn is_ignorable(c: char) -> bool {
+    let c = c as u32;
+    let i = IGNORABLE.partition_point(|&(_, end)| end < c);
+    IGNORABLE.get(i).is_some_and(|&(start, _)| start <= c)
+}
+
+/// The letter or digit a grapheme stands for: exactly one non-ignorable character that folds.
+fn base(grapheme: &str) -> Option<u8> {
+    let mut found = None;
+    for c in grapheme.chars().filter(|c| !is_ignorable(*c)) {
+        if found.is_some() {
+            return None;
+        }
+        found = Some(fold(c)?);
+    }
+    found
 }
 
 /// Classifies one grapheme into exactly one category (R1.5).
@@ -47,11 +77,10 @@ pub fn classify(grapheme: &str) -> TokenKind {
     if !grapheme.is_empty() && grapheme.chars().all(char::is_whitespace) {
         return TokenKind::Space;
     }
-    let mut base = grapheme.nfd().filter(|c| !is_combining_mark(*c)).flat_map(char::to_lowercase);
-    match (base.next(), base.next()) {
-        (Some(c @ 'a'..='z'), None) => TokenKind::Letter(c as u8 - b'a'),
-        (Some('0'..='9'), None) => TokenKind::Digit,
-        _ => TokenKind::Other,
+    match base(grapheme) {
+        Some(n @ 0..=25) => TokenKind::Letter(n),
+        Some(_) => TokenKind::Digit,
+        None => TokenKind::Other,
     }
 }
 
@@ -65,13 +94,53 @@ mod tests {
         text.graphemes(true).map(classify).collect()
     }
 
-    #[test]
-    fn normalize_strips_diacritics_and_lowercases() {
-        for (input, expected) in [("è", "e"), ("É", "e"), ("ñ", "n"), ("ü", "u"), ("Å", "a"), ("ç", "c")] {
-            assert_eq!(normalize(input), expected);
+    /// R1.4 as originally specified: NFD, marks removed, lowercased; then a–z / 0–9 / other.
+    fn reference(grapheme: &str) -> Option<u8> {
+        use alloc::string::String;
+        use unicode_normalization::char::is_combining_mark;
+        use unicode_normalization::UnicodeNormalization;
+        let folded: String =
+            grapheme.nfd().filter(|c| !is_combining_mark(*c)).flat_map(char::to_lowercase).collect();
+        let mut chars = folded.chars();
+        match (chars.next(), chars.next()) {
+            (Some(c @ 'a'..='z'), None) => Some(c as u8 - b'a'),
+            (Some(c @ '0'..='9'), None) => Some(26 + c as u8 - b'0'),
+            _ => None,
         }
-        assert_eq!(normalize("ß"), "ß");
-        assert_eq!(normalize("ж"), "ж");
+    }
+
+    #[test]
+    fn folding_tables_match_the_reference_for_every_scalar_value() {
+        let mut buf = [0u8; 4];
+        for c in (0..=0x10ffffu32).filter_map(char::from_u32) {
+            let s = c.encode_utf8(&mut buf);
+            assert_eq!(base(s), reference(s), "U+{:04X}", c as u32);
+        }
+    }
+
+    #[test]
+    fn folding_tables_match_the_reference_for_letters_with_marks() {
+        let marks = ['\u{0300}', '\u{0301}', '\u{0308}', '\u{0323}', '\u{0344}', '\u{20DD}', '\u{FE0F}'];
+        let bases = ['a', 'E', 'é', 'İ', 'ß', 'ж', '1', '\u{0301}', 'ǅ'];
+        for b in bases {
+            for m1 in marks {
+                for m2 in marks {
+                    let s: alloc::string::String = [b, m1, m2].iter().collect();
+                    assert_eq!(base(&s), reference(&s), "{s:?}");
+                    let pair: alloc::string::String = [b, b].iter().collect();
+                    assert_eq!(base(&pair), reference(&pair), "{pair:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn folds_accents_and_case() {
+        for (input, expected) in [("è", 4), ("É", 4), ("ñ", 13), ("ü", 20), ("Å", 0), ("ç", 2), ("e\u{0301}", 4)] {
+            assert_eq!(base(input), Some(expected), "{input:?}");
+        }
+        assert_eq!(base("ß"), None);
+        assert_eq!(base("ж"), None);
     }
 
     #[test]

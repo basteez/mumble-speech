@@ -87,9 +87,9 @@ Test-only internals (sound specs, style tables, single-sound synthesis) are
 exposed under `mumble_speech::internals`, `#[doc(hidden)]` and outside the
 stable API.
 
-Core dependencies: `libm` (deterministic math [L1.4]), `unicode-segmentation`
-(graphemes) and `unicode-normalization` (diacritic stripping, R1.4), all
-`no_std`. Nothing else.
+Core dependencies: `libm` (deterministic math [L1.4]) and `unicode-segmentation`
+(graphemes), both `no_std`. Nothing else. `unicode-normalization` is only a
+dev-dependency, used to generate and verify the folding tables (§4.1, LD11).
 
 ## 3. Cross-platform determinism [L1.4]
 
@@ -182,7 +182,23 @@ JSON schema (`version: 1`; values below are illustrative):
    - `base` in `a–z` → `letter`
    - `0–9` → `digit`
    - everything else → `other` (emoji, non-Latin alphabets, symbols)
-3. Iteration is per *grapheme* (`Intl.Segmenter`), so a composite emoji counts as a single token.
+3. Iteration is per *grapheme* (`Intl.Segmenter`, `unicode-segmentation` in Rust), so a composite emoji counts as a single token.
+
+Rust implementation (LD11): step 1 is not computed at runtime. Two tables,
+generated from `unicode-normalization` by
+`cargo run -p mumble-speech --example gen_tables` and committed as
+`src/fold_tables.rs`, give the same result:
+
+- `FOLD`: every non-ASCII character whose NFD, without marks, lowercased, is
+  exactly one character in `a–z` or `0–9`, with that character;
+- `IGNORABLE`: ranges of characters whose NFD is only marks (they vanish).
+
+A grapheme is a letter or digit when, skipping ignorable characters, exactly one
+character is left and it folds to `a–z` or `0–9` (ASCII directly, otherwise via
+`FOLD`). This equals step 1 for any grapheme, because NFD and lowercasing work
+character by character and the result must be a single character, so the
+canonical reordering of marks cannot change it. A test compares both methods
+on every Unicode scalar value.
 
 ### 4.2 Determinism [R3.8]
 
@@ -343,24 +359,44 @@ Pure function: timeline + sample rate → `f32` samples.
 
 ### 9.1 Web: `mumble-wasm` + `@mumble-speech/web` [L4.1, L4.2]
 
-- `wasm-bindgen` (pinned version) with `--target web`, build with
-  `opt-level = "z"`, LTO and `wasm-opt -Oz`.
+- `wasm-bindgen` (pinned version, `0.2.129`) with `--target web`,
+  `--remove-name-section` and `--remove-producers-section`; Cargo profile `wasm`
+  (`opt-level = "z"`, LTO, `panic = "abort"`) and `wasm-opt -Oz` (npm `binaryen`).
+- The optimized `.wasm` is inlined in the JS as base64 and instantiated with
+  `WebAssembly.instantiate` inside `init()` (LD12): no file to fetch or locate,
+  so the same code works in browsers, Node and any bundler without
+  configuration.
+- Build: `npm run build -w @mumble-speech/web` runs
+  `packages/web/scripts/build-wasm.mjs` (cargo build, wasm-bindgen, wasm-opt,
+  base64 module into `src/generated/`, not committed) and `tsc` to `dist/`.
 - Objects cross the boundary in compact form: samples as
   `Float32Array`, events as a packed `Float64Array`. The TS wrapper
   turns them into typed objects. No `serde`, for size [L4.2].
 - TS API:
 
 ```ts
-await init();                        // loads the WASM, idempotent
-render(text, voice, sampleRate?) → { samples: Float32Array; timeline: Timeline }
+await init();                        // instantiates the WASM, idempotent; other calls throw before it
+render(text, voice, sampleRate = 48000) → { samples: Float32Array; sampleRate; timeline: Timeline }
 timeline(text, voice) → Timeline
 encodeWav(samples, sampleRate) → Uint8Array
-new Speaker(voice, sampleRate?)  .next(text) → Utterance  .reset()  .free()
+new Speaker(voice, sampleRate = 48000)  .next(text) → Utterance  .reset()  .free()
 new WebAudioPlayer()  .unlock()  .play(samples, sampleRate)  .stop()  .position()
+
+type Voice = { style: 'beep' | 'grunt' | 'alphabet'; pitch?; speed?; variation?; seed? }  // defaults 0, 15, 0, 0
+type MumbleEvent = { graphemeIndex; utf8Start; utf8Length; utf16Start; utf16Length;
+                     start; duration; dot: { color: '#rrggbb'; size: 'sm' | 'md' | 'lg' } }
+type Utterance = { samples: Float32Array; advance: number; dot: Dot | null }
+class MumbleError extends Error { code: 'PitchOutOfRange' | 'SpeedOutOfRange'
+                                  | 'VariationOutOfRange' | 'SampleRateOutOfRange' | 'UnknownStyle' }
 ```
 
 - `WebAudioPlayer` is the playground's `Player`, moved into the package.
-- Tests: Vitest in Node loads the WASM and runs the vectors [L5.2]. An external consumption check runs `npm pack`, installs the tarball in an empty project and uses the public API [L6.2].
+- Tests: Vitest in Node loads the WASM and runs the vectors [L5.2], checks
+  Speaker/render equivalence (L3.2), the L2.5 WASM budget (with `MUMBLE_PERF_SLACK`,
+  LD10) and the size budget: gzip of the JS in `dist/`, WASM included, under
+  60 KB [L4.2]. An external consumption check
+  (`packages/web/scripts/consume-check.mjs`) runs `npm pack`, installs the
+  tarball in an empty project and renders a vector through the public API [L6.2].
 
 ### 9.2 C ABI: `mumble-ffi` [L4.3–L4.5]
 
@@ -431,7 +467,7 @@ GitHub Actions, matrix:
 | Job | Runner | Produces / verifies |
 |---|---|---|
 | core | ubuntu, macos, windows | `cargo test`, native vectors, L2.5 benchmark |
-| wasm | ubuntu | WASM build, package Vitest tests, L4.2 budget, L6.2 external consumption |
+| web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu | GDExtension build, headless tests |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
@@ -477,6 +513,8 @@ defaults to 1 (LD10).
 | LD8 | Playground in a separate repository (superseded by LD9) | `apps/playground` in the monorepo | User request: the library repo contains only the library |
 | LD9 | Playground back in the monorepo as a private app, with its history imported | Separate repository linked from the README | A contributor changing the core can hear it with one clone and one PR; CI catches API breaks in the same PR; no version drift between library and demo [L6.1] |
 | LD10 | Benchmarks warm up once and scale their budget by `MUMBLE_PERF_SLACK` (1 locally, 3 in CI) | Exact budget in CI; no benchmark in CI | First CI run: 52 ms vs 50 ms (core, `beep`, cold first run) and 290 ms vs 250 ms (playground) on 2-core shared runners, while the same code passes on the laptop with margin. A ×3 slack still catches regressions like D6 (×30) |
+| LD11 | Diacritic folding through generated tables (`FOLD`, `IGNORABLE`) instead of `unicode-normalization` at runtime | Keep `unicode-normalization`; hand-written Latin table | Measured: the normalization tables were 64 KB of the 104 KB gzip WASM, budget 60 KB (L4.2); without them 40 KB. Generated tables keep R1.4 exact, and an exhaustive test over all scalar values proves it; a hand-written table would drift |
+| LD12 | WASM inlined as base64 in the JS module | Separate `.wasm` file loaded via `new URL(…, import.meta.url)` | Works unchanged in browsers, Node ≥ 20 and bundlers (a separate file needs `fs` in Node and bundler support, and `node:` imports break some bundlers). Measured: base64 costs 30% more gzip than the raw `.wasm` (51.8 KB vs 39.9 KB); the package totals 57.2 KB gzip, under the 60 KB budget [L4.2] with a narrow margin, guarded by the size test. If the budget is exceeded, switch to a separate `.wasm` file |
 
 Decisions inherited from the first version (IDs unchanged):
 
