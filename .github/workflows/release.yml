@@ -1,0 +1,161 @@
+# Release (specs/design.md §13, L8). A tag vX.Y.Z publishes a GitHub Release with four
+# archives. Manual runs and pull requests that change the release pipeline are dry runs:
+# same builds and checks, no release.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/release/**
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Every package has the same version, equal to the tag (L8.2)
+        id: check
+        run: |
+          cargo_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "mumble-speech") | .version')
+          web_version=$(jq -r .version packages/web/package.json)
+          unity_version=$(jq -r .version bindings/unity/package.json)
+          echo "cargo $cargo_version, web $web_version, unity $unity_version"
+          [ "$cargo_version" = "$web_version" ] && [ "$cargo_version" = "$unity_version" ] || { echo "::error::package versions differ"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "v$cargo_version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $cargo_version"; exit 1
+          fi
+          echo "version=$cargo_version" >> "$GITHUB_OUTPUT"
+
+  native:
+    needs: version
+    name: native (${{ matrix.platform }})
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux-x64 }
+          - { os: windows-latest, platform: windows-x64 }
+          - { os: macos-latest, platform: macos-universal }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build C ABI and Godot libraries
+        run: |
+          mkdir -p out
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            for target in aarch64-apple-darwin x86_64-apple-darwin; do
+              cargo build --release -p mumble-ffi -p mumble-godot --target "$target"
+            done
+            for lib in libmumble_ffi.dylib libmumble_godot.dylib; do
+              lipo -create -output "out/$lib" "target/aarch64-apple-darwin/release/$lib" "target/x86_64-apple-darwin/release/$lib"
+            done
+            lipo -info out/*.dylib
+          else
+            cargo build --release -p mumble-ffi -p mumble-godot
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              cp target/release/mumble_ffi.dll target/release/mumble_ffi.dll.lib target/release/mumble_godot.dll out/
+            else
+              cp target/release/libmumble_ffi.so target/release/libmumble_godot.so out/
+            fi
+          fi
+          ls -l out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.platform }}
+          path: out/
+          if-no-files-found: error
+
+  web:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @mumble-speech/web
+      - name: npm pack
+        run: |
+          mkdir -p out
+          npm pack -w @mumble-speech/web --pack-destination out
+          ls -l out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web
+          path: out/
+          if-no-files-found: error
+
+  assemble:
+    needs: [version, native, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Build the four archives (L8.1)
+        run: scripts/release/assemble.sh "${{ needs.version.outputs.version }}" artifacts release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: release/
+          if-no-files-found: error
+
+  verify:
+    needs: [version, assemble]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Download Godot 4.3 (minimum supported)
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip"
+          unzip -q godot.zip -d godot && mv godot/Godot_v*_linux.x86_64 godot/godot
+      - name: Check the archives before publishing
+        run: scripts/release/verify.sh "${{ needs.version.outputs.version }}" release "$PWD/godot/godot"
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [version, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "mumble-speech $GITHUB_REF_NAME" --generate-notes

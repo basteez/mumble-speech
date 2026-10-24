@@ -616,8 +616,9 @@ defaults to 1 (LD10).
 
 ## 13. Release [L8]
 
-`.github/workflows/release.yml`, on tags `v*.*.*` and on manual dispatch
-(dry run: artifacts only, no GitHub Release):
+`.github/workflows/release.yml`, on tags `v*.*.*`; manual runs and pull
+requests that change the workflow or `scripts/release/` are dry runs (archives
+built and verified, no GitHub Release):
 
 1. `version`: the tag equals the version in `Cargo.toml` (workspace),
    `packages/web/package.json` and `bindings/unity/package.json` [L8.2].
@@ -633,7 +634,13 @@ defaults to 1 (LD10).
    - `com.mumble-speech.unity-X.Y.Z.tgz`: the UPM package (`package/` prefix,
      as npm tarballs) with `Plugins/` filled;
    - `mumble-speech-web-X.Y.Z.tgz`: the npm tarball;
-   then `gh release create vX.Y.Z --generate-notes` with the four files [L8.1].
+   (`scripts/release/assemble.sh`).
+5. `verify` (Linux, `scripts/release/verify.sh`): the C tests link against the
+   packaged library; the packaged Godot addon passes the headless tests on
+   Godot 4.3; the Unity tarball has the three plugins and a `.meta` for every
+   file; the npm tarball installs in an empty project and renders a vector.
+6. `publish` (tags only, after `verify`): `gh release create vX.Y.Z
+   --generate-notes` with the four files [L8.1].
 
 Publishing a release is an outward-facing action: the first tag is pushed
 only with the user's go-ahead.
