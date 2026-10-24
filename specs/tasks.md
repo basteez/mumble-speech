@@ -24,7 +24,7 @@ task cites the requirements it covers.
 ## Phase C — Conformance
 
 - [x] **C1** `mumble-conformance`: list of cases, generation of `conformance/vectors.json` and of the vectors' C header. — L5.1, LD7
-- [ ] **C2** Core CI on Linux, macOS and Windows with vector verification. — L1.4
+- [x] **C2** Core CI on Linux, macOS and Windows with vector verification. — L1.4
 
 ## Phase D — Web
 
