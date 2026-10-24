@@ -6,7 +6,7 @@ use mumble_speech as core;
 use wasm_bindgen::prelude::*;
 
 /// Numbers per event in [`RenderResult::events`]: grapheme, utf8 start/len,
-/// utf16 start/len, start, duration, rgb, size.
+/// utf16 start/len, start, duration, style, variant.
 pub const EVENT_STRIDE: usize = 9;
 
 fn voice(style: u32, pitch: f64, speed: f64, variation: f64, seed: u32) -> Result<core::Voice, JsError> {
@@ -36,8 +36,8 @@ fn pack(timeline: &core::Timeline) -> Vec<f64> {
             f64::from(e.utf16_len),
             e.start,
             e.duration,
-            f64::from(e.dot.rgb),
-            f64::from(e.dot.size as u8),
+            f64::from(e.sound.style as u32),
+            f64::from(e.sound.variant),
         ]);
     }
     out
@@ -105,8 +105,9 @@ pub fn encode_wav(samples: &[f32], sample_rate: u32) -> Vec<u8> {
 pub struct Utterance {
     samples: Vec<f32>,
     advance: f64,
-    dot_rgb: i32,
-    dot_size: u8,
+    /// Style index of the sound, or −1 when nothing sounded.
+    sound_style: i32,
+    sound_variant: u8,
 }
 
 #[wasm_bindgen]
@@ -121,15 +122,15 @@ impl Utterance {
         self.advance
     }
 
-    /// `0xRRGGBB`, or −1 when nothing sounded.
-    #[wasm_bindgen(getter, js_name = dotRgb)]
-    pub fn dot_rgb(&self) -> i32 {
-        self.dot_rgb
+    /// Style index of the sound (0 beep, 1 grunt, 2 alphabet), or −1 when nothing sounded.
+    #[wasm_bindgen(getter, js_name = soundStyle)]
+    pub fn sound_style(&self) -> i32 {
+        self.sound_style
     }
 
-    #[wasm_bindgen(getter, js_name = dotSize)]
-    pub fn dot_size(&self) -> u8 {
-        self.dot_size
+    #[wasm_bindgen(getter, js_name = soundVariant)]
+    pub fn sound_variant(&self) -> u8 {
+        self.sound_variant
     }
 }
 
@@ -148,8 +149,8 @@ impl Speaker {
         Utterance {
             samples: u.samples,
             advance: u.advance,
-            dot_rgb: u.dot.map_or(-1, |d| d.rgb as i32),
-            dot_size: u.dot.map_or(0, |d| d.size as u8),
+            sound_style: u.sound.map_or(-1, |id| id.style as i32),
+            sound_variant: u.sound.map_or(0, |id| id.variant),
         }
     }
 

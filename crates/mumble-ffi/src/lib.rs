@@ -11,7 +11,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::{ptr, slice};
 
 /// Bumped on every incompatible change of this interface (L4.5).
-pub const MUMBLE_ABI_VERSION: u32 = 1;
+pub const MUMBLE_ABI_VERSION: u32 = 2;
 
 pub const MUMBLE_OK: i32 = 0;
 pub const MUMBLE_ERR_NULL: i32 = -1;
@@ -32,7 +32,8 @@ pub struct MumbleVoice {
     pub seed: u32,
 }
 
-/// One sound of a rendered line. `dot_rgb` is 0xRRGGBB; `dot_size` 0 = sm, 1 = md, 2 = lg.
+/// One sound of a rendered line. `style` 0 = beep, 1 = grunt, 2 = alphabet; `variant` is
+/// which sound of the style (beep 0; grunt 0–3; alphabet 0–25 for a–z, 26 neutral).
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct MumbleEvent {
@@ -43,20 +44,21 @@ pub struct MumbleEvent {
     pub utf16_len: u32,
     pub start: f64,
     pub duration: f64,
-    pub dot_rgb: u32,
-    pub dot_size: u8,
+    pub style: u32,
+    pub variant: u8,
 }
 
 /// Result of `mumble_speaker_next`. `samples` stays valid until the next call on the
-/// same speaker or until it is freed. `has_dot` is 0 for spaces and pauses.
+/// same speaker or until it is freed. `has_sound` is 0 for spaces and pauses; then
+/// `style` and `variant` are 0.
 #[repr(C)]
 pub struct MumbleUtterance {
     pub samples: *const f32,
     pub sample_count: usize,
     pub advance: f64,
-    pub dot_rgb: u32,
-    pub dot_size: u8,
-    pub has_dot: u8,
+    pub style: u32,
+    pub variant: u8,
+    pub has_sound: u8,
 }
 
 /// Opaque rendered line; free with `mumble_render_free`.
@@ -167,8 +169,8 @@ pub unsafe extern "C" fn mumble_render_event(render: *const MumbleRender, index:
         utf16_len: e.utf16_len,
         start: e.start,
         duration: e.duration,
-        dot_rgb: e.dot.rgb,
-        dot_size: e.dot.size as u8,
+        style: e.sound.style as u32,
+        variant: e.sound.variant,
     };
     MUMBLE_OK
 }
@@ -225,9 +227,9 @@ pub unsafe extern "C" fn mumble_speaker_next(
             samples: s.last.as_ptr(),
             sample_count: s.last.len(),
             advance: u.advance,
-            dot_rgb: u.dot.map_or(0, |d| d.rgb),
-            dot_size: u.dot.map_or(0, |d| d.size as u8),
-            has_dot: u8::from(u.dot.is_some()),
+            style: u.sound.map_or(0, |id| id.style as u32),
+            variant: u.sound.map_or(0, |id| id.variant),
+            has_sound: u8::from(u.sound.is_some()),
         };
         MUMBLE_OK
     })

@@ -1,4 +1,4 @@
-//! The three styles: what each sounding grapheme plays and which dot it shows.
+//! The three styles: what each sounding grapheme plays and which variant it is.
 //! Tables and formulas: specs/design.md §5.
 
 use crate::rng::Mulberry32;
@@ -47,32 +47,19 @@ pub struct SoundSpec {
     pub gain: f64,
 }
 
+/// Which sound of the style an event plays (L2.3, LD14): beep 0; grunt 0–3;
+/// alphabet 0–25 for `a`–`z`, 26 for the neutral sound. Neutral data: hosts map it to
+/// whatever they like (mouth shapes, particles, colors).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[repr(u8)]
-pub enum DotSize {
-    Sm = 0,
-    Md = 1,
-    Lg = 2,
+pub struct SoundId {
+    pub style: StyleId,
+    pub variant: u8,
 }
-
-/// Visualization hint for a sound: color as `0xRRGGBB` (LD3) and size.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Dot {
-    pub rgb: u32,
-    pub size: DotSize,
-}
-
-const TEAL: u32 = 0x3f8f78;
-const BLUE: u32 = 0x3f6fc4;
-const OLIVE: u32 = 0x7d8f45;
-const ORANGE: u32 = 0xb85a33;
-const MUTED: u32 = 0x9aa0a6;
 
 /// A style's choice for one grapheme. `variant` identifies the sound within the style (R3.3).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Choice {
     pub spec: SoundSpec,
-    pub dot: Dot,
     pub variant: u8,
 }
 
@@ -100,7 +87,7 @@ mod beep {
 
     /// One beep for every letter (R3.1).
     pub(crate) fn choose() -> Choice {
-        Choice { spec: SPEC, dot: Dot { rgb: TEAL, size: DotSize::Md }, variant: 0 }
+        Choice { spec: SPEC, variant: 0 }
     }
 }
 
@@ -108,27 +95,25 @@ pub mod grunt {
     //! A few grunts per voice, never the same twice in a row (R3.2, R3.3).
     use super::*;
 
-    const fn g(frequency: f64, glide: f64, duration_ratio: f64, formants: [f64; 2], rgb: u32, size: DotSize) -> (SoundSpec, Dot) {
-        (
-            SoundSpec {
-                waveform: Waveform::Sawtooth,
-                frequency,
-                glide,
-                duration_ratio,
-                formants: Some(formants),
-                vocal_tract: None,
-                noise_burst: None,
-                gain: 0.5,
-            },
-            Dot { rgb, size },
-        )
+    const fn g(frequency: f64, glide: f64, duration_ratio: f64, formants: [f64; 2]) -> SoundSpec {
+        SoundSpec {
+            waveform: Waveform::Sawtooth,
+            frequency,
+            glide,
+            duration_ratio,
+            formants: Some(formants),
+            vocal_tract: None,
+            noise_burst: None,
+            gain: 0.5,
+        }
     }
 
-    pub const GRUNTS: [(SoundSpec, Dot); 4] = [
-        g(140.0, -3.0, 0.5, [600.0, 1000.0], TEAL, DotSize::Sm),
-        g(180.0, -5.0, 0.75, [700.0, 1200.0], BLUE, DotSize::Md),
-        g(110.0, -2.0, 0.9, [500.0, 900.0], OLIVE, DotSize::Lg),
-        g(210.0, -6.0, 0.6, [800.0, 1400.0], ORANGE, DotSize::Md),
+    /// Indexed by variant.
+    pub const GRUNTS: [SoundSpec; 4] = [
+        g(140.0, -3.0, 0.5, [600.0, 1000.0]),
+        g(180.0, -5.0, 0.75, [700.0, 1200.0]),
+        g(110.0, -2.0, 0.9, [500.0, 900.0]),
+        g(210.0, -6.0, 0.6, [800.0, 1400.0]),
     ];
 
     pub(crate) fn choose(rng: &mut Mulberry32, prev: Option<u8>) -> Choice {
@@ -137,8 +122,7 @@ pub mod grunt {
         if Some(i as u8) == prev {
             i = (i + 1 + (rng.next_f64() * (count - 1) as f64) as usize) % count;
         }
-        let (spec, dot) = GRUNTS[i];
-        Choice { spec, dot, variant: i as u8 }
+        Choice { spec: GRUNTS[i], variant: i as u8 }
     }
 }
 
@@ -201,11 +185,6 @@ pub mod alphabet {
         }
     }
 
-    pub fn letter_dot(n: u8) -> Dot {
-        let hue = libm::round(f64::from(n) * 360.0 / 26.0);
-        Dot { rgb: hsl_to_rgb(hue, 0.55, 0.55), size: DotSize::Md }
-    }
-
     /// Schwa shared by digits and other characters (R3.5).
     pub const NEUTRAL_SPEC: SoundSpec = SoundSpec {
         waveform: Waveform::Sawtooth,
@@ -220,41 +199,9 @@ pub mod alphabet {
 
     pub(crate) fn choose(kind: TokenKind) -> Choice {
         match kind {
-            TokenKind::Letter(n) => Choice { spec: letter_spec(n), dot: letter_dot(n), variant: n },
-            _ => Choice {
-                spec: NEUTRAL_SPEC,
-                dot: Dot { rgb: MUTED, size: DotSize::Md },
-                variant: NEUTRAL_VARIANT,
-            },
-        }
-    }
-
-    fn hsl_to_rgb(hue: f64, saturation: f64, lightness: f64) -> u32 {
-        let chroma = (1.0 - libm::fabs(2.0 * lightness - 1.0)) * saturation;
-        let h = hue / 60.0;
-        let x = chroma * (1.0 - libm::fabs(libm::fmod(h, 2.0) - 1.0));
-        let (r, g, b) = match h as u32 {
-            0 => (chroma, x, 0.0),
-            1 => (x, chroma, 0.0),
-            2 => (0.0, chroma, x),
-            3 => (0.0, x, chroma),
-            4 => (x, 0.0, chroma),
-            _ => (chroma, 0.0, x),
-        };
-        let m = lightness - chroma / 2.0;
-        let channel = |v: f64| libm::round((v + m) * 255.0) as u32;
-        (channel(r) << 16) | (channel(g) << 8) | channel(b)
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[test]
-        fn hsl_matches_css() {
-            assert_eq!(hsl_to_rgb(0.0, 0.55, 0.55), 0xcb4d4d);
-            assert_eq!(hsl_to_rgb(120.0, 0.55, 0.55), 0x4dcb4d);
-            assert_eq!(hsl_to_rgb(240.0, 0.55, 0.55), 0x4d4dcb);
+            TokenKind::Letter(n) => Choice { spec: letter_spec(n), variant: n },
+            _ => Choice { spec: NEUTRAL_SPEC, variant: NEUTRAL_VARIANT },
         }
     }
 }
+

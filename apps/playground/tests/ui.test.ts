@@ -2,6 +2,7 @@
 import type { MumbleEvent } from '@mumble-speech/web';
 import { describe, expect, it, vi } from 'vitest';
 import { createBufferCache } from '../src/audio/cache.ts';
+import { dotFor } from '../src/ui/dots.ts';
 import { eventAt } from '../src/ui/event-at.ts';
 import { exportFilename } from '../src/ui/filename.ts';
 
@@ -60,7 +61,7 @@ describe('eventAt (R6.3)', () => {
     utf16Length: 1,
     start,
     duration,
-    dot: { color: '#ff0000', size: 'md' },
+    sound: { style: 'beep', variant: 0 },
   });
   const events = [ev(0, 0.05), ev(0.1, 0.05), ev(0.5, 0.05)];
 
@@ -80,5 +81,24 @@ describe('eventAt (R6.3)', () => {
 
   it('handles an empty list', () => {
     expect(eventAt([], 0)).toBeNull();
+  });
+});
+
+describe('dotFor (R6.2)', () => {
+  it('uses one dot for beep', () => {
+    expect(dotFor({ style: 'beep', variant: 0 })).toEqual({ color: 'var(--teal)', size: 'md' });
+  });
+
+  it('gives each grunt its own color and size', () => {
+    const dots = [0, 1, 2, 3].map((variant) => dotFor({ style: 'grunt', variant }));
+    expect(new Set(dots.map((d) => `${d.color}/${d.size}`)).size).toBe(4);
+    expect(dots.map((d) => d.size)).toEqual(['sm', 'md', 'lg', 'md']);
+  });
+
+  it('gives the 26 letters 26 colors and the neutral sound a gray', () => {
+    const colors = Array.from({ length: 26 }, (_, variant) => dotFor({ style: 'alphabet', variant }).color);
+    expect(new Set(colors).size).toBe(26);
+    expect(colors[0]).toBe('hsl(0 55% 55%)');
+    expect(dotFor({ style: 'alphabet', variant: 26 }).color).toBe('var(--muted)');
   });
 });

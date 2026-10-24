@@ -29,8 +29,8 @@ namespace MumbleSpeech
             public uint Utf16Len;
             public double Start;
             public double Duration;
-            public uint DotRgb;
-            public byte DotSize;
+            public uint Style;
+            public byte Variant;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -39,9 +39,9 @@ namespace MumbleSpeech
             public IntPtr Samples;
             public UIntPtr SampleCount;
             public double Advance;
-            public uint DotRgb;
-            public byte DotSize;
-            public byte HasDot;
+            public uint Style;
+            public byte Variant;
+            public byte HasSound;
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

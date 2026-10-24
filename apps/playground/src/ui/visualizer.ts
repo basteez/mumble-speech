@@ -1,4 +1,5 @@
 import type { Timeline } from '@mumble-speech/web';
+import { dotFor } from './dots.ts';
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
@@ -15,7 +16,7 @@ export function createVisualizer(root: HTMLElement) {
     render(text: string, timeline: Timeline) {
       active = null;
       cells = new Map();
-      const dots = new Map(timeline.events.map((e) => [e.utf16Start, e.dot]));
+      const dots = new Map(timeline.events.map((e) => [e.utf16Start, dotFor(e.sound)]));
       const children: HTMLElement[] = [];
       let word: HTMLElement | null = null;
 

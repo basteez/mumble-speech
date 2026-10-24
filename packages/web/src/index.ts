@@ -19,13 +19,13 @@ export interface Voice {
   seed?: number;
 }
 
-export type DotSize = 'sm' | 'md' | 'lg';
-
-/** Visualization hint for a sound. */
-export interface Dot {
-  /** `#rrggbb`. */
-  color: string;
-  size: DotSize;
+/**
+ * Which sound of the style an event plays: `beep` 0; `grunt` 0–3; `alphabet` 0–25 for
+ * a–z, 26 for the neutral sound. Neutral data: map it to mouth shapes, effects, colors…
+ */
+export interface SoundId {
+  style: StyleId;
+  variant: number;
 }
 
 export interface MumbleEvent {
@@ -39,7 +39,7 @@ export interface MumbleEvent {
   start: number;
   /** Seconds. */
   duration: number;
-  dot: Dot;
+  sound: SoundId;
 }
 
 export interface Timeline {
@@ -63,7 +63,8 @@ export interface Utterance {
   samples: Samples;
   /** Seconds to wait before the next character. */
   advance: number;
-  dot: Dot | null;
+  /** The sound played, or null for spaces and pauses. */
+  sound: SoundId | null;
 }
 
 export type MumbleErrorCode =
@@ -83,7 +84,7 @@ export class MumbleError extends Error {
 export const DEFAULT_SAMPLE_RATE = 48_000;
 
 const STYLE_INDEX: Record<StyleId, number> = { beep: 0, grunt: 1, alphabet: 2 };
-const SIZES: readonly DotSize[] = ['sm', 'md', 'lg'];
+const STYLE_IDS: readonly StyleId[] = ['beep', 'grunt', 'alphabet'];
 /** Numbers per event in the packed array (crates/mumble-wasm). */
 const EVENT_STRIDE = 9;
 
@@ -127,8 +128,8 @@ function args(voice: Voice): [number, number, number, number, number] {
   return [style, voice.pitch ?? 0, voice.speed ?? 15, voice.variation ?? 0, voice.seed ?? 0];
 }
 
-function dot(rgb: number, size: number): Dot {
-  return { color: `#${rgb.toString(16).padStart(6, '0')}`, size: SIZES[size] };
+function soundId(style: number, variant: number): SoundId {
+  return { style: STYLE_IDS[style], variant };
 }
 
 function unpack(packed: Float64Array, duration: number): Timeline {
@@ -142,7 +143,7 @@ function unpack(packed: Float64Array, duration: number): Timeline {
       utf16Length: packed[i + 4],
       start: packed[i + 5],
       duration: packed[i + 6],
-      dot: dot(packed[i + 7], packed[i + 8]),
+      sound: soundId(packed[i + 7], packed[i + 8]),
     });
   }
   return { events, duration };
@@ -194,7 +195,8 @@ export class Speaker {
     return call(() => {
       const u = this.#inner.next(text);
       try {
-        return { samples: u.takeSamples() as Samples, advance: u.advance, dot: u.dotRgb < 0 ? null : dot(u.dotRgb, u.dotSize) };
+        const sound = u.soundStyle < 0 ? null : soundId(u.soundStyle, u.soundVariant);
+        return { samples: u.takeSamples() as Samples, advance: u.advance, sound };
       } finally {
         u.free();
       }

@@ -1,4 +1,4 @@
-use crate::audio::{char_index, color, size_name};
+use crate::audio::char_index;
 use crate::voice::{core_voice, error_name, MumbleVoice};
 use godot::prelude::*;
 use mumble_speech as core;
@@ -11,6 +11,8 @@ pub struct Mumble {}
 #[godot_api]
 impl Mumble {
     /// `{ samples: PackedFloat32Array, duration: float, events: Array }`, or `{ error: String }`.
+    /// Each event: `char_index`, `char_count`, `start`, `duration`, `style` (MumbleVoice.BEEP…),
+    /// `variant` (which sound of the style: grunt 0–3, letter 0–25, 26 neutral).
     #[func]
     fn render(text: GString, voice: Option<Gd<MumbleVoice>>, sample_rate: i64) -> VarDictionary {
         let text = text.to_string();
@@ -26,8 +28,8 @@ impl Mumble {
                         "char_count" => end - start,
                         "start" => e.start,
                         "duration" => e.duration,
-                        "color" => color(e.dot.rgb),
-                        "size" => size_name(e.dot.size),
+                        "style" => e.sound.style as i64,
+                        "variant" => i64::from(e.sound.variant),
                     };
                     events.push(&event.to_variant());
                 }
