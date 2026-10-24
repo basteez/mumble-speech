@@ -1,0 +1,5 @@
+Plugins/**/*.dylib
+Plugins/**/*.so
+Plugins/**/*.dll
+DotnetTests~/bin/
+DotnetTests~/obj/

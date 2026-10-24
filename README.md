@@ -25,6 +25,7 @@ crates/mumble-ffi/    C ABI (cdylib + staticlib)
 bindings/c/           mumble.h, CMake tests and example
 crates/mumble-godot/  Godot 4 GDExtension
 bindings/godot/       Godot addon, example scene and headless tests
+bindings/unity/       Unity package (UPM): C# interop, components, EditMode tests
 apps/playground/      web playground to try the styles (private, not published)
 specs/                requirements, design and plan (spec-driven: start here)
 ```
@@ -44,6 +45,7 @@ npm test                      # web package and playground tests
 cargo build -p mumble-ffi --release                 # C ABI
 cmake -S bindings/c -B build/c && cmake --build build/c && ctest --test-dir build/c
 bindings/godot/build.sh && godot --headless --path bindings/godot -s res://tests/run_tests.gd
+bindings/unity/build.sh        # native library into the Unity package's Plugins/
 ```
 
 Changes start from the specs: see [`specs/README.md`](specs/README.md) for the process.

@@ -169,6 +169,10 @@ JSON schema (`version: 1`; values below are illustrative):
 - `vectors.h` carries, per vector, text, voice, sample rate, expected sample
   count, hash, event count and error code (events are checked by the other
   suites; C checks counts and hash).
+- `bindings/unity/Tests/EditMode/Vectors.cs` carries the same data plus every
+  event (UTF-16 start and length, times, color, size) as C# literals, so Unity
+  needs no JSON parser; doubles are written in round-trip form and compared
+  exactly. It is the third generated file checked by `check`.
 
 ## 4. Algorithms
 
@@ -491,15 +495,51 @@ void mumble_bytes_free(uint8_t *p, size_t len);
 
 ### 9.4 Unity [L4.7]
 
-- Package `com.mumble-speech.unity`:
-  - `Runtime/Native.cs`: `[DllImport("mumble_ffi")]` over the C ABI.
-  - `Runtime/MumbleVoice.cs` (`ScriptableObject`).
-  - `Runtime/MumbleSpeaker.cs` (`MonoBehaviour` with `AudioSource`): `Say(string)` creates an `AudioClip` with `AudioClip.Create` + `SetData`; `SpeakCharacter(string)`; events `OnCharacter(int)` and `OnFinished`.
-  - `Runtime/TMP/MumbleTypewriterTMP.cs` in a separate assembly, compiled only if `com.unity.textmeshpro` is present (`versionDefines`). Uses `maxVisibleCharacters` and the advances.
-  - `Plugins/{macOS,Windows,Linux}/`: C ABI binaries.
-  - `Samples~/Basic`: example scene [L4.9].
-  - `Tests/EditMode`: execution of the vectors [L5.2].
-- Verification: manual, because a Unity license in CI is not available.
+Package `com.mumble-speech.unity` in `bindings/unity` (Unity 2022.3 LTS or
+later, C# 9). Namespace `MumbleSpeech`.
+
+- `Runtime/Core/` (assembly `MumbleSpeech.Core`, **no `UnityEngine`
+  reference**): the interop layer.
+  - `Native.cs`: `[DllImport("mumble_ffi")]` over the C ABI; structs with
+    `LayoutKind.Sequential` matching `mumble.h` field by field.
+  - `Mumble.cs`: `Mumble.Render(text, voice, sampleRate)` → `MumbleRender`
+    (`float[] Samples`, `Duration`, `MumbleEvent[] Events`),
+    `Mumble.EncodeWav(samples, sampleRate)`, `Speaker` (`Next(text)` →
+    `MumbleUtterance` with samples and advance, `Reset`, `Dispose`),
+    `MumbleVoiceSettings` (style, pitch, speed, variation, seed),
+    `MumbleException` with the error code. Text goes to the C ABI as UTF-8
+    bytes; event indices are **UTF-16** (`CharIndex`, `CharLength`), so they
+    index C# strings directly.
+- `Runtime/` (assembly `MumbleSpeech`, references `UnityEngine`):
+  - `MumbleVoice` (`ScriptableObject`, `CreateAssetMenu`): the settings, with
+    `[Range]` attributes.
+  - `MumbleSpeaker` (`MonoBehaviour`, requires `AudioSource`): `Say(text)`
+    renders at `AudioSettings.outputSampleRate`, builds an `AudioClip`
+    (`AudioClip.Create` + `SetData`) and starts it with `PlayScheduled`;
+    `SpeakCharacter(text)` → seconds to wait; `ResetSpeaker()`, `Stop()`,
+    `IsSpeaking`; `UnityEvent<int> OnCharacter` (UTF-16 index) and
+    `UnityEvent OnFinished`, driven by `AudioSettings.dspTime` (the audio
+    clock, as in D7).
+- `Runtime/TMP/` (assembly `MumbleSpeech.TMP`, compiled only when TextMeshPro
+  is available: `com.unity.textmeshpro`, or `com.unity.ugui` ≥ 2.0 which
+  contains it, via `versionDefines`): `MumbleTypewriterTMP` reveals a
+  `TMP_Text` with `maxVisibleCharacters`, grapheme by grapheme
+  (`StringInfo` text elements), waiting each advance; `Skip()`, `IsTyping`,
+  `OnFinished`.
+- `Plugins/{macOS,Windows/x86_64,Linux/x86_64}/`: the C ABI library
+  (macOS universal). Binaries are not committed: `bindings/unity/build.sh`
+  builds and copies them. Their `.meta` files (platform settings) are
+  committed, as are `.meta` files for every package asset (required for
+  immutable packages).
+- `Samples~/Basic`: a script that types a line with a `MumbleSpeaker` [L4.9].
+- `Tests/EditMode` (NUnit): all conformance vectors through `MumbleSpeech.Core`
+  (`Vectors.cs` generated, checks in `VectorChecks.cs`, shared with CI), plus
+  Speaker/render equivalence and error codes.
+- Verification (LD13): CI job `unity-interop` builds `Runtime/Core` and the
+  shared checks with the .NET SDK on Linux, **C# 9** like Unity, and runs every
+  vector against the real native library: this covers struct layout,
+  marshalling and UTF-16 indices. The `UnityEngine` parts (components, TMP,
+  sample) are verified manually (U1–U3), since Unity in CI needs a license.
 
 ## 10. Build and CI [L4.3, L5.2]
 
@@ -511,6 +551,7 @@ GitHub Actions, matrix:
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter) |
+| unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13] |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 
 Performance budgets (L2.5, playground R5.4) are defined for a mid-range laptop.
@@ -556,6 +597,7 @@ defaults to 1 (LD10).
 | LD10 | Benchmarks warm up once and scale their budget by `MUMBLE_PERF_SLACK` (1 locally, 3 in CI) | Exact budget in CI; no benchmark in CI | First CI run: 52 ms vs 50 ms (core, `beep`, cold first run) and 290 ms vs 250 ms (playground) on 2-core shared runners, while the same code passes on the laptop with margin. A ×3 slack still catches regressions like D6 (×30) |
 | LD11 | Diacritic folding through generated tables (`FOLD`, `IGNORABLE`) instead of `unicode-normalization` at runtime | Keep `unicode-normalization`; hand-written Latin table | Measured: the normalization tables were 64 KB of the 104 KB gzip WASM, budget 60 KB (L4.2); without them 40 KB. Generated tables keep R1.4 exact, and an exhaustive test over all scalar values proves it; a hand-written table would drift |
 | LD12 | WASM inlined as base64 in the JS module | Separate `.wasm` file loaded via `new URL(…, import.meta.url)` | Works unchanged in browsers, Node ≥ 20 and bundlers (a separate file needs `fs` in Node and bundler support, and `node:` imports break some bundlers). Measured: base64 costs 30% more gzip than the raw `.wasm` (51.8 KB vs 39.9 KB); the package totals 57.2 KB gzip, under the 60 KB budget [L4.2] with a narrow margin, guarded by the size test. If the budget is exceeded, switch to a separate `.wasm` file |
+| LD13 | Unity package split into a `UnityEngine`-free interop assembly, verified in CI with plain .NET (C# 9), and thin Unity components verified manually | Everything verified manually | No Unity license in CI. Interop is where silent errors live (struct layout, marshalling, UTF-16 offsets); plain .NET runs the same C# against the real library on every PR |
 
 Decisions inherited from the first version (IDs unchanged):
 

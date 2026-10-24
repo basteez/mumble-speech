@@ -1,0 +1,20 @@
+{
+  "name": "com.mumble-speech.unity",
+  "version": "0.1.0",
+  "displayName": "Mumble Speech",
+  "description": "Video-game mumble speech generated at runtime: beep (Undertale), grunt (Banjo-Kazooie) and alphabet (Animal Crossing) styles, with typewriter dialogue support. Same output as the web, C and Godot bindings.",
+  "unity": "2022.3",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["audio", "dialogue", "voice", "typewriter", "mumble"],
+  "author": {
+    "name": "Tiziano Basile",
+    "url": "https://github.com/basteez/mumble-speech"
+  },
+  "samples": [
+    {
+      "displayName": "Basic",
+      "description": "Says a few lines and shows them as they are spoken.",
+      "path": "Samples~/Basic"
+    }
+  ]
+}

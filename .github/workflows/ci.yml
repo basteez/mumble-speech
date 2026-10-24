@@ -110,6 +110,23 @@ jobs:
           godot/godot --headless --path bindings/godot --quit-after 300 2>&1 | tee example.log
           ! grep -E "SCRIPT ERROR|ERROR:" example.log
 
+  unity-interop:
+    # The Unity package's UnityEngine-free code, C# 9, against the real native library (LD13).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the C ABI library
+        run: cargo build -p mumble-ffi --release
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - name: Conformance vectors through the C# interop layer
+        env:
+          LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
+        run: dotnet run -c Release --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj"
+
   web:
     runs-on: ubuntu-latest
     steps:

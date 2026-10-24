@@ -40,14 +40,15 @@ task cites the requirements it covers.
 
 ## Phase F — Godot
 
-- [ ] **F1** `mumble-godot` with `gdext`: `MumbleVoice`, `MumbleSpeaker`, `MumbleTypewriter`. — L4.6
-- [ ] **F2** Addon in `bindings/godot`, example project and headless tests in CI. — L4.6, L4.9, L5.2
-- [ ] **F3** Manual verification in Godot 4.3 desktop: example, inspector, typewriter (checklist G1–G3). — L4.6
+- [x] **F1** `mumble-godot` with `gdext`: `MumbleVoice`, `MumbleSpeaker`, `MumbleTypewriter`. — L4.6
+- [x] **F2** Addon in `bindings/godot`, example project and headless tests in CI. — L4.6, L4.9, L5.2
+- [x] **F3** Manual verification in Godot 4.3 desktop: example, inspector, typewriter (checklist G1–G3). — L4.6
+  - Outcome: verified by the user on Godot 4.7.2, macOS (2026-10-24); Godot 4.3 covered by the CI headless tests.
 
 ## Phase G — Unity
 
-- [ ] **G1** UPM package: `Native.cs`, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter. — L4.7
-- [ ] **G2** `Basic` sample and EditMode tests on the vectors. — L4.9, L5.2
+- [ ] **G1** UPM package: `Runtime/Core` interop, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter, plugin `.meta` files. — L4.7, LD13
+- [ ] **G2** `Basic` sample, EditMode tests on the vectors (generated `Vectors.cs`), CI `unity-interop` job with .NET. — L4.9, L5.2, LD13
 - [ ] **G3** Manual verification in Unity 2022.3 LTS (checklist U1–U3). — L4.7
 
 ## Phase H — Release
