@@ -129,6 +129,15 @@ no debounce. Synthesis happens only on *Play* or *Export*.
   finds the event with `start ≤ position() < start + duration` (binary search) and
   sets `data-active` on the token. Spaces remain visible as gaps.
 - With `prefers-reduced-motion: reduce` no `transform: scale`, only color.
+- Dot colors and sizes come from the event's sound identifier (library LD14),
+  mapped in `src/ui/dots.ts` [R6.2]:
+
+  | Style | Variant | Color | Size |
+  |---|---|---|---|
+  | `beep` | 0 | `--teal` | `md` |
+  | `grunt` | 0 / 1 / 2 / 3 | `--teal` / `--blue` / `--olive` / `--orange` | `sm` / `md` / `lg` / `md` |
+  | `alphabet` | `n` = 0–25 | `hsl(round(n × 360 / 26) 55% 55%)` | `md` |
+  | `alphabet` | 26 (neutral) | `--muted` | `md` |
 - The container has `aria-hidden="true"`: the text is already in the textarea, and the
   visualization is decorative.
 

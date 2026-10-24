@@ -31,6 +31,7 @@ package's public API (L6). Its own requirements are in
 | **Voice** | Style + pitch + speed + variation + seed. |
 | **Render** | Audio of an entire text, plus its timeline. |
 | **Speaker** | Stateful object that produces the sound of one character at a time (typewriter mode). |
+| **Sound identifier** | Which sound of the style an event plays: style plus variant (which grunt, which letter, or the neutral sound). Neutral data a host can map to anything (mouth shapes, particles, colors). |
 | **Advance** | Seconds to wait after a character before the next one (1 slot, 2 or 4 for pauses). |
 | **Conformance vector** | Shared test case (input → expected timeline + PCM hash) that every binding must pass. |
 
@@ -84,13 +85,13 @@ existing tests and commits continue to refer to them.
 
 - **L2.1** The core SHALL offer `render(text, voice, sampleRate)`, which returns the mono `f32` PCM and the timeline. [auto]
 - **L2.2** The core SHALL offer `timeline(text, voice)` without synthesizing audio. [auto]
-- **L2.3** Each timeline event SHALL report: grapheme index, UTF-8 byte range, UTF-16 unit range, start, duration, dot color (sRGB `#rrggbb`) and size (`sm`/`md`/`lg`). [auto]
+- **L2.3** Each timeline event SHALL report: grapheme index, UTF-8 byte range, UTF-16 unit range, start, duration and the sound identifier (style and variant: `beep` 0; `grunt` 0–3; `alphabet` 0–25 for `a`–`z`, 26 for the neutral sound). The library SHALL NOT carry presentation choices such as colors (LQ6). [auto]
 - **L2.4** The core SHALL offer `encodeWav(pcm, sampleRate)`, which produces a 16-bit mono PCM WAV. [auto]
 - **L2.5** `render` on 500 characters at speed 5 SHALL take less than 50 ms natively and less than 150 ms in WASM, on a mid-range laptop. [auto]
 
 ### L3 — "Character by character" API (Speaker)
 
-- **L3.1** The core SHALL offer a `Speaker` created from `voice` and `sampleRate`, with `next(grapheme)` returning: samples (empty for spaces and pauses), advance in seconds, dot (absent for spaces and pauses). [auto]
+- **L3.1** The core SHALL offer a `Speaker` created from `voice` and `sampleRate`, with `next(grapheme)` returning: samples (empty for spaces and pauses), advance in seconds, sound identifier (absent for spaces and pauses). [auto]
 - **L3.2** If the samples returned by `next` for each grapheme of a text are placed at the respective cumulative advances, the result SHALL be bit-for-bit identical to `render` of the same text. [auto]
 - **L3.3** IF `next` receives a string with multiple graphemes, it SHALL process them in order and return concatenated sounds and the total advance. [auto]
 - **L3.4** `reset()` SHALL return the Speaker to its initial state. [auto]
@@ -118,6 +119,18 @@ existing tests and commits continue to refer to them.
 - **L6.1** The repository SHALL contain the playground in `apps/playground`, marked private: it SHALL NOT be published nor included in any library package, and SHALL use only the public API of `@mumble-speech/web`, without deep imports. CI SHALL build and test it on every change. [auto] [rev]
 - **L6.2** The `@mumble-speech/web` package SHALL be installable by an external project before publication, as a tarball (`npm pack`) or `file:` dependency. A CI check installs the tarball in an empty project and uses its public API. [auto]
 
+### L7 — Documentation and website
+
+- **L7.1** A documentation site SHALL explain what the library does, the three styles, installation and usage for each binding (web, Godot, Unity, C), the concepts (voice, timeline, typewriter and advance, sound identifier), determinism and conformance, and how to contribute (spec-driven process). [rev]
+- **L7.2** The site SHALL publish the playground, built from `main`, at `/playground/`. [auto]
+- **L7.3** CI SHALL build the site on every change and fail on broken internal links; a push to `main` SHALL deploy it. [auto]
+- **L7.4** The site SHALL be served on a default `github.io` domain, not on the user's custom domain (LQ7). [man]
+
+### L8 — Release
+
+- **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms), the Unity package tarball (with its native plugins) and the npm tarball of `@mumble-speech/web`. [auto]
+- **L8.2** The release job SHALL fail if the tag does not match the version of every package (L5.3). [auto]
+
 ## 5. Out of scope (v1)
 
 - Prebuilt libraries for iOS, Android and consoles (the C ABI makes them possible later).
@@ -138,9 +151,10 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 | LQ3 | Hosting and CI? | GitHub + GitHub Actions, public repository `basteez/mumble-speech` on the user's personal account, no organization (user decision, 2026-10-24). |
 | LQ4 | The seed change (L1.6) slightly changes the behavior of R3.8: the seed is no longer derived from the text. Is that OK? | Yes: it is necessary for L3.2. |
 | LQ5 | Where does the playground live? | In the library repository, `apps/playground`, so a contributor can hear a change to the core in the same clone and PR (user decision, 2026-10-24; it replaces the separate repository of 2026-10-19, see LD9). |
+| LQ6 | Should events keep the `dot` (color + size), or expose a neutral sound identifier? | Only the sound identifier (style + variant); colors become a playground choice (user decision, 2026-10-24, LD14). |
+| LQ7 | Where are the docs and the playground published, given that GitHub Pages on `basteez` would use the custom domain `bstz.it` for every project site? | A GitHub organization used only for the site: `mumble-speech`, user site `mumble-speech.github.io`, deployed from this repository's CI. The code stays on `basteez/mumble-speech` (user decision, 2026-10-24, LD15). |
+| LQ8 | Documentation tool? | VitePress, in the same npm workspace as the playground (user decision, 2026-10-24). |
 
 ## 7. Open questions
 
-| # | Question | Notes |
-|---|---|---|
-| LQ6 | Should events keep the `dot` (color + size), or expose a neutral sound identifier (which grunt, which letter) and leave colors to the playground? | `dot` was born for the playground's visualizer. Games may still use the identifier (mouth shapes, particles). Changing it changes the event layout in every binding and the conformance vectors, so decide before the first release. Raised on 2026-10-24. |
+None.

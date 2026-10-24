@@ -23,6 +23,7 @@ bindings/
   unity/              # UPM package: Runtime/, Plugins/, Samples~/, Tests/
 apps/
   playground/         # private web playground, consumes @mumble-speech/web [L6.1]
+docs/                 # VitePress documentation site [L7] (§12)
 conformance/
   vectors.json        # [L5.1]
 specs/
@@ -41,8 +42,9 @@ pub struct Voice {
     pub seed: u32,       // [L1.6]
 }
 
-pub enum DotSize { Sm, Md, Lg }
-pub struct Dot { pub rgb: u32, pub size: DotSize }        // 0xRRGGBB [L2.3]
+/// Which sound of the style an event plays [L2.3] (LD14): beep 0; grunt 0–3;
+/// alphabet 0–25 for a–z, 26 for the neutral sound.
+pub struct SoundId { pub style: StyleId, pub variant: u8 }
 
 impl Voice {
     pub const fn new(style: StyleId) -> Voice;      // pitch 0, speed 15, variation 0, seed 0
@@ -56,7 +58,7 @@ pub struct Event {
     pub utf8_start: u32, pub utf8_len: u32,
     pub utf16_start: u32, pub utf16_len: u32,             // for JS and C# [L2.3]
     pub start: f64, pub duration: f64,                    // seconds
-    pub dot: Dot,
+    pub sound: SoundId,
 }
 
 pub struct Timeline { pub events: Vec<Event>, pub duration: f64 }
@@ -72,7 +74,7 @@ impl Speaker {
     pub fn next(&mut self, text: &str) -> Utterance;
     pub fn reset(&mut self);
 }
-pub struct Utterance { pub samples: Vec<f32>, pub advance: f64, pub dot: Option<Dot> }
+pub struct Utterance { pub samples: Vec<f32>, pub advance: f64, pub sound: Option<SoundId> }
 ```
 
 `render` is implemented on top of `Speaker`: for each grapheme it uses the same
@@ -133,11 +135,11 @@ Cases (34): for each style, the same 10 inputs, plus 4 error cases.
 | 10 | `Hi` | 0, 15, 0, 42 | 44,100 |
 | E1–E4 | `a` | pitch 13 / speed 4 / variation 1.5 / valid | 48,000 / 48,000 / 48,000 / 7,999 |
 
-JSON schema (`version: 1`; values below are illustrative):
+JSON schema (`version: 2` since LD14; values below are illustrative):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "hash": "fnv1a64-f32le",
   "vectors": [
     {
@@ -151,7 +153,7 @@ JSON schema (`version: 1`; values below are illustrative):
         "duration": 0.53,
         "events": [
           { "grapheme": 0, "utf8": [0, 1], "utf16": [0, 1],
-            "start": 0, "duration": 0.0166, "rgb": "#3f8f78", "size": "md" }
+            "start": 0, "duration": 0.0166, "variant": 0 }
         ]
       }
     },
@@ -170,7 +172,7 @@ JSON schema (`version: 1`; values below are illustrative):
   count, hash, event count and error code (events are checked by the other
   suites; C checks counts and hash).
 - `bindings/unity/Tests/EditMode/Vectors.cs` carries the same data plus every
-  event (UTF-16 start and length, times, color, size) as C# literals, so Unity
+  event (UTF-16 start and length, times, variant) as C# literals, so Unity
   needs no JSON parser; doubles are written in round-trip form and compared
   exactly. It is the third generated file checked by `check`.
 
@@ -219,7 +221,7 @@ for each token:
   space        → t += 1 slot
   pause-short  → t += 2 slot
   pause-long   → t += 4 slot
-  sounding     → { sound, dot } = style.voice(token, rng, prev)
+  sounding     → { sound, variant } = style.voice(token, rng, prev)
                  dur = sound.durationRatio * slot      // ≤ 0.9 slot ⇒ no overlap
                  semitones = voice.pitch + (rng() * 2 - 1) * voice.variation * 2
                  freq = sound.frequency * 2^(semitones / 12)
@@ -243,7 +245,7 @@ Base frequencies before transposition [R4.2].
 | Frequency | 520 Hz |
 | `durationRatio` | 0.5 |
 | Gain | 0.35 |
-| Dot | color `--teal`, `md` |
+| Variant | 0 |
 
 No use of `rng` inside the style.
 
@@ -251,12 +253,12 @@ No use of `rng` inside the style.
 
 Four fixed grunts: low-pass filtered `sawtooth` wave, downward glissando.
 
-| # | Frequency | Glide | `durationRatio` | Formants | Dot |
-|---|---|---|---|---|---|
-| 0 | 140 Hz | −3 | 0.5 | 600 / 1000 | `--teal`, `sm` |
-| 1 | 180 Hz | −5 | 0.75 | 700 / 1200 | `--blue`, `md` |
-| 2 | 110 Hz | −2 | 0.9 | 500 / 900 | `--olive`, `lg` |
-| 3 | 210 Hz | −6 | 0.6 | 800 / 1400 | `--orange`, `md` |
+| Variant | Frequency | Glide | `durationRatio` | Formants |
+|---|---|---|---|---|
+| 0 | 140 Hz | −3 | 0.5 | 600 / 1000 |
+| 1 | 180 Hz | −5 | 0.75 | 700 / 1200 |
+| 2 | 110 Hz | −2 | 0.9 | 500 / 900 |
+| 3 | 210 Hz | −6 | 0.6 | 800 / 1400 |
 
 Choice: `i = floor(rng() * 4)`; if `i` matches the previous grunt,
 `i = (i + 1 + floor(rng() * 3)) % 4`. This way the distribution stays uniform over the
@@ -299,13 +301,16 @@ With `n = letter index (a = 0 … z = 25)`:
 - `glide` −1.5 semitones: the pitch drops slightly within each syllable, as in speech;
 - `noiseBurst` only for consonants: `centerHz = 1500 + n × 250`, `durationMs = 12`;
 - `durationRatio = 0.85`, gain 0.4;
-- dot: `hsl(round(n × 360 / 26), 55%, 55%)`, `md`.
+- variant `n`.
 
 The tuple (vowel, `o`, `centerHz`) is different for each letter; a test
 verifies that the 26 `SoundSpec`s are all distinct [R3.4].
 
-Digits and `other`: schwa, 240 Hz, same glide, no noise, gray dot
-`--muted` [R3.5].
+Digits and `other`: schwa, 240 Hz, same glide, no noise, variant 26 [R3.5].
+
+Colors and dot sizes for these variants are a playground choice
+([`playground/design.md`](playground/design.md) §7.3, R6.2), not library data
+(LD14).
 
 Verification of R3.9: for each vowel a long event is synthesized at 100 Hz (at
 240 Hz the harmonics are too sparse and the result depends on where they fall) and the
@@ -355,7 +360,7 @@ Pure function: timeline + sample rate → `f32` samples.
 |---|---|---|---|---|
 | LD1 | Seed | `fnv1a(style + text)` | `fnv1a(style) XOR voice.seed` | In typewriter mode the Speaker does not know the text that follows [L1.6, L3.2]. Whoever wants variety between lines passes a different seed, for example the line's id. |
 | LD2 | Peak limiting | Global buffer scaling | Each sound limited to 0.98 on its own | With a global scaling `render` and Speaker would not match. Events do not overlap, so R5.5 still holds. |
-| LD3 | Dot color | CSS string (`var(--teal)`, `hsl(…)`) | `0xRRGGBB` | Platform-neutral. The CSS theme colors become: teal `0x3f8f78`, blue `0x3f6fc4`, olive `0x7d8f45`, orange `0xb85a33`, muted `0x9aa0a6`; `hsl(h 55% 55%)` is converted to RGB. |
+| LD3 | Dot color (superseded by LD14) | CSS string (`var(--teal)`, `hsl(…)`) | `0xRRGGBB` | Platform-neutral. The CSS theme colors become: teal `0x3f8f78`, blue `0x3f6fc4`, olive `0x7d8f45`, orange `0xb85a33`, muted `0x9aa0a6`; `hsl(h 55% 55%)` is converted to RGB. |
 | LD4 | Default sample rate | 44,100 | 48,000 | Default of Unity and of modern devices. |
 | LD5 | Implementation | TypeScript (in the playground) | Rust | A single implementation [L1.1]. The Vitest tests of the TS core become Rust tests and conformance vectors. |
 
@@ -388,8 +393,9 @@ new WebAudioPlayer()  .unlock()  .play(samples, sampleRate)  .stop()  .position(
 
 type Voice = { style: 'beep' | 'grunt' | 'alphabet'; pitch?; speed?; variation?; seed? }  // defaults 0, 15, 0, 0
 type MumbleEvent = { graphemeIndex; utf8Start; utf8Length; utf16Start; utf16Length;
-                     start; duration; dot: { color: '#rrggbb'; size: 'sm' | 'md' | 'lg' } }
-type Utterance = { samples: Float32Array; advance: number; dot: Dot | null }
+                     start; duration; sound: SoundId }
+type SoundId = { style: 'beep' | 'grunt' | 'alphabet'; variant: number }
+type Utterance = { samples: Float32Array; advance: number; sound: SoundId | null }
 class MumbleError extends Error { code: 'PitchOutOfRange' | 'SpeedOutOfRange'
                                   | 'VariationOutOfRange' | 'SampleRateOutOfRange' | 'UnknownStyle' }
 ```
@@ -405,14 +411,14 @@ class MumbleError extends Error { code: 'PitchOutOfRange' | 'SpeedOutOfRange'
 ### 9.2 C ABI: `mumble-ffi` [L4.3–L4.5]
 
 ```c
-#define MUMBLE_ABI_VERSION 1
+#define MUMBLE_ABI_VERSION 2   // 2: sound identifier instead of dot (LD14)
 uint32_t mumble_abi_version(void);
 
 typedef struct { uint32_t style; double pitch, speed, variation; uint32_t seed; } MumbleVoice;
 typedef struct { uint32_t grapheme_index, utf8_start, utf8_len, utf16_start, utf16_len;
-                 double start, duration; uint32_t dot_rgb; uint8_t dot_size; } MumbleEvent;
+                 double start, duration; uint32_t style; uint8_t variant; } MumbleEvent;
 typedef struct { const float *samples; size_t sample_count; double advance;
-                 uint32_t dot_rgb; uint8_t dot_size; uint8_t has_dot; } MumbleUtterance;
+                 uint32_t style; uint8_t variant; uint8_t has_sound; } MumbleUtterance;
 
 typedef struct MumbleRender MumbleRender;   // opaque, owned by the caller
 int32_t mumble_render(const char *utf8, size_t len, const MumbleVoice *v,
@@ -473,7 +479,7 @@ void mumble_bytes_free(uint8_t *p, size_t len);
   - `Mumble` (`RefCounted`, static functions, low level):
     `render(text, voice, sample_rate) → Dictionary` with `samples`
     (`PackedFloat32Array`), `duration` and `events` (array of dictionaries:
-    `char_index`, `char_count`, `start`, `duration`, `color`, `size`), or
+    `char_index`, `char_count`, `start`, `duration`, `style`, `variant`), or
     `{ "error": "<code>" }`; `encode_wav(samples, sample_rate) → PackedByteArray`.
   - `MumbleSpeaker` (`Node`): `voice`, `bus`, `volume_db`; `say(text)`,
     `speak_character(text) → float` (plays one character, returns the advance
@@ -503,7 +509,9 @@ later, C# 9). Namespace `MumbleSpeech`.
   - `Native.cs`: `[DllImport("mumble_ffi")]` over the C ABI; structs with
     `LayoutKind.Sequential` matching `mumble.h` field by field.
   - `Mumble.cs`: `Mumble.Render(text, voice, sampleRate)` → `MumbleRender`
-    (`float[] Samples`, `Duration`, `MumbleEvent[] Events`),
+    (`float[] Samples`, `Duration`, `MumbleEvent[] Events`; events and
+    utterances carry the sound identifier as `Style` and `Variant`, plus
+    `HasSound` on utterances),
     `Mumble.EncodeWav(samples, sampleRate)`, `Speaker` (`Next(text)` →
     `MumbleUtterance` with samples and advance, `Reset`, `Dispose`),
     `MumbleVoiceSettings` (style, pitch, speed, variation, seed),
@@ -559,7 +567,8 @@ Shared CI runners are slower and noisy, so CI sets `MUMBLE_PERF_SLACK=3`: the
 benchmarks still run (after a warm-up) and fail on order-of-magnitude
 regressions, while the exact budget is checked locally, where the slack
 defaults to 1 (LD10).
-| release | on tag | artifacts: Godot addon zip, Unity package, npm tarball, C archive |
+| site | ubuntu | builds docs + playground on every PR; deploys on push to `main` (§12) |
+| release | on tag / manual | four release artifacts and the GitHub Release (§13) |
 
 ## 11. Migration
 
@@ -574,7 +583,59 @@ defaults to 1 (LD10).
 4. Only after the playground works with the package are C ABI,
    Godot and Unity added.
 
-## 12. Risks
+## 12. Documentation site [L7] (LD15)
+
+- `docs/`: VitePress site, npm workspace `@mumble-speech/docs` (private).
+  Pages: home (what it is, the three styles, link to the playground);
+  guide (getting started, styles, concepts: voice, timeline, typewriter and
+  advance, sound identifier, determinism and seeds, sample rates); one page
+  per binding (web, Godot, Unity, C) with install and usage; reference
+  (C ABI, conformance vectors and hash); contributing (spec-driven process,
+  pull requests, local development) [L7.1].
+- Site layout: documentation at `/`, playground at `/playground/` (Vite
+  `base: '/playground/'`) [L7.2]. `npm run build:site` builds the web package,
+  the playground and VitePress, and copies the playground into the VitePress
+  output.
+- VitePress fails the build on dead internal links [L7.3].
+- Hosting (LQ7): organization `mumble-speech`, repository
+  `mumble-speech/mumble-speech.github.io`, GitHub Pages from its `main`
+  branch, URL `https://mumble-speech.github.io/` [L7.4]. The code stays on
+  `basteez/mumble-speech`.
+- CI job `site`: builds the site on every pull request (required check). On
+  push to `main` it deploys the output to the organization repository with
+  `peaceiris/actions-gh-pages` (`external_repository`), authenticated by an SSH
+  deploy key with write access on that repository only; its private half is
+  the `SITE_DEPLOY_KEY` secret of `basteez/mumble-speech`. A `.nojekyll` file
+  disables Jekyll processing.
+- One-time setup: the user creates the free organization (it cannot be created
+  from the CLI); the rest (repository, deploy key, secret, Pages source) is
+  scripted with `gh`.
+
+## 13. Release [L8]
+
+`.github/workflows/release.yml`, on tags `v*.*.*` and on manual dispatch
+(dry run: artifacts only, no GitHub Release):
+
+1. `version`: the tag equals the version in `Cargo.toml` (workspace),
+   `packages/web/package.json` and `bindings/unity/package.json` [L8.2].
+2. `native` (Linux x64, Windows x64, macOS): release builds of `mumble-ffi`
+   and `mumble-godot`; on macOS both architectures joined with `lipo`.
+3. `web`: `@mumble-speech/web` build and `npm pack`.
+4. `assemble`: from the artifacts of 2–3, with `LICENSE-MIT`, `LICENSE-APACHE`
+   and the binding README in each archive:
+   - `mumble-speech-c-X.Y.Z.zip`: `include/mumble.h`, `lib/<platform>/`
+     (shared libraries, Windows import library);
+   - `mumble-speech-godot-X.Y.Z.zip`: `addons/mumble_speech/` with `bin/` for
+     the three platforms;
+   - `com.mumble-speech.unity-X.Y.Z.tgz`: the UPM package (`package/` prefix,
+     as npm tarballs) with `Plugins/` filled;
+   - `mumble-speech-web-X.Y.Z.tgz`: the npm tarball;
+   then `gh release create vX.Y.Z --generate-notes` with the four files [L8.1].
+
+Publishing a release is an outward-facing action: the first tag is pushed
+only with the user's go-ahead.
+
+## 14. Risks
 
 | Risk | Mitigation |
 |---|---|
@@ -584,7 +645,7 @@ defaults to 1 (LD10).
 | WASM size | No `serde`, `opt-level = "z"`, `wasm-opt`, budget verified in CI |
 | Unity not verifiable in CI | EditMode tests in the package + manual checklist |
 
-## 13. Decision log
+## 15. Decision log
 
 | # | Decision | Rejected alternative | Rationale |
 |---|---|---|---|
@@ -598,6 +659,8 @@ defaults to 1 (LD10).
 | LD11 | Diacritic folding through generated tables (`FOLD`, `IGNORABLE`) instead of `unicode-normalization` at runtime | Keep `unicode-normalization`; hand-written Latin table | Measured: the normalization tables were 64 KB of the 104 KB gzip WASM, budget 60 KB (L4.2); without them 40 KB. Generated tables keep R1.4 exact, and an exhaustive test over all scalar values proves it; a hand-written table would drift |
 | LD12 | WASM inlined as base64 in the JS module | Separate `.wasm` file loaded via `new URL(…, import.meta.url)` | Works unchanged in browsers, Node ≥ 20 and bundlers (a separate file needs `fs` in Node and bundler support, and `node:` imports break some bundlers). Measured: base64 costs 30% more gzip than the raw `.wasm` (51.8 KB vs 39.9 KB); the package totals 57.2 KB gzip, under the 60 KB budget [L4.2] with a narrow margin, guarded by the size test. If the budget is exceeded, switch to a separate `.wasm` file |
 | LD13 | Unity package split into a `UnityEngine`-free interop assembly, verified in CI with plain .NET (C# 9), and thin Unity components verified manually | Everything verified manually | No Unity license in CI. Interop is where silent errors live (struct layout, marshalling, UTF-16 offsets); plain .NET runs the same C# against the real library on every PR |
+| LD14 | Events carry a sound identifier (style + variant) instead of a dot (color + size); C ABI version 2 | Keep the dot; keep both | Colors are a presentation choice of the playground; a neutral identifier is useful to games (mouth shapes, effects) and keeps the library free of UI decisions (LQ6, user decision) |
+| LD15 | Site on a dedicated free organization (`mumble-speech.github.io`), deployed from this repository with a deploy key | Pages on `basteez` (forced onto `bstz.it/mumble-speech` by the user site's custom domain); Cloudflare Pages; a `bstz.it` subdomain | GitHub applies the user site's custom domain to every project site of the account (documented behavior); an organization keeps a default `github.io` domain with no third-party account (LQ7, user decision) |
 
 Decisions inherited from the first version (IDs unchanged):
 
