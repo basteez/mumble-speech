@@ -42,12 +42,12 @@ fn pauses_return_silence_and_their_advance() {
     for (g, slots) in [(" ", 1.0), (",", 2.0), (".", 4.0)] {
         let u = speaker.next(g);
         assert!(u.samples.is_empty());
-        assert_eq!(u.dot, None);
+        assert_eq!(u.sound, None);
         assert!((u.advance - slots * 0.1).abs() < 1e-12);
     }
     let u = speaker.next("a");
     assert!(!u.samples.is_empty());
-    assert!(u.dot.is_some());
+    assert_eq!(u.sound, Some(SoundId { style: StyleId::Beep, variant: 0 }));
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn several_graphemes_play_in_order() {
     let both = together.next("a b");
     let parts: Vec<Utterance> = ["a", " ", "b"].iter().map(|g| apart.next(g)).collect();
     assert!((both.advance - parts.iter().map(|u| u.advance).sum::<f64>()).abs() < 1e-12);
-    assert_eq!(both.dot, parts[0].dot);
+    assert_eq!(both.sound, parts[0].sound);
     assert_eq!(&both.samples[..parts[0].samples.len()], &parts[0].samples[..]);
     // The state moved on as if called one grapheme at a time.
     assert_eq!(together.next("c"), apart.next("c"));

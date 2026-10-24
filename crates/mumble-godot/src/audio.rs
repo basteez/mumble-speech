@@ -23,15 +23,3 @@ pub fn stream(samples: &[f32], sample_rate: u32) -> Gd<AudioStreamWav> {
 pub fn char_index(text: &str, utf8_offset: u32) -> i64 {
     text[..utf8_offset as usize].chars().count() as i64
 }
-
-pub fn color(rgb: u32) -> Color {
-    Color::from_rgba8((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8, 255)
-}
-
-pub fn size_name(size: core::DotSize) -> &'static str {
-    match size {
-        core::DotSize::Sm => "sm",
-        core::DotSize::Md => "md",
-        core::DotSize::Lg => "lg",
-    }
-}

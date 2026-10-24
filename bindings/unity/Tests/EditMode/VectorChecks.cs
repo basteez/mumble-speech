@@ -79,8 +79,8 @@ namespace MumbleSpeech.Tests
                     failures.Add($"{v.Id}[{i}]: UTF-16 range {got.CharIndex}+{got.CharLength}, expected {want.Utf16Start}+{want.Utf16Length}");
                 if (got.Start != want.Start || got.Duration != want.Duration)
                     failures.Add($"{v.Id}[{i}]: timing {got.Start:R}/{got.Duration:R}, expected {want.Start:R}/{want.Duration:R}");
-                if (got.ColorRgb != want.Rgb || (int)got.DotSize != want.Size)
-                    failures.Add($"{v.Id}[{i}]: dot {got.ColorRgb:x6}/{got.DotSize}");
+                if ((int)got.Style != v.Style || got.Variant != want.Variant)
+                    failures.Add($"{v.Id}[{i}]: sound {got.Style}/{got.Variant}, expected {v.Style}/{want.Variant}");
             }
 
             // The whole text through one Speaker.Next places sounds exactly like Render (L3.2, L3.3).
@@ -103,7 +103,7 @@ namespace MumbleSpeech.Tests
                         }
                     }
                 }
-                if (u.HasDot != (v.Events.Length > 0)) failures.Add($"{v.Id}: HasDot");
+                if (u.HasSound != (v.Events.Length > 0)) failures.Add($"{v.Id}: HasSound");
             }
         }
 
@@ -131,13 +131,13 @@ namespace MumbleSpeech.Tests
             using (var speaker = new Speaker(MumbleVoiceSettings.Default))
             {
                 MumbleUtterance pause = speaker.Next(".");
-                if (pause.Samples.Length != 0 || pause.HasDot || Math.Abs(pause.Advance - 4.0 / 15.0) > 1e-12)
+                if (pause.Samples.Length != 0 || pause.HasSound || Math.Abs(pause.Advance - 4.0 / 15.0) > 1e-12)
                     failures.Add("pause utterance");
                 MumbleUtterance first = speaker.Next("a");
                 speaker.Reset();
                 speaker.Next(".");
                 MumbleUtterance again = speaker.Next("a");
-                if (first.Samples.Length != again.Samples.Length || first.ColorRgb != again.ColorRgb) failures.Add("reset");
+                if (first.Samples.Length != again.Samples.Length || first.Variant != again.Variant) failures.Add("reset");
             }
 
             byte[] wav = Mumble.EncodeWav(new[] { 0f, 0.5f, -0.5f }, 44100);

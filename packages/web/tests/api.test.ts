@@ -86,15 +86,17 @@ describe('Speaker (L3)', () => {
     }
   });
 
-  it('returns silence and no dot for pauses, and resets', async () => {
+  it('returns silence and no sound for pauses, and resets', async () => {
     await init();
     const speaker = new Speaker({ style: 'grunt', speed: 10 });
     const pause = speaker.next('.');
     expect(pause.samples.length).toBe(0);
-    expect(pause.dot).toBeNull();
+    expect(pause.sound).toBeNull();
     expect(pause.advance).toBeCloseTo(0.4, 12);
     const first = speaker.next('a');
-    expect(first.dot?.color).toMatch(/^#[0-9a-f]{6}$/);
+    expect(first.sound?.style).toBe('grunt');
+    expect(first.sound?.variant).toBeGreaterThanOrEqual(0);
+    expect(first.sound?.variant).toBeLessThanOrEqual(3);
     speaker.reset();
     speaker.next('.');
     expect(speaker.next('a')).toEqual(first);

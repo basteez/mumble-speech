@@ -12,13 +12,6 @@ namespace MumbleSpeech
         Alphabet = 2,
     }
 
-    public enum MumbleDotSize
-    {
-        Small = 0,
-        Medium = 1,
-        Large = 2,
-    }
-
     /// <summary>Error codes of the C ABI.</summary>
     public enum MumbleErrorCode
     {
@@ -58,24 +51,28 @@ namespace MumbleSpeech
         }
     }
 
-    /// <summary>One sound of a rendered line. Indices are UTF-16, so they index C# strings.</summary>
+    /// <summary>
+    /// One sound of a rendered line. Indices are UTF-16, so they index C# strings.
+    /// <see cref="Variant"/> says which sound of the style plays: Beep 0; Grunt 0–3;
+    /// Alphabet 0–25 for a–z, 26 for the neutral sound. Map it to mouth shapes, effects…
+    /// </summary>
     public readonly struct MumbleEvent
     {
         public readonly int CharIndex;
         public readonly int CharLength;
         public readonly double Start;
         public readonly double Duration;
-        public readonly uint ColorRgb;
-        public readonly MumbleDotSize DotSize;
+        public readonly MumbleStyle Style;
+        public readonly int Variant;
 
-        public MumbleEvent(int charIndex, int charLength, double start, double duration, uint colorRgb, MumbleDotSize dotSize)
+        public MumbleEvent(int charIndex, int charLength, double start, double duration, MumbleStyle style, int variant)
         {
             CharIndex = charIndex;
             CharLength = charLength;
             Start = start;
             Duration = duration;
-            ColorRgb = colorRgb;
-            DotSize = dotSize;
+            Style = style;
+            Variant = variant;
         }
     }
 
@@ -94,9 +91,10 @@ namespace MumbleSpeech
         public float[] Samples;
         /// <summary>Seconds to wait before the next character.</summary>
         public double Advance;
-        public bool HasDot;
-        public uint ColorRgb;
-        public MumbleDotSize DotSize;
+        /// <summary>False for spaces and pauses; then Style and Variant are meaningless.</summary>
+        public bool HasSound;
+        public MumbleStyle Style;
+        public int Variant;
     }
 
     public static class Mumble
@@ -104,7 +102,7 @@ namespace MumbleSpeech
         public const int DefaultSampleRate = 48000;
 
         /// <summary>Version of the native C ABI this package expects.</summary>
-        public const uint ExpectedAbiVersion = 1;
+        public const uint ExpectedAbiVersion = 2;
 
         public static uint NativeAbiVersion => Native.mumble_abi_version();
 
@@ -124,7 +122,7 @@ namespace MumbleSpeech
                 for (int i = 0; i < events.Length; i++)
                 {
                     Check(Native.mumble_render_event(handle, (UIntPtr)i, out Native.Event e));
-                    events[i] = new MumbleEvent((int)e.Utf16Start, (int)e.Utf16Len, e.Start, e.Duration, e.DotRgb, (MumbleDotSize)e.DotSize);
+                    events[i] = new MumbleEvent((int)e.Utf16Start, (int)e.Utf16Len, e.Start, e.Duration, (MumbleStyle)e.Style, e.Variant);
                 }
                 return new MumbleRender
                 {
@@ -193,9 +191,9 @@ namespace MumbleSpeech
             {
                 Samples = samples,
                 Advance = u.Advance,
-                HasDot = u.HasDot != 0,
-                ColorRgb = u.DotRgb,
-                DotSize = (MumbleDotSize)u.DotSize,
+                HasSound = u.HasSound != 0,
+                Style = (MumbleStyle)u.Style,
+                Variant = u.Variant,
             };
         }
 

@@ -88,8 +88,8 @@ func test_vectors() -> void:
 			check(got.char_index == char_index, "%s[%d]: char_index %d, expected %d" % [v.id, i, got.char_index, char_index])
 			check(same_time(got.start, want.start) and same_time(got.duration, want.duration),
 				"%s[%d]: timing %s/%s vs %s/%s" % [v.id, i, got.start, got.duration, want.start, want.duration])
-			check("#" + got.color.to_html(false) == want.rgb, "%s[%d]: color %s" % [v.id, i, got.color.to_html(false)])
-			check(got.size == want.size, "%s[%d]: size" % [v.id, i])
+			check(got.style == STYLES[v.voice.style] and got.variant == int(want.variant),
+				"%s[%d]: sound %d/%d" % [v.id, i, got.style, got.variant])
 	print("vectors: %d checked in %d ms" % [data.vectors.size(), Time.get_ticks_msec() - started])
 
 

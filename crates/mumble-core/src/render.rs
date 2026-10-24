@@ -1,5 +1,5 @@
 use crate::speaker::{Planned, Speaker};
-use crate::style::{Dot, SoundSpec};
+use crate::style::{SoundId, SoundSpec};
 use crate::text::classify;
 use crate::voice::{validate_sample_rate, Error, Voice};
 use alloc::vec::Vec;
@@ -22,9 +22,10 @@ pub struct Event {
     pub start: f64,
     /// Seconds.
     pub duration: f64,
-    pub dot: Dot,
+    /// Which sound of the style this is (L2.3, LD14).
+    pub sound: SoundId,
     #[doc(hidden)]
-    pub sound: SoundSpec,
+    pub spec: SoundSpec,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -85,8 +86,8 @@ fn walk(text: &str, speaker: &mut Speaker, mut on_sound: impl FnMut(&mut Speaker
                 utf16_len,
                 start: t,
                 duration: p.duration,
-                dot: p.dot,
-                sound: p.spec,
+                sound: p.sound,
+                spec: p.spec,
             });
             on_sound(speaker, (t, &p));
         }

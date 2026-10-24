@@ -53,8 +53,8 @@ task cites the requirements it covers.
 
 ## Phase H — Sound identifier, READMEs, site, release
 
-- [ ] **I1** Core: `SoundId` (style + variant) in events and utterances instead of the dot; conformance vectors format 2. — L2.3, L3.1, LD14
-- [ ] **I2** Bindings follow LD14: web (`sound`), C ABI version 2, Godot (`style`, `variant`), Unity (`Style`, `Variant`, `HasSound`); the playground maps variants to colors (`src/ui/dots.ts`). — L4.x, R6.2
+- [x] **I1** Core: `SoundId` (style + variant) in events and utterances instead of the dot; conformance vectors format 2. — L2.3, L3.1, LD14
+- [x] **I2** Bindings follow LD14: web (`sound`), C ABI version 2, Godot (`style`, `variant`), Unity (`Style`, `Variant`, `HasSound`); the playground maps variants to colors (`src/ui/dots.ts`). — L4.x, R6.2
   - Done when: every suite passes the format-2 vectors and the playground looks as before (headless smoke test).
 - [ ] **H2** README for each binding with a short example, and a test guide for the Unity checklist U1–U3 (for whoever runs G3). — L4.8, L4.9
 - [ ] **J1** VitePress site in `docs/`: home, guide, one page per binding, reference, contributing. — L7.1

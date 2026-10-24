@@ -1,5 +1,5 @@
 use crate::rng::{fnv1a, Mulberry32};
-use crate::style::{choose, Dot, SoundSpec};
+use crate::style::{choose, SoundId, SoundSpec};
 use crate::synth;
 use crate::text::{classify, TokenKind};
 use crate::voice::{validate_sample_rate, Error, Voice};
@@ -13,8 +13,8 @@ pub struct Utterance {
     pub samples: Vec<f32>,
     /// Seconds to wait before the next grapheme.
     pub advance: f64,
-    /// Dot of the first sounding grapheme, `None` if nothing sounded.
-    pub dot: Option<Dot>,
+    /// Sound of the first sounding grapheme, `None` if nothing sounded (L3.1).
+    pub sound: Option<SoundId>,
 }
 
 /// A sound planned for one grapheme, before synthesis.
@@ -22,7 +22,7 @@ pub struct Utterance {
 pub(crate) struct Planned {
     /// Frequency already transposed and varied.
     pub spec: SoundSpec,
-    pub dot: Dot,
+    pub sound: SoundId,
     pub duration: f64,
 }
 
@@ -73,7 +73,7 @@ impl Speaker {
     pub fn next(&mut self, text: &str) -> Utterance {
         let sr = f64::from(self.sample_rate);
         let mut samples: Vec<f32> = Vec::new();
-        let mut dot = None;
+        let mut sound_id = None;
         let mut t = 0.0;
         for grapheme in text.graphemes(true) {
             let (planned, advance) = self.plan(classify(grapheme));
@@ -84,11 +84,11 @@ impl Speaker {
                     samples.resize(offset + sound.len(), 0.0);
                 }
                 samples[offset..offset + sound.len()].copy_from_slice(&sound);
-                dot.get_or_insert(p.dot);
+                sound_id.get_or_insert(p.sound);
             }
             t += advance;
         }
-        Utterance { samples, advance: t, dot }
+        Utterance { samples, advance: t, sound: sound_id }
     }
 
     /// Chooses the sound of one grapheme and advances the random state. Returns it with the advance.
@@ -104,7 +104,8 @@ impl Speaker {
         let semitones = self.voice.pitch + jitter * self.voice.variation * 2.0;
         let spec = SoundSpec { frequency: choice.spec.frequency * libm::pow(2.0, semitones / 12.0), ..choice.spec };
         self.prev_variant = Some(choice.variant);
-        (Some(Planned { spec, dot: choice.dot, duration: spec.duration_ratio * slot }), advance)
+        let sound = SoundId { style: self.voice.style, variant: choice.variant };
+        (Some(Planned { spec, sound, duration: spec.duration_ratio * slot }), advance)
     }
 
     pub(crate) fn synthesize(&mut self, planned: &Planned) -> Vec<f32> {

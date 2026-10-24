@@ -21,8 +21,7 @@ interface Vector {
           utf16: [number, number];
           start: number;
           duration: number;
-          rgb: string;
-          size: string;
+          variant: number;
         }[];
       };
 }
@@ -46,8 +45,8 @@ function pcmHash(samples: Float32Array): string {
 beforeAll(() => init());
 
 describe('conformance vectors', () => {
-  it('uses format version 1', () => {
-    expect(file.version).toBe(1);
+  it('uses format version 2', () => {
+    expect(file.version).toBe(2);
     expect(file.vectors.length).toBeGreaterThanOrEqual(30);
   });
 
@@ -69,9 +68,9 @@ describe('conformance vectors', () => {
         utf16: [e.utf16Start, e.utf16Length],
         start: e.start,
         duration: e.duration,
-        rgb: e.dot.color,
-        size: e.dot.size,
+        variant: e.sound.variant,
       })),
     ).toEqual(v.expected.events);
+    expect(r.timeline.events.every((e) => e.sound.style === v.voice.style)).toBe(true);
   });
 });

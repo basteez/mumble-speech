@@ -27,7 +27,7 @@ mod wav;
 
 pub use render::{render, timeline, Event, Render, Timeline, TAIL_SECONDS};
 pub use speaker::{Speaker, Utterance};
-pub use style::{Dot, DotSize};
+pub use style::SoundId;
 pub use text::TokenKind;
 pub use voice::{
     Error, StyleId, Voice, DEFAULT_SAMPLE_RATE, MAX_SAMPLE_RATE, MIN_SAMPLE_RATE, PITCH_RANGE, SPEED_RANGE,

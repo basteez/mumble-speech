@@ -62,7 +62,8 @@ static void check_vector(const MumbleVector *v) {
             }
         }
     }
-    CHECK(u.has_dot == (v->event_count > 0), "%s: has_dot", v->id);
+    CHECK(u.has_sound == (v->event_count > 0), "%s: has_sound", v->id);
+    CHECK(!u.has_sound || u.style == v->style, "%s: utterance style", v->id);
     mumble_speaker_free(speaker);
     mumble_render_free(render);
 }
@@ -86,6 +87,7 @@ static void check_errors(void) {
 
     CHECK(mumble_render("Hi", 2, &voice, 48000, &render) == MUMBLE_OK, "render Hi");
     CHECK(mumble_render_event(render, 1, &event) == MUMBLE_OK && event.utf8_start == 1, "second event");
+    CHECK(event.style == 0 && event.variant == 0, "beep sound identifier");
     CHECK(mumble_render_duration(render) > 0.0, "duration");
     mumble_render_free(render);
 
@@ -93,7 +95,7 @@ static void check_errors(void) {
     CHECK(mumble_speaker_new(&voice, 7999, &speaker) == MUMBLE_ERR_SAMPLE_RATE, "speaker sample rate");
     CHECK(mumble_speaker_new(&voice, 48000, &speaker) == MUMBLE_OK, "speaker");
     MumbleUtterance u;
-    CHECK(mumble_speaker_next(speaker, ".", 1, &u) == MUMBLE_OK && u.sample_count == 0 && !u.has_dot, "pause");
+    CHECK(mumble_speaker_next(speaker, ".", 1, &u) == MUMBLE_OK && u.sample_count == 0 && !u.has_sound, "pause");
     mumble_speaker_reset(speaker);
     mumble_speaker_free(speaker);
 

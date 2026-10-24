@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 // Bumped on every incompatible change of this interface (L4.5).
-#define MUMBLE_ABI_VERSION 1
+#define MUMBLE_ABI_VERSION 2
 
 #define MUMBLE_OK 0
 
@@ -39,7 +39,8 @@ typedef struct MumbleVoice {
   uint32_t seed;
 } MumbleVoice;
 
-// One sound of a rendered line. `dot_rgb` is 0xRRGGBB; `dot_size` 0 = sm, 1 = md, 2 = lg.
+// One sound of a rendered line. `style` 0 = beep, 1 = grunt, 2 = alphabet; `variant` is
+// which sound of the style (beep 0; grunt 0–3; alphabet 0–25 for a–z, 26 neutral).
 typedef struct MumbleEvent {
   uint32_t grapheme_index;
   uint32_t utf8_start;
@@ -48,19 +49,20 @@ typedef struct MumbleEvent {
   uint32_t utf16_len;
   double start;
   double duration;
-  uint32_t dot_rgb;
-  uint8_t dot_size;
+  uint32_t style;
+  uint8_t variant;
 } MumbleEvent;
 
 // Result of `mumble_speaker_next`. `samples` stays valid until the next call on the
-// same speaker or until it is freed. `has_dot` is 0 for spaces and pauses.
+// same speaker or until it is freed. `has_sound` is 0 for spaces and pauses; then
+// `style` and `variant` are 0.
 typedef struct MumbleUtterance {
   const float *samples;
   size_t sample_count;
   double advance;
-  uint32_t dot_rgb;
-  uint8_t dot_size;
-  uint8_t has_dot;
+  uint32_t style;
+  uint8_t variant;
+  uint8_t has_sound;
 } MumbleUtterance;
 
 #ifdef __cplusplus

@@ -58,19 +58,19 @@ fn duration_ends_at_last_sound_plus_tail() {
 fn pitch_transposes_by_2_pow_semitones_over_12() {
     let up = tl("a", Voice { pitch: 12.0, ..voice(StyleId::Beep) });
     let down = tl("a", Voice { pitch: -7.0, ..voice(StyleId::Beep) });
-    assert!((up.events[0].sound.frequency - 1040.0).abs() < 1e-9);
-    assert!((down.events[0].sound.frequency - 520.0 * 2f64.powf(-7.0 / 12.0)).abs() < 1e-9);
+    assert!((up.events[0].spec.frequency - 1040.0).abs() < 1e-9);
+    assert!((down.events[0].spec.frequency - 520.0 * 2f64.powf(-7.0 / 12.0)).abs() < 1e-9);
 }
 
 #[test]
 fn variation_stays_within_twice_its_value_in_semitones() {
     let text = "x".repeat(500);
     let events = tl(&text, Voice { variation: 0.5, ..voice(StyleId::Beep) }).events;
-    let semis: Vec<f64> = events.iter().map(|e| semitones(e.sound.frequency, 520.0)).collect();
+    let semis: Vec<f64> = events.iter().map(|e| semitones(e.spec.frequency, 520.0)).collect();
     assert!(semis.iter().all(|s| s.abs() <= 1.0 + 1e-9));
     assert!(semis.iter().any(|s| s.abs() > 0.1));
     let flat = tl("hello", voice(StyleId::Beep)).events;
-    assert!(flat.iter().all(|e| e.sound.frequency == 520.0));
+    assert!(flat.iter().all(|e| e.spec.frequency == 520.0));
 }
 
 #[test]
@@ -112,22 +112,21 @@ fn events_carry_grapheme_utf8_and_utf16_offsets() {
 }
 
 #[test]
-fn beep_plays_one_sound_and_one_dot() {
+fn beep_plays_one_sound_with_variant_0() {
     let events = tl("Hello, wörld 42 #!", voice(StyleId::Beep)).events;
     assert_eq!(events.len(), 13);
-    assert_eq!(events.iter().map(|e| e.sound.frequency.to_bits()).collect::<HashSet<_>>().len(), 1);
-    assert_eq!(events.iter().map(|e| e.dot).collect::<HashSet<_>>().len(), 1);
+    assert_eq!(events.iter().map(|e| e.spec.frequency.to_bits()).collect::<HashSet<_>>().len(), 1);
+    assert!(events.iter().all(|e| e.sound == SoundId { style: StyleId::Beep, variant: 0 }));
 }
 
 #[test]
 fn grunt_has_four_distinct_grunts() {
     let g = grunt::GRUNTS;
-    let distinct = |f: &dyn Fn(&internals::SoundSpec) -> u64| g.iter().map(|(s, _)| f(s)).collect::<HashSet<_>>().len();
+    let distinct = |f: &dyn Fn(&internals::SoundSpec) -> u64| g.iter().map(f).collect::<HashSet<_>>().len();
     assert_eq!(distinct(&|s| s.frequency.to_bits()), 4);
     assert_eq!(distinct(&|s| s.duration_ratio.to_bits()), 4);
     assert_eq!(distinct(&|s| s.glide.to_bits()), 4);
     assert_eq!(distinct(&|s| s.formants.unwrap()[0].to_bits()), 4);
-    assert_eq!(g.iter().map(|(_, d)| *d).collect::<HashSet<_>>().len(), 4);
 }
 
 #[test]
@@ -135,20 +134,26 @@ fn grunt_never_repeats_and_uses_all_four() {
     for text in random_texts(200) {
         let events = tl(&text, voice(StyleId::Grunt)).events;
         for pair in events.windows(2) {
-            assert_ne!(pair[0].dot, pair[1].dot, "{text:?}");
+            assert_ne!(pair[0].sound, pair[1].sound, "{text:?}");
         }
     }
     let events = tl("the quick brown fox jumps over the lazy dog", voice(StyleId::Grunt)).events;
-    assert_eq!(events.iter().map(|e| e.dot).collect::<HashSet<_>>().len(), 4);
+    let variants: HashSet<u8> = events.iter().map(|e| e.sound.variant).collect();
+    assert_eq!(variants, HashSet::from([0, 1, 2, 3]));
+    // The variant is the index of the grunt that plays (L2.3).
+    for e in &events {
+        assert_eq!(e.spec.duration_ratio, grunt::GRUNTS[usize::from(e.sound.variant)].duration_ratio);
+    }
 }
 
 #[test]
-fn alphabet_has_26_distinct_sounds_and_colors() {
+fn alphabet_has_26_distinct_sounds_with_the_letter_as_variant() {
     let specs: HashSet<String> = (0..26).map(|n| format!("{:?}", alphabet::letter_spec(n))).collect();
     assert_eq!(specs.len(), 26);
-    let dots: Vec<Dot> = (0..26).map(alphabet::letter_dot).collect();
-    assert_eq!(dots.iter().map(|d| d.rgb).collect::<HashSet<_>>().len(), 26);
-    assert!(dots.iter().all(|d| d.size == DotSize::Md));
+    let events = tl("Abz 7", voice(StyleId::Alphabet)).events;
+    let variants: Vec<u8> = events.iter().map(|e| e.sound.variant).collect();
+    assert_eq!(variants, [0, 1, 25, alphabet::NEUTRAL_VARIANT]);
+    assert!(events.iter().all(|e| e.sound.style == StyleId::Alphabet));
 }
 
 #[test]
@@ -159,7 +164,7 @@ fn alphabet_plays_the_same_sound_for_the_same_letter() {
     for e in events {
         let g = &text[e.utf8_start as usize..(e.utf8_start + e.utf8_len) as usize];
         let key = internals::classify(g);
-        let spec = format!("{:?}", e.sound);
+        let spec = format!("{:?}", e.spec);
         assert_eq!(by_letter.entry(key).or_insert_with(|| spec.clone()), &spec);
     }
 }
@@ -183,6 +188,6 @@ fn alphabet_digits_and_other_play_the_neutral_sound() {
     let events = tl("7#ж👋", voice(StyleId::Alphabet)).events;
     assert_eq!(events.len(), 4);
     for e in events {
-        assert_eq!(e.sound, alphabet::NEUTRAL_SPEC);
+        assert_eq!(e.spec, alphabet::NEUTRAL_SPEC);
     }
 }
