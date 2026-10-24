@@ -62,8 +62,9 @@ task cites the requirements it covers.
 - [x] **J3** Organization `mumble-speech` (created by the user), repository `mumble-speech.github.io`, deploy key and secret, Pages enabled, deploy on push to `main`. — L7.4, LD15
   - Done when: `https://mumble-speech.github.io/` and `/playground/` serve the latest `main`.
   - Outcome: deployed by the `main` run after #11; all pages and the playground checked live in headless Chrome (2026-10-24).
-- [ ] **H1** `release.yml`: version check, native builds, web package, four archives, GitHub Release; manual dry run. — L8.1, L8.2
+- [x] **H1** `release.yml`: version check, native builds, web package, four archives, GitHub Release; manual dry run. — L8.1, L8.2
   - Done when: a dry run on `main` produces the four archives, and they are checked (Godot addon loads, C archive links, Unity tarball has plugins and metas, npm tarball installs).
+  - Outcome: dry run on #12 (pull request trigger): four archives built and verified, `publish` skipped (2026-10-24).
 - [ ] **H3** First release `v0.1.0`, only with the user's go-ahead. — L8.1
 
 ## Manual checklist
