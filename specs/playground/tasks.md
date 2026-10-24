@@ -65,7 +65,8 @@ Legend: **Done when** = verifiable condition for closing the task.
   - Outcome: JS 4.7 KB + CSS 5.1 KB gzip (limit 50 KB).
 - [x] **T5.3** Check in the Network panel: no requests after load. — R8.1
   - Outcome: zero requests during play and export (headless Chrome).
-- [ ] **T5.4** Static deploy (see Q4 in requirements).
+- [x] **T5.4** Static deploy (see Q4 in requirements).
+  - Outcome: published at https://mumble-speech.github.io/playground/ with the documentation site (library L7.2, LD15), not on the personal account's Pages because of its custom domain.
 
 ## Phase 6 — Migration to the library
 
