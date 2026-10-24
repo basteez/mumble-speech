@@ -1,0 +1,10 @@
+{
+    "name": "MumbleSpeech",
+    "rootNamespace": "MumbleSpeech",
+    "references": ["MumbleSpeech.Core"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true,
+    "noEngineReferences": false
+}
