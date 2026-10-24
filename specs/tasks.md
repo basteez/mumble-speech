@@ -8,7 +8,7 @@ task cites the requirements it covers.
 - [x] **A1** `git init`, monorepo structure (design §1), Cargo and npm workspaces.
 - [x] **A1b** Bring the playground back into `apps/playground` with its git history; its specs move to `specs/playground/`. — L6.1, LD9
   - Done when: the playground passes tests and build from `apps/playground` and is marked private.
-- [ ] **A2** Public GitHub repository `basteez/mumble-speech` and minimal CI (core and playground jobs). — LQ3, L6.1
+- [x] **A2** Public GitHub repository `basteez/mumble-speech` and minimal CI (core and playground jobs). — LQ3, L6.1
   - Done when: CI is green on the first push.
 
 ## Phase B — Rust core

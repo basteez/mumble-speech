@@ -24,6 +24,9 @@ with its own specs in [`playground/`](playground/README.md).
    verified (automated test or manual checklist indicated in the task).
 4. Decisions made during implementation that are not already in the specs
    must be added to `design.md` → *Decision log*.
+5. Every change lands through a pull request: `main` is protected (CI checks
+   required, no direct pushes, enforced for admins). Branch names and PR
+   titles cite the task ID.
 
 ## Status
 
