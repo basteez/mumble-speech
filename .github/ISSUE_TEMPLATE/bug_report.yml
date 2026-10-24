@@ -1,0 +1,81 @@
+name: Bug report
+description: Something does not work as documented.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! mumble-speech is deterministic: the same text and voice give the
+        same samples everywhere, so the exact inputs below let us reproduce the problem bit for bit.
+  - type: dropdown
+    id: binding
+    attributes:
+      label: Where
+      description: Which part of the project is affected?
+      multiple: true
+      options:
+        - Web (@mumble-speech/web)
+        - Rust crate (mumble-speech)
+        - Godot addon
+        - Unity package
+        - C ABI (mumble.h)
+        - Playground
+        - Documentation site
+        - Release / packaging
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: mumble-speech version (for example 0.1.0), or the commit if built from source.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and CPU, plus the browser, Node, Godot or Unity version.
+      placeholder: "macOS 15 arm64, Godot 4.7.2"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Exact inputs
+      description: The line and the voice that show the problem (leave out what does not apply).
+      value: |
+        text:
+        style: beep | grunt | alphabet
+        pitch:
+        speed:
+        variation:
+        seed:
+        sample rate:
+      render: yaml
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps or code to reproduce
+      description: The smallest code or the steps that show the problem.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors and logs
+      description: Error codes (MumbleError code, C ABI status), console output, stack traces.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the existing issues.
+          required: true
