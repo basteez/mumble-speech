@@ -21,6 +21,8 @@ with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
 crates/mumble-core/   Rust core (crate `mumble-speech`)
 crates/mumble-wasm/   WebAssembly exports
 packages/web/         npm package @mumble-speech/web (WASM inlined, TypeScript API)
+crates/mumble-ffi/    C ABI (cdylib + staticlib)
+bindings/c/           mumble.h, CMake tests and example
 apps/playground/      web playground to try the styles (private, not published)
 specs/                requirements, design and plan (spec-driven: start here)
 ```
@@ -37,6 +39,8 @@ npm install
 npm run build --workspace @mumble-speech/web       # WASM + TypeScript
 npm run dev --workspace @mumble-speech/playground   # http://localhost:5173
 npm test                      # web package and playground tests
+cargo build -p mumble-ffi --release                 # C ABI
+cmake -S bindings/c -B build/c && cmake --build build/c && ctest --test-dir build/c
 ```
 
 Changes start from the specs: see [`specs/README.md`](specs/README.md) for the process.

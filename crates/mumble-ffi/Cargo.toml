@@ -1,0 +1,15 @@
+[package]
+name = "mumble-ffi"
+description = "C ABI of mumble-speech (header: bindings/c/include/mumble.h)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "mumble_ffi"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+mumble-speech = { path = "../mumble-core" }

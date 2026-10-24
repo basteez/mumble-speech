@@ -41,6 +41,47 @@ jobs:
       - name: Builds for WebAssembly (L1.3)
         run: cargo build -p mumble-speech --target wasm32-unknown-unknown --release
 
+  ffi:
+    name: ffi (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Header is up to date
+        if: runner.os == 'Linux'
+        run: |
+          cargo install cbindgen --version 0.29.4 --locked
+          cbindgen --config crates/mumble-ffi/cbindgen.toml --crate mumble-ffi --output bindings/c/include/mumble.h --verify crates/mumble-ffi
+      - name: Build (Linux, Windows)
+        if: runner.os != 'macOS'
+        run: cargo build -p mumble-ffi --release
+      - name: Build universal library (macOS arm64 + x86_64)
+        if: runner.os == 'macOS'
+        run: |
+          cargo build -p mumble-ffi --release --target aarch64-apple-darwin
+          cargo build -p mumble-ffi --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create -output target/release/libmumble_ffi.dylib \
+            target/aarch64-apple-darwin/release/libmumble_ffi.dylib \
+            target/x86_64-apple-darwin/release/libmumble_ffi.dylib
+          lipo -info target/release/libmumble_ffi.dylib
+      - name: Configure
+        run: cmake -S bindings/c -B build/c -DCMAKE_BUILD_TYPE=Release ${{ runner.os == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"' || '' }}
+      - name: Build tests
+        run: cmake --build build/c --config Release
+      - name: CTest (all conformance vectors through the C ABI)
+        run: ctest --test-dir build/c -C Release --output-on-failure
+      - name: Conformance vectors as x86_64 under Rosetta (macOS)
+        if: runner.os == 'macOS'
+        run: arch -x86_64 build/c/test_vectors
+
   web:
     runs-on: ubuntu-latest
     steps:
