@@ -70,6 +70,10 @@ components, the sample and the TextMeshPro typewriter.
 
 ## Report template
 
+The easiest way: open a
+[Unity verification report](https://github.com/basteez/mumble-speech/issues/new?template=unity_verification.yml)
+issue, which asks for exactly these fields. Or copy this:
+
 ```
 Unity version:
 OS and CPU (e.g. macOS 15 arm64, Windows 11 x64):

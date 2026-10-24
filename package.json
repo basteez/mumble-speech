@@ -1,6 +1,6 @@
 {
   "name": "com.mumble-speech.unity",
-  "version": "0.1.0",
+  "version": "0.1.1-rc.1",
   "displayName": "Mumble Speech",
   "description": "Video-game mumble speech generated at runtime: beep (Undertale), grunt (Banjo-Kazooie) and alphabet (Animal Crossing) styles, with typewriter dialogue support. Same output as the web, C and Godot bindings.",
   "unity": "2022.3",
