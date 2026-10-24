@@ -1,0 +1,9 @@
+; Godot project for the mumble-speech addon: example scene and headless tests (specs/design.md §9.3).
+
+config_version=5
+
+[application]
+
+config/name="mumble-speech"
+run/main_scene="res://example/dialogue.tscn"
+config/features=PackedStringArray("4.3")
