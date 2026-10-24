@@ -11,6 +11,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/release/**
+      - CHANGELOG.md
 
 permissions:
   contents: read
@@ -144,9 +145,48 @@ jobs:
       - name: Check the archives before publishing
         run: scripts/release/verify.sh "${{ needs.version.outputs.version }}" release "$PWD/godot/godot"
 
+  notes:
+    # Release notes and checksums (L8.3, L8.4); shown in the run summary, so dry runs are a preview.
+    needs: [version, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the releases/generate-notes API; it creates nothing
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+      - name: GitHub's generated notes (merged pull requests, compare link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="v$VERSION" -f target_commitish="$GITHUB_SHA" --jq .body > generated.md \
+            || { echo "::warning::could not generate the pull request list"; : > generated.md; }
+      - name: Compose the notes
+        run: |
+          mkdir -p notes
+          node scripts/release/notes.mjs "$VERSION" release notes/notes.md \
+            ${{ github.ref_type == 'tag' && '--require-changelog' || '' }} \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --generated generated.md
+          mv release/SHA256SUMS.txt notes/
+          cat notes/notes.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes/
+          if-no-files-found: error
+
   publish:
     if: github.ref_type == 'tag'
-    needs: [version, verify]
+    needs: [version, verify, notes]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -155,7 +195,14 @@ jobs:
         with:
           name: release
           path: release
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: notes
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "mumble-speech $GITHUB_REF_NAME" --generate-notes
+        run: |
+          cp notes/SHA256SUMS.txt release/
+          gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" \
+            --title "mumble-speech $GITHUB_REF_NAME" --notes-file notes/notes.md --verify-tag

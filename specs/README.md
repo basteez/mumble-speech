@@ -27,6 +27,8 @@ with its own specs in [`playground/`](playground/README.md).
 5. Every change lands through a pull request: `main` is protected (CI checks
    required, no direct pushes, enforced for admins). Branch names and PR
    titles cite the task ID.
+6. A pull request that changes behavior or public API adds an entry to the
+   *Unreleased* section of `CHANGELOG.md` (L8.4).
 
 ## Status
 

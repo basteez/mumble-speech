@@ -130,6 +130,8 @@ existing tests and commits continue to refer to them.
 
 - **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms), the Unity package tarball (with its native plugins) and the npm tarball of `@mumble-speech/web`. [auto]
 - **L8.2** The release job SHALL fail if the tag does not match the version of every package (L5.3). [auto]
+- **L8.3** The release notes SHALL contain: links to the documentation, the playground and the changelog; the changelog section of the version; a table of the archives with platforms, size and SHA-256 (plus a `SHA256SUMS.txt` asset); install instructions for each binding from the release archives, linking its documentation page; compatibility (minimum Godot, Unity and Node versions, platforms, C ABI version, conformance vector format); what was verified before publishing, with a link to the CI run; the list of merged pull requests and the comparison with the previous release. Values such as versions and checksums SHALL be read from the repository and the archives, not written by hand. [auto]
+- **L8.4** `CHANGELOG.md` (Keep a Changelog format) SHALL have an *Unreleased* section that every pull request changing behavior or public API updates; a release renames it to the version. The release job SHALL fail if the changelog has no section for the tagged version. The changelog SHALL be published on the documentation site. [auto] [rev]
 
 ## 5. Out of scope (v1)
 

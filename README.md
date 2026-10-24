@@ -13,7 +13,8 @@ One implementation in Rust, deterministic and bit-identical across platforms,
 with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
 
 > **Status:** early development, nothing published to package registries yet.
-> Documentation and playground: **https://mumble-speech.github.io/**
+> Documentation and playground: **https://mumble-speech.github.io/** ·
+> [Releases](https://github.com/basteez/mumble-speech/releases) · [Changelog](CHANGELOG.md)
 
 ## Repository layout
 
