@@ -1,0 +1,15 @@
+[package]
+name = "mumble-wasm"
+description = "WebAssembly exports of mumble-speech, wrapped by the @mumble-speech/web npm package."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mumble-speech = { path = "../mumble-core" }
+wasm-bindgen = "=0.2.129"

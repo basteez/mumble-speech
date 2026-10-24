@@ -19,20 +19,24 @@ with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
 
 ```
 crates/mumble-core/   Rust core (crate `mumble-speech`)
+crates/mumble-wasm/   WebAssembly exports
+packages/web/         npm package @mumble-speech/web (WASM inlined, TypeScript API)
 apps/playground/      web playground to try the styles (private, not published)
 specs/                requirements, design and plan (spec-driven: start here)
 ```
 
 ## Development
 
-Requirements: Rust (stable) and Node.js 24+.
+Requirements: Rust (stable) with the `wasm32-unknown-unknown` target, Node.js 24+ and
+`wasm-bindgen-cli` 0.2.129 (`cargo install wasm-bindgen-cli --version 0.2.129`).
 
 ```bash
 cargo test                    # core tests
 cargo test --release          # also runs the performance check
 npm install
+npm run build --workspace @mumble-speech/web       # WASM + TypeScript
 npm run dev --workspace @mumble-speech/playground   # http://localhost:5173
-npm test                      # playground tests
+npm test                      # web package and playground tests
 ```
 
 Changes start from the specs: see [`specs/README.md`](specs/README.md) for the process.

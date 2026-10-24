@@ -1,0 +1,41 @@
+{
+  "name": "@mumble-speech/web",
+  "version": "0.1.0",
+  "description": "Video-game mumble speech synthesis for the web (WebAssembly).",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/basteez/mumble-speech.git",
+    "directory": "packages/web"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build-wasm.mjs && tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "consume-check": "node scripts/consume-check.mjs",
+    "prepack": "node -e \"for (const f of ['LICENSE-MIT','LICENSE-APACHE']) require('fs').copyFileSync('../../'+f, f)\""
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "binaryen": "132.0.0",
+    "typescript": "~7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

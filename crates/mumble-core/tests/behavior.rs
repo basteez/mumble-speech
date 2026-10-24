@@ -158,7 +158,7 @@ fn alphabet_plays_the_same_sound_for_the_same_letter() {
     let mut by_letter = std::collections::HashMap::new();
     for e in events {
         let g = &text[e.utf8_start as usize..(e.utf8_start + e.utf8_len) as usize];
-        let key = internals::normalize(g);
+        let key = internals::classify(g);
         let spec = format!("{:?}", e.sound);
         assert_eq!(by_letter.entry(key).or_insert_with(|| spec.clone()), &spec);
     }
