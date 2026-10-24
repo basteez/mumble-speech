@@ -1,0 +1,54 @@
+# Minimal CI (task A2). Jobs follow specs/design.md §10; wasm, ffi, godot and release come with their phases.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test
+      - name: Tests (release, includes the L2.5 benchmark)
+        run: cargo test --release
+      - name: Builds for WebAssembly (L1.3)
+        run: cargo build -p mumble-speech --target wasm32-unknown-unknown --release
+
+  playground:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck --workspace @mumble-speech/playground
+      - name: Tests
+        run: npm test --workspace @mumble-speech/playground
+      - name: Build
+        run: npm run build --workspace @mumble-speech/playground
