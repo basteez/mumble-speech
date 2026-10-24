@@ -5,9 +5,10 @@ task cites the requirements it covers.
 
 ## Phase A — Foundations
 
-- [x] **A1** `git init`, monorepo structure (design §1), Cargo and npm workspaces. The playground is moved to a separate repository (`../mumble-speech-playground`) together with its specs. — L6.1, LD8
-  - Done when: the playground passes tests and build in the new location and the library repo contains no apps.
-- [ ] **A2** GitHub repository and minimal CI (core job). — LQ3
+- [x] **A1** `git init`, monorepo structure (design §1), Cargo and npm workspaces.
+- [ ] **A1b** Bring the playground back into `apps/playground` with its git history; its specs move to `specs/playground/`. — L6.1, LD9
+  - Done when: the playground passes tests and build from `apps/playground` and is marked private.
+- [ ] **A2** Public GitHub repository `basteez/mumble-speech` and minimal CI (core and playground jobs). — LQ3, L6.1
   - Done when: CI is green on the first push.
 
 ## Phase B — Rust core
@@ -30,7 +31,7 @@ task cites the requirements it covers.
 - [ ] **D1** `mumble-wasm` + `@mumble-speech/web` (API from design §9.1, `WebAudioPlayer`). — L4.1
 - [ ] **D2** Vitest tests of the package: vectors in Node, size budget. — L1.4, L4.2, L5.2
 - [ ] **D3** External consumption check in CI: `npm pack`, installation of the tarball in an empty project, use of the public API. — L6.2
-  - After D3, the playground (in its own repo) migrates to the package: tasks P1–P3 of its specs.
+  - After D3, the playground migrates to the package: tasks P1–P3 in `playground/tasks.md`.
 
 ## Phase E — C ABI
 
@@ -86,4 +87,4 @@ task cites the requirements it covers.
 | L4.7 | G1–G3 |
 | L4.8–L4.9 | F2, G2, H2 |
 | L5 | C1, C2, D2, E2, F2, G2, H1 |
-| L6 | A1, D3 |
+| L6 | A1b, A2, D3, P1–P3 |

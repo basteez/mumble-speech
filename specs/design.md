@@ -21,6 +21,8 @@ bindings/
   c/                  # generated mumble.h, CMake example and tests
   godot/              # addons/mumble_speech + example project and tests
   unity/              # UPM package: Runtime/, Plugins/, Samples~/, Tests/
+apps/
+  playground/         # private web playground, consumes @mumble-speech/web [L6.1]
 conformance/
   vectors.json        # [L5.1]
 specs/
@@ -363,6 +365,7 @@ GitHub Actions, matrix:
 | wasm | ubuntu | WASM build, package Vitest tests, L4.2 budget, L6.2 external consumption |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu | GDExtension build, headless tests |
+| playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 | release | on tag | artifacts: Godot addon zip, Unity package, npm tarball, C archive |
 
 ## 11. Migration
@@ -372,9 +375,9 @@ GitHub Actions, matrix:
    vowels R3.9…).
 2. Vitest snapshots → conformance vectors. The hashes change compared to TS
    because of LD1–LD2 and the use of `libm`: this is expected.
-3. The playground, in its own repository, switches to `@mumble-speech/web` via the
-   tarball or a `file:` dependency [L6.2]. That migration is tracked in the
-   playground's specs.
+3. The playground (`apps/playground`) switches to `@mumble-speech/web` as an
+   npm workspace dependency [L6.1]. That migration is tracked in
+   `playground/tasks.md` (P1–P3).
 4. Only after the playground works with the package are C ABI,
    Godot and Unity added.
 
@@ -396,7 +399,8 @@ GitHub Actions, matrix:
 | LD1–LD5 | See §8 | | |
 | LD6 | Godot via `gdext` on the core, not via the C ABI | C++ GDExtension on the C ABI | Less glue code, native Godot types, same language as the core |
 | LD7 | Vector hash FNV-1a 64 | SHA-256 | Implementable in a few lines in C, C#, GDScript and TS |
-| LD8 | Playground in a separate repository | `apps/playground` in the monorepo | User request: the library repo contains only the library [L6.1] |
+| LD8 | Playground in a separate repository (superseded by LD9) | `apps/playground` in the monorepo | User request: the library repo contains only the library |
+| LD9 | Playground back in the monorepo as a private app, with its history imported | Separate repository linked from the README | A contributor changing the core can hear it with one clone and one PR; CI catches API breaks in the same PR; no version drift between library and demo [L6.1] |
 
 Decisions inherited from the first version (IDs unchanged):
 

@@ -12,9 +12,10 @@ a library that has **a single implementation in Rust**, usable:
 - in Unity, via a UPM package with a native library;
 - from any other language, via a C interface (C ABI).
 
-The test web page (*playground*) is a separate project,
-`mumble-speech-playground`, which uses the library only through the npm package
-(L6).
+The test web page (*playground*) lives in the same repository as an
+unpublished app (`apps/playground`) and uses the library only through the npm
+package's public API (L6). Its own requirements are in
+[`playground/requirements.md`](playground/requirements.md).
 
 ## 2. Glossary
 
@@ -112,9 +113,9 @@ existing tests and commits continue to refer to them.
 - **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license). [auto] [man]
 - **L5.3** All packages SHALL share the same semver version. [rev]
 
-### L6 — Use from external projects
+### L6 — Playground and external use
 
-- **L6.1** The library repository SHALL NOT contain the playground or other demo apps beyond the minimal examples of L4.9. [rev]
+- **L6.1** The repository SHALL contain the playground in `apps/playground`, marked private: it SHALL NOT be published nor included in any library package, and SHALL use only the public API of `@mumble-speech/web`, without deep imports. CI SHALL build and test it on every change. [auto] [rev]
 - **L6.2** The `@mumble-speech/web` package SHALL be installable by an external project before publication, as a tarball (`npm pack`) or `file:` dependency. A CI check installs the tarball in an empty project and uses its public API. [auto]
 
 ## 5. Out of scope (v1)
@@ -134,6 +135,6 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 |---|---|---|
 | LQ1 | Package names (`@mumble-speech/web`, `com.mumble-speech.unity`, crate `mumble-speech`)? | These, subject to an availability check. |
 | LQ2 | License? | MIT OR Apache-2.0, Rust convention. |
-| LQ3 | Hosting and CI? | GitHub + GitHub Actions. Git needs to be initialized and the repo created. |
+| LQ3 | Hosting and CI? | GitHub + GitHub Actions, public repository `basteez/mumble-speech` on the user's personal account, no organization (user decision, 2026-10-24). |
 | LQ4 | The seed change (L1.6) slightly changes the behavior of R3.8: the seed is no longer derived from the text. Is that OK? | Yes: it is necessary for L3.2. |
-| LQ5 | Where does the playground live? | In a separate project, `mumble-speech-playground` (user request, 2026-10-19). |
+| LQ5 | Where does the playground live? | In the library repository, `apps/playground`, so a contributor can hear a change to the core in the same clone and PR (user decision, 2026-10-24; it replaces the separate repository of 2026-10-19, see LD9). |
