@@ -383,7 +383,7 @@ CSS variables: `--bg #000`, `--card #0b0d0f`, `--border #2a2d31`,
 | Level | What | Requirements |
 |---|---|---|
 | Unit (Vitest, node) | normalize, tokenize, rng, timeline, three styles, synthesize, cache, encodeWav, filename | R1.3–R1.5, R3.x, R4.2–R4.3, R5.5, R6.2, R7.1–R7.4, R8.5 |
-| Performance (Vitest) | `synthesize` on 500 characters at speed 5, all styles, under 250 ms | R5.4 |
+| Performance (Vitest) | `synthesize` on 500 characters at speed 5, all styles, under 250 ms × `MUMBLE_PERF_SLACK` after a warm-up (slack 1 locally, 3 in CI; library LD10) | R5.4 |
 | Smoke (headless Chrome, not in the repo) | play, highlight, stop on change, export, 320 px layout | R5, R6, R7, M2, M6, M9 |
 | Lightweight property-based | for 200 random texts: no overlap, determinism, no repeated grunt | R3.3, R3.7, R3.8 |
 | Snapshot | timeline of `"Hello, world!"` for each style | regressions |

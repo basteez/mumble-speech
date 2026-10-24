@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Performance budgets are for a mid-range laptop; shared runners get slack (specs/design.md, LD10).
+  MUMBLE_PERF_SLACK: 3
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

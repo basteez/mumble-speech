@@ -140,12 +140,16 @@ fn renders_500_characters_fast_enough() {
     if cfg!(debug_assertions) {
         return;
     }
+    // Budget is for a mid-range laptop; CI runners get a slack factor (LD10).
+    let slack: f64 = std::env::var("MUMBLE_PERF_SLACK").ok().and_then(|s| s.parse().ok()).unwrap_or(1.0);
     let text: String = "The quick brown fox jumps over the lazy dog, again and again! ".repeat(9).chars().take(500).collect();
     for style in StyleId::ALL {
         let v = Voice { speed: 5.0, variation: 0.3, ..Voice::new(style) };
+        render(&text, &v, DEFAULT_SAMPLE_RATE).unwrap(); // warm-up
         let start = std::time::Instant::now();
         render(&text, &v, DEFAULT_SAMPLE_RATE).unwrap();
         let ms = start.elapsed().as_secs_f64() * 1000.0;
-        assert!(ms < 50.0, "{style:?}: {ms:.1} ms (L2.5)");
+        println!("{style:?}: {ms:.1} ms");
+        assert!(ms < 50.0 * slack, "{style:?}: {ms:.1} ms, budget 50 ms × {slack} (L2.5)");
     }
 }

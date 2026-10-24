@@ -366,6 +366,12 @@ GitHub Actions, matrix:
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu | GDExtension build, headless tests |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
+
+Performance budgets (L2.5, playground R5.4) are defined for a mid-range laptop.
+Shared CI runners are slower and noisy, so CI sets `MUMBLE_PERF_SLACK=3`: the
+benchmarks still run (after a warm-up) and fail on order-of-magnitude
+regressions, while the exact budget is checked locally, where the slack
+defaults to 1 (LD10).
 | release | on tag | artifacts: Godot addon zip, Unity package, npm tarball, C archive |
 
 ## 11. Migration
@@ -401,6 +407,7 @@ GitHub Actions, matrix:
 | LD7 | Vector hash FNV-1a 64 | SHA-256 | Implementable in a few lines in C, C#, GDScript and TS |
 | LD8 | Playground in a separate repository (superseded by LD9) | `apps/playground` in the monorepo | User request: the library repo contains only the library |
 | LD9 | Playground back in the monorepo as a private app, with its history imported | Separate repository linked from the README | A contributor changing the core can hear it with one clone and one PR; CI catches API breaks in the same PR; no version drift between library and demo [L6.1] |
+| LD10 | Benchmarks warm up once and scale their budget by `MUMBLE_PERF_SLACK` (1 locally, 3 in CI) | Exact budget in CI; no benchmark in CI | First CI run: 52 ms vs 50 ms (core, `beep`, cold first run) and 290 ms vs 250 ms (playground) on 2-core shared runners, while the same code passes on the laptop with margin. A ×3 slack still catches regressions like D6 (×30) |
 
 Decisions inherited from the first version (IDs unchanged):
 

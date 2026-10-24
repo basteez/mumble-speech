@@ -84,12 +84,16 @@ describe('synthesize', () => {
   });
 
   it('synthesizes 500 characters at the slowest speed in under 250 ms per style (R5.4)', () => {
+    // Budget is for a mid-range laptop; CI runners get a slack factor (library LD10).
+    const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env;
+    const budget = 250 * Number(env?.MUMBLE_PERF_SLACK ?? 1);
     const text = 'The quick brown fox jumps over the lazy dog, again and again! '.repeat(9).slice(0, 500);
     for (const style of STYLE_LIST) {
       const t = buildTimeline(text, style, { pitch: 0, speed: 5, variation: 0.3 });
+      synthesize(t); // warm-up
       const t0 = performance.now();
       synthesize(t);
-      expect(performance.now() - t0).toBeLessThan(250);
+      expect(performance.now() - t0).toBeLessThan(budget);
     }
   });
 });
