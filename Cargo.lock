@@ -42,6 +42,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mumble-ffi"
+version = "0.1.0"
+dependencies = [
+ "mumble-speech",
+]
+
+[[package]]
 name = "mumble-speech"
 version = "0.1.0"
 dependencies = [

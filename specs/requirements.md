@@ -138,3 +138,9 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 | LQ3 | Hosting and CI? | GitHub + GitHub Actions, public repository `basteez/mumble-speech` on the user's personal account, no organization (user decision, 2026-10-24). |
 | LQ4 | The seed change (L1.6) slightly changes the behavior of R3.8: the seed is no longer derived from the text. Is that OK? | Yes: it is necessary for L3.2. |
 | LQ5 | Where does the playground live? | In the library repository, `apps/playground`, so a contributor can hear a change to the core in the same clone and PR (user decision, 2026-10-24; it replaces the separate repository of 2026-10-19, see LD9). |
+
+## 7. Open questions
+
+| # | Question | Notes |
+|---|---|---|
+| LQ6 | Should events keep the `dot` (color + size), or expose a neutral sound identifier (which grunt, which letter) and leave colors to the playground? | `dot` was born for the playground's visualizer. Games may still use the identifier (mouth shapes, particles). Changing it changes the event layout in every binding and the conformance vectors, so decide before the first release. Raised on 2026-10-24. |
