@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest a new style, an API, a platform or an improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        mumble-speech is spec-driven: accepted ideas go into the
+        [specifications](https://github.com/basteez/mumble-speech/tree/main/specs) first, then into
+        the code. Describing the problem you want to solve helps more than a ready-made solution.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How you imagine it working (API, behavior, sound).
+    validations:
+      required: true
+  - type: dropdown
+    id: binding
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - Core (sound, styles, timing)
+        - Web (@mumble-speech/web)
+        - Rust crate (mumble-speech)
+        - Godot addon
+        - Unity package
+        - C ABI (mumble.h)
+        - Playground
+        - Documentation site
+        - New platform or binding
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and references
+      description: Workarounds you use today, or games and tools that do it well.

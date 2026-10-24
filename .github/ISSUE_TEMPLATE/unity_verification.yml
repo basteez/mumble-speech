@@ -1,0 +1,70 @@
+name: Unity verification report (U1–U3)
+description: Results of the manual Unity checklist in bindings/unity/TESTING.md.
+title: "[Unity check]: Unity <version> on <OS>"
+labels: ["unity", "verification"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Follow [TESTING.md](https://github.com/basteez/mumble-speech/blob/main/bindings/unity/TESTING.md)
+        and report here, even if everything works. Thank you!
+  - type: input
+    id: unity
+    attributes:
+      label: Unity version
+      placeholder: "2022.3.50f1 or 6000.0.30f1"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and CPU
+      placeholder: "Windows 11 x64"
+    validations:
+      required: true
+  - type: input
+    id: package
+    attributes:
+      label: Package version and source
+      placeholder: "0.1.0 from git URL #upm, or from OpenUPM"
+    validations:
+      required: true
+  - type: dropdown
+    id: u1-install
+    attributes:
+      label: "U1: install and Basic sample"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u1-plugins
+    attributes:
+      label: "U1: native plugin settings"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u2
+    attributes:
+      label: "U2: EditMode tests"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u3
+    attributes:
+      label: "U3: TextMeshPro typewriter"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors and warnings
+      description: Copy them as they are.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything that was confusing, surprising, or sounded wrong.

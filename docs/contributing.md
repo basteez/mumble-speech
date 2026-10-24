@@ -1,5 +1,13 @@
 # Contributing
 
+## Reporting a problem or an idea
+
+Open an [issue](https://github.com/basteez/mumble-speech/issues/new/choose) with one of
+the forms: **Bug report** asks for the exact text and voice, which reproduce any problem
+bit for bit; **Feature request** starts from the problem you want to solve; **Unity
+verification report** collects the results of the
+[Unity checklist](https://github.com/basteez/mumble-speech/blob/main/bindings/unity/TESTING.md).
+
 ## Specs first
 
 The project is spec-driven. The
