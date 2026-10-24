@@ -10,22 +10,13 @@ components, the sample and the TextMeshPro typewriter.
 ## Before you start
 
 - Unity **2022.3 LTS** or **Unity 6**, on Windows, macOS or Linux.
-- [Rust](https://rustup.rs) (stable), to build the native library.
-- A clone of https://github.com/basteez/mumble-speech.
-
-Build the native library into the package (on Windows run it from Git Bash):
-
-```sh
-bindings/unity/build.sh
-```
-
-You should see `copied Plugins/.../libmumble_ffi...`.
+- Nothing else: the package installs from git with its native libraries.
 
 ## U1 — Install the package and run the sample
 
 1. Create a new 3D project in Unity Hub.
-2. **Window → Package Manager → + → Add package from disk…** and select
-   `bindings/unity/package.json` in the clone.
+2. **Window → Package Manager → + → Add package from git URL…** and paste
+   `https://github.com/basteez/mumble-speech.git#upm`.
 3. Expected: "Mumble Speech 0.1.0" in the list, **no errors in the Console**.
 4. Select `Packages/Mumble Speech/Plugins/<your OS>/` and click the library file:
    in the Inspector, **Editor** and your standalone platform must be ticked, the others

@@ -7,14 +7,13 @@ serve. About 57 KB gzip.
 
 ## Install
 
-Not on npm yet. Build it from the repository (needs Rust with the
-`wasm32-unknown-unknown` target and `wasm-bindgen-cli` 0.2.129):
-
 ```sh
-npm install
-npm run build -w @mumble-speech/web
-npm pack -w @mumble-speech/web      # mumble-speech-web-0.1.0.tgz, installable anywhere
+npm install @mumble-speech/web
 ```
+
+Each [GitHub release](https://github.com/basteez/mumble-speech/releases) also has the
+npm tarball. To build from source (Rust with the `wasm32-unknown-unknown` target and
+`wasm-bindgen-cli` 0.2.129): `npm run build -w @mumble-speech/web`.
 
 ## Use
 

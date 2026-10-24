@@ -40,6 +40,9 @@ jobs:
         run: cargo test --release
       - name: Builds for WebAssembly (L1.3)
         run: cargo build -p mumble-speech --target wasm32-unknown-unknown --release
+      - name: Crate packages for crates.io (L9.2)
+        if: runner.os == 'Linux'
+        run: cargo publish --dry-run -p mumble-speech
 
   ffi:
     name: ffi (${{ matrix.os }})

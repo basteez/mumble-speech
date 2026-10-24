@@ -120,12 +120,21 @@ Also attached as \`SHA256SUMS.txt\`: download it next to the archives and run \`
 
 **Web** ([docs](${site}/bindings/web))
 \`\`\`sh
-npm install ${url(fileOf(/^mumble-speech-web-/))}
+npm install @mumble-speech/web@${version}
 \`\`\`
 
-**Godot** ([docs](${site}/bindings/godot)): unzip \`${fileOf(/^mumble-speech-godot-/)}\` into your project, so that \`addons/mumble_speech/\` sits at its root.
+**Rust** ([docs.rs](https://docs.rs/mumble-speech/${version}))
+\`\`\`sh
+cargo add mumble-speech@${version}
+\`\`\`
 
-**Unity** ([docs](${site}/bindings/unity)): Package Manager → **+** → **Add package from tarball…** → \`${fileOf(/^com\.mumble-speech\.unity-/)}\`.
+**Unity** ([docs](${site}/bindings/unity)): Package Manager → **+** → **Add package from git URL…**
+\`\`\`
+https://github.com/${repo}.git#upm/v${version}
+\`\`\`
+or **Add package from tarball…** with \`${fileOf(/^com\.mumble-speech\.unity-/)}\`.
+
+**Godot** ([docs](${site}/bindings/godot)): unzip \`${fileOf(/^mumble-speech-godot-/)}\` into your project, so that \`addons/mumble_speech/\` sits at its root (also on branch [\`godot-addon\`](https://github.com/${repo}/tree/godot/v${version})).
 
 **C, C++, C#, Python…** ([docs](${site}/bindings/c)): unzip \`${fileOf(/^mumble-speech-c-/)}\`; include \`include/mumble.h\` and link the library for your platform from \`lib/\`.
 

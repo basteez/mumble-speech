@@ -661,6 +661,24 @@ built and verified, no GitHub Release):
 Publishing a release is an outward-facing action: the first tag is pushed
 only with the user's go-ahead.
 
+### 13.1 Registries [L9] (LD16)
+
+After `publish`, four independent jobs (L9.5), tags only:
+
+| Job | Registry | How | One-time setup by the maintainer |
+|---|---|---|---|
+| `npm` | npm, `@mumble-speech/web` | `npm publish <release tarball> --access public --provenance`; token `NPM_TOKEN` if present, otherwise OIDC trusted publishing (`id-token: write`, npm ≥ 11.5.1) | npm account and organization `mumble-speech`; a short-lived granular token for the first publish; then trusted publisher (`basteez/mumble-speech`, `release.yml`) and token deleted |
+| `crates` | crates.io, `mumble-speech` | `cargo publish -p mumble-speech`; token `CARGO_REGISTRY_TOKEN` if present, otherwise `rust-lang/crates-io-auth-action` (OIDC) | crates.io account (GitHub login, verified email); a scoped token for the first publish (crates.io requires it); then trusted publishing and token deleted |
+| `upm` | git branch `upm` + OpenUPM | the package from the release tarball pushed as a new commit on `upm` (`package.json` at the root), tagged `upm/vX.Y.Z` | one-time submission on openupm.com (branch `upm`, tag prefix `upm/`) |
+| `godot-addon` | git branch `godot-addon` + Godot Asset Library | the addon from the release zip pushed as a new commit on `godot-addon` (with `LICENSE` and README), tagged `godot/vX.Y.Z`; the run summary prints version, commit and URLs for the Asset Library form | Asset Library account and first submission; each release: edit the entry with the printed values |
+
+Both branches keep one commit per release on top of the previous one, so every
+tag stays reachable. Pull requests run `cargo publish --dry-run -p mumble-speech`
+in the `core` job. The crate gets a README and the metadata crates.io and
+docs.rs need (`repository`, `homepage`, `documentation`, `readme`, `keywords`,
+`categories`). An icon (`docs/public/icon.png`, 256 × 256, also the site logo)
+serves the Asset Library.
+
 ## 14. Risks
 
 | Risk | Mitigation |
@@ -687,6 +705,7 @@ only with the user's go-ahead.
 | LD13 | Unity package split into a `UnityEngine`-free interop assembly, verified in CI with plain .NET (C# 9), and thin Unity components verified manually | Everything verified manually | No Unity license in CI. Interop is where silent errors live (struct layout, marshalling, UTF-16 offsets); plain .NET runs the same C# against the real library on every PR |
 | LD14 | Events carry a sound identifier (style + variant) instead of a dot (color + size); C ABI version 2 | Keep the dot; keep both | Colors are a presentation choice of the playground; a neutral identifier is useful to games (mouth shapes, effects) and keeps the library free of UI decisions (LQ6, user decision) |
 | LD15 | Site on a dedicated free organization (`mumble-speech.github.io`), deployed from this repository with a deploy key | Pages on `basteez` (forced onto `bstz.it/mumble-speech` by the user site's custom domain); Cloudflare Pages; a `bstz.it` subdomain | GitHub applies the user site's custom domain to every project site of the account (documented behavior); an organization keeps a default `github.io` domain with no third-party account (LQ7, user decision) |
+| LD16 | Registries: npm and crates.io from CI (token only for the first publish, then OIDC); Unity and Godot through generated git branches (`upm`, `godot-addon`) with the binaries, tracked by OpenUPM and the Asset Library | Commit binaries to `main`; store long-lived tokens; automate the Asset Library with the account password | OpenUPM and the Asset Library build from git commits, and the native libraries are not in `main`; generated branches keep `main` clean. npm and crates.io require the package to exist before trusted publishing can be configured |
 
 Decisions inherited from the first version (IDs unchanged):
 

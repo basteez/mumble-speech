@@ -11,12 +11,19 @@ checked by hand with [this guide](https://github.com/basteez/mumble-speech/blob/
 
 ## Install
 
-Build the native library into the package (needs Rust), then in Unity use
-**Package Manager → + → Add package from disk…** and pick `bindings/unity/package.json`:
+In Unity: **Package Manager → + → Add package from git URL…**
 
-```sh
-bindings/unity/build.sh
 ```
+https://github.com/basteez/mumble-speech.git#upm
+```
+
+Append a tag to pin a version, for example `#upm/v0.1.0`. The `upm` branch holds the
+complete package with its native plugins, and every
+[release](https://github.com/basteez/mumble-speech/releases) also has it as a tarball
+(**Add package from tarball…**).
+
+To build from source (needs Rust): `bindings/unity/build.sh`, then **Add package from
+disk…** and pick `bindings/unity/package.json`.
 
 ## Use
 

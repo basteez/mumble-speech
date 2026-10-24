@@ -67,7 +67,11 @@ task cites the requirements it covers.
   - Outcome: dry run on #12 (pull request trigger): four archives built and verified, `publish` skipped (2026-10-24).
 - [ ] **H4** Release notes and changelog: `CHANGELOG.md` with the 0.1.0 section, `scripts/release/notes.mjs`, `notes` job, `SHA256SUMS.txt`, changelog page on the site. — L8.3, L8.4
   - Done when: a dry run shows the complete notes in the run summary and the user has seen the preview.
-- [ ] **H3** First release `v0.1.0`, only with the user's go-ahead. — L8.1
+- [x] **K1** Registry jobs in `release.yml` (`npm`, `crates`, `upm`, `godot-addon`), crate metadata and README, `cargo publish --dry-run` on PRs, icon. — L9, LD16
+  - Outcome: crate dry run in CI; `publish-branch.sh` tested against a local repository (new branch, later releases, fresh clone). The registry jobs themselves first run on the `v0.1.0` tag.
+- [ ] **K2** One-time account setup by the maintainer (npm organization and first token, crates.io account and first token), guided step by step. — L9.1, L9.2
+- [ ] **H3** First release `v0.1.0`, only with the user's go-ahead. — L8.1, L9
+- [ ] **K3** After the first release: trusted publishing on npm and crates.io, tokens deleted; OpenUPM submission; Godot Asset Library submission. — L9
 
 ## Manual checklist
 
@@ -103,4 +107,5 @@ task cites the requirements it covers.
 | L5 | C1, C2, D2, E2, F2, G2, H1 |
 | L7 | J1–J3 |
 | L8 | H1, H3, H4 |
+| L9 | K1–K3, H3 |
 | L6 | A1b, A2, D3, P1–P3 |

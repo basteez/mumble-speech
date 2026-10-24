@@ -8,9 +8,11 @@ export default defineConfig({
   title: 'mumble-speech',
   description: 'Video-game mumble speech generated at runtime, for the web, Godot, Unity and C.',
   cleanUrls: true,
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]],
   // /playground/ is not a VitePress page: it is the playground app copied into the output.
   ignoreDeadLinks: [/^\/playground(\/.*)?$/],
   themeConfig: {
+    logo: '/logo.svg',
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       {

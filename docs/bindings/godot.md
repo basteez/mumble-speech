@@ -5,11 +5,13 @@ generated at runtime; nothing is drawn by the addon.
 
 ## Install
 
-Build the addon (needs Rust), then copy `addons/mumble_speech/` into your project:
+Download `mumble-speech-godot-X.Y.Z.zip` from the
+[latest release](https://github.com/basteez/mumble-speech/releases/latest) and unzip it
+into your project, so that `addons/mumble_speech/` sits at its root. The same addon is
+on the [`godot-addon`](https://github.com/basteez/mumble-speech/tree/godot-addon)
+branch, which is what the Godot Asset Library entry points to.
 
-```sh
-bindings/godot/build.sh
-```
+To build from source (needs Rust): `bindings/godot/build.sh`.
 
 ## Use
 

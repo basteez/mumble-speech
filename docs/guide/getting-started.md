@@ -4,15 +4,16 @@ mumble-speech turns a line of text into the fake speech of video games. You choo
 **style** and a **voice**, and you get mono audio samples plus a **timeline** that says
 when each character sounds, so you can reveal the text in sync.
 
-::: warning Early development
-Nothing is published to npm, the Godot Asset Library or OpenUPM yet. Each binding is
-built from source for now; see its page.
+::: tip Early development
+Releases are on [GitHub](https://github.com/basteez/mumble-speech/releases), npm and
+crates.io; see each binding's page for how to install it.
 :::
 
 ## Pick your platform
 
 | Platform | Package | Page |
 |---|---|---|
+| Rust | crate `mumble-speech` (`cargo add mumble-speech`) | [docs.rs](https://docs.rs/mumble-speech) |
 | Web (browser, Node ≥ 20) | `@mumble-speech/web` (WebAssembly) | [Web](/bindings/web) |
 | Godot 4.3+ | GDExtension addon `addons/mumble_speech` | [Godot](/bindings/godot) |
 | Unity 2022.3+ | UPM package `com.mumble-speech.unity` | [Unity](/bindings/unity) |
