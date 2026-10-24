@@ -646,7 +646,10 @@ built and verified, no GitHub Release):
    repository metadata (`MUMBLE_ABI_VERSION` from `mumble.h`, vector format and
    count from `vectors.json`, `compatibility_minimum` from the `.gdextension`,
    `unity` from the Unity `package.json`, `engines.node` from the web
-   `package.json`). GitHub's generated notes (merged pull requests and compare
+   `package.json`), plus a *Packages* table linking the version on npm,
+   crates.io, docs.rs, the `upm` and `godot-addon` tags, and the OpenUPM and
+   Godot Asset Library pages listed in `scripts/release/registries.json`
+   (empty until those entries are approved). GitHub's generated notes (merged pull requests and compare
    link, from the `releases/generate-notes` API) are appended. The notes are
    shown in the run summary and uploaded as an artifact, so dry runs give a
    preview.

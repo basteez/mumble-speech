@@ -93,6 +93,18 @@ const nodeEngines = JSON.parse(read('packages/web/package.json')).engines.node;
 
 const generated = generatedFile ? readFileSync(generatedFile, 'utf8').trim() : '';
 
+// Where this version is published (L8.3). Entries that need manual approval come from registries.json.
+const registries = JSON.parse(read('scripts/release/registries.json'));
+const packages = [
+  ['npm', '`@mumble-speech/web`', `https://www.npmjs.com/package/@mumble-speech/web/v/${version}`],
+  ['crates.io', '`mumble-speech`', `https://crates.io/crates/mumble-speech/${version}`],
+  ['docs.rs', 'Rust API reference', `https://docs.rs/mumble-speech/${version}`],
+  ['Unity (git URL)', `branch \`upm\`, tag \`upm/${tag}\``, `https://github.com/${repo}/tree/upm/${tag}`],
+  ['OpenUPM', '`com.mumble-speech.unity`', registries.openupm],
+  ['Godot (git)', `branch \`godot-addon\`, tag \`godot/${tag}\``, `https://github.com/${repo}/tree/godot/${tag}`],
+  ['Godot Asset Library', 'Mumble Speech', registries.godotAssetLibrary],
+].filter(([, , link]) => link);
+
 const notes = `**mumble-speech ${version}**: video-game mumble speech generated at runtime, for the web, Godot, Unity and C.
 
 [Documentation](${site}/) · [Playground](${site}/playground/) · [Changelog](${site}/changelog) · [Report an issue](https://github.com/${repo}/issues)
@@ -100,6 +112,12 @@ const notes = `**mumble-speech ${version}**: video-game mumble speech generated 
 ## What's new
 
 ${changesNote}${changes}
+
+## Packages
+
+| Where | What | Link |
+|---|---|---|
+${packages.map(([where, what, link]) => `| ${where} | ${what} | ${link} |`).join('\n')}
 
 ## Downloads
 
