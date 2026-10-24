@@ -4,9 +4,10 @@ Web page for trying out the `mumble-speech` library: you write a text,
 choose a style, listen to it with synchronized visualization and export it
 to WAV.
 
-The library (Rust core, web/Godot/Unity/C bindings) lives in a separate
-repository, `../mumble-speech`, with its own specs. This project will use it only
-through the npm package `@mumble-speech/web` (tasks P1–P3).
+The code lives in `apps/playground`, a private app of the library monorepo
+(L6.1, LD9). The library specs are one level up, in [`../`](../README.md).
+The playground will use the library only through the public API of the npm
+package `@mumble-speech/web` (tasks P1–P3).
 
 ## Documents
 

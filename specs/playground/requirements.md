@@ -1,7 +1,7 @@
 # Requirements
 
-> **Note (library):** the engine has been extracted into the `mumble-speech` library
-> (separate repository, `specs/requirements.md`). R1.4, R1.5, R3.x, R4.2, R4.3,
+> **Note (library):** the engine has been extracted into the library
+> ([`../requirements.md`](../requirements.md)). R1.4, R1.5, R3.x, R4.2, R4.3,
 > R5.5, R7.1 and R7.4 are specified there, with the same IDs; they remain here for
 > reference as long as the playground still uses its TypeScript core (tasks P1–P3).
 > With the library, R3.8 (explicit seed, LD1) and R8.6 (the WASM is

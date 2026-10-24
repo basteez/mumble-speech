@@ -4,7 +4,7 @@ References to requirements in square brackets, for example [R3.8].
 
 > **Note (library):** §3–§6 (data model, algorithms, styles, synthesis, WAV)
 > describe the current TypeScript core. The reference for behavior is
-> now `specs/design.md` of the `mumble-speech` library; with P1–P3 this
+> now the library's [`../design.md`](../design.md); with P1–P3 this
 > code is replaced by `@mumble-speech/web` and these sections are reduced
 > to a pointer.
 

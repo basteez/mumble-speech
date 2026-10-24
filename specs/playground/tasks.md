@@ -69,10 +69,10 @@ Legend: **Done when** = verifiable condition for closing the task.
 
 ## Phase 6 — Migration to the library
 
-Depends on the library's (`mumble-speech`) task D3: package
-`@mumble-speech/web` available as a tarball or `file:` dependency.
+Depends on the library's task D3 ([`../tasks.md`](../tasks.md)): package
+`@mumble-speech/web` available in the npm workspace.
 
-- [ ] **P1** Add `@mumble-speech/web` as a `file:../mumble-speech/packages/web` dependency and replace core, styles, synthesis and WAV with the package API. The player becomes `WebAudioPlayer`. — R1–R8
+- [ ] **P1** Add `@mumble-speech/web` as an npm workspace dependency and replace core, styles, synthesis and WAV with the package API. The player becomes `WebAudioPlayer`. — R1–R8
 - [ ] **P2** Remove `src/core`, `src/styles`, `src/audio/synth.ts`, `src/audio/wav.ts`, `src/audio/player.ts` and the tests migrated to the library; the UI, cache and file name tests remain. Update design §3–§6 to a reference. — R8.5
 - [ ] **P3** Repeat the manual checklist M1–M10; verify the R8.6 budget (JS + CSS under 50 KB gzip, WASM excluded). — R8.6
 

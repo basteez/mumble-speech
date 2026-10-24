@@ -3,8 +3,8 @@
 Library that generates "mumble speech" (the fake speech of video games) in three
 styles: Rust core with bindings for web (WASM/npm), Godot, Unity and C ABI.
 
-The test web page is a separate project, `mumble-speech-playground`, with
-its own specs.
+The web playground is a private app in this repository (`apps/playground`),
+with its own specs in [`playground/`](playground/README.md).
 
 ## Documents
 
@@ -13,6 +13,7 @@ its own specs.
 | [requirements.md](requirements.md) | Numbered requirements: behavior (R*) and library (L*) | *What* it must do |
 | [design.md](design.md) | Architecture, algorithms, bindings, CI | *How* it does it |
 | [tasks.md](tasks.md) | Traceable implementation plan | *In what order* we build it |
+| [playground/](playground/README.md) | Requirements (R1–R8), design and tasks of the web playground | Same three questions, for the page |
 
 ## Process rules
 
