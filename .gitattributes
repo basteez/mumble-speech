@@ -1,0 +1,2 @@
+# LF everywhere: generated conformance files are compared byte for byte on every OS (specs/design.md §3.1).
+* text=auto eol=lf
