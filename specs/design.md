@@ -661,6 +661,12 @@ built and verified, no GitHub Release):
 `### Fixed`, `### Removed` and `### Known issues`. The site includes it as the
 *Changelog* page.
 
+Prereleases (L8.5): the `version` job marks versions with a `-` suffix as
+prereleases. Then `notes` does not require a changelog section, `publish` adds
+`--prerelease`, `npm` publishes with `--tag next`, and `upm` / `godot-addon`
+push only their tags (`publish-branch.sh --tag-only`): the commit sits on top
+of the branch but the branch head stays on the last stable release.
+
 Publishing a release is an outward-facing action: the first tag is pushed
 only with the user's go-ahead.
 
