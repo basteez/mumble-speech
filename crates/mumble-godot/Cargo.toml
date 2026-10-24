@@ -1,0 +1,17 @@
+[package]
+name = "mumble-godot"
+description = "Godot 4 GDExtension of mumble-speech (addon: bindings/godot/addons/mumble_speech)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mumble-speech = { path = "../mumble-core" }
+# api-4-3: built against the Godot 4.3 API, so the addon loads in 4.3 and every later 4.x.
+godot = { version = "0.5.5", features = ["api-4-3"] }
+unicode-segmentation = "1.13.3"

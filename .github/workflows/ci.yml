@@ -82,6 +82,34 @@ jobs:
         if: runner.os == 'macOS'
         run: arch -x86_64 build/c/test_vectors
 
+  godot:
+    name: godot (${{ matrix.godot }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Minimum supported version (L4.6) and the latest tested one.
+        godot: [4.3-stable, 4.7.2-stable]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the GDExtension into the addon
+        run: bindings/godot/build.sh
+      - name: Download Godot ${{ matrix.godot }}
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}/Godot_v${{ matrix.godot }}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          mv godot/Godot_v*_linux.x86_64 godot/godot
+      - name: Import project
+        run: godot/godot --headless --path bindings/godot --import || true
+      - name: Headless tests (vectors, typewriter, say)
+        run: godot/godot --headless --path bindings/godot -s res://tests/run_tests.gd
+      - name: Example scene runs without errors
+        run: |
+          godot/godot --headless --path bindings/godot --quit-after 300 2>&1 | tee example.log
+          ! grep -E "SCRIPT ERROR|ERROR:" example.log
+
   web:
     runs-on: ubuntu-latest
     steps:

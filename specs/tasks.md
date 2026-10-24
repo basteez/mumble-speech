@@ -35,8 +35,8 @@ task cites the requirements it covers.
 
 ## Phase E — C ABI
 
-- [ ] **E1** `mumble-ffi` with `catch_unwind`, error codes, `cbindgen` header. — L4.3–L4.5
-- [ ] **E2** C example and CTest tests on the vectors; CI build for the three platforms (macOS universal). — L4.3, L5.2
+- [x] **E1** `mumble-ffi` with `catch_unwind`, error codes, `cbindgen` header. — L4.3–L4.5
+- [x] **E2** C example and CTest tests on the vectors; CI build for the three platforms (macOS universal). — L4.3, L5.2
 
 ## Phase F — Godot
 

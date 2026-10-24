@@ -451,16 +451,43 @@ void mumble_bytes_free(uint8_t *p, size_t len);
 
 ### 9.3 Godot: `mumble-godot` [L4.6]
 
-- GDExtension written in Rust with `gdext`, which uses the core directly (not
-  the C ABI): one fewer layer, native Godot types.
+- GDExtension written in Rust with `gdext` (`godot = "0.5.5"`, feature
+  `api-4-3`), which uses the core directly (not the C ABI): one fewer layer,
+  native Godot types. `compatibility_minimum = 4.3`, so the same build loads in
+  every Godot from 4.3 on.
+- `bindings/godot` is itself a Godot project: `addons/mumble_speech/` (what
+  users copy: `.gdextension` + `bin/`), `example/` (a dialogue scene, L4.9) and
+  `tests/`. `bin/` is not committed: `bindings/godot/build.sh` builds the crate
+  and copies the library there.
+- Indices exposed to GDScript are **code point** indices in the Godot `String`
+  (how `String` and `visible_characters` count), converted from the core's
+  UTF-8 offsets.
 - Classes:
-  - `MumbleVoice` (`Resource`): `style`, `pitch`, `speed`, `variation`, `seed`, editable from the inspector.
-  - `MumbleSpeaker` (`Node`): `voice`, `bus`; `say(text)`, `speak_character(c)`, `stop()`, `render_stream(text) → AudioStreamWAV`; signals `character_spoken(index)` and `finished`. Internally it uses an `AudioStreamPlayer`.
-  - `MumbleTypewriter` (`Node`): `label: NodePath`, `speaker: NodePath`; `type_text(text)` sets the text, reveals one character at a time with `visible_characters` using the advances and plays each character; signal `finished`.
-- Distribution: `bindings/godot/addons/mumble_speech/` with the
-  `.gdextension` file and the per-platform binaries in `bin/`.
-- Tests: Godot test project run in CI with `godot --headless`, which
-  verifies the vectors via `MumbleSpeaker.render_stream` and the typewriter's behavior.
+  - `MumbleVoice` (`Resource`): `style` (enum `BEEP`, `GRUNT`, `ALPHABET`),
+    `pitch` (−12..12), `speed` (5..30), `variation` (0..1), `seed`, editable
+    from the inspector with ranges.
+  - `Mumble` (`RefCounted`, static functions, low level):
+    `render(text, voice, sample_rate) → Dictionary` with `samples`
+    (`PackedFloat32Array`), `duration` and `events` (array of dictionaries:
+    `char_index`, `char_count`, `start`, `duration`, `color`, `size`), or
+    `{ "error": "<code>" }`; `encode_wav(samples, sample_rate) → PackedByteArray`.
+  - `MumbleSpeaker` (`Node`): `voice`, `bus`, `volume_db`; `say(text)`,
+    `speak_character(text) → float` (plays one character, returns the advance
+    in seconds), `stop()`, `is_speaking()`, `render_stream(text) →
+    AudioStreamWAV` (16-bit, at the `AudioServer` mix rate); signals
+    `character_spoken(char_index)` and `finished`. Playback goes through an
+    internal `AudioStreamPlayer`; `character_spoken` follows the audio clock
+    (playback position + time since last mix − output latency, as in D7).
+  - `MumbleTypewriter` (`Node`): `label: NodePath` (`Label` or
+    `RichTextLabel`), `speaker: NodePath`; `type_text(text)` sets the text and
+    reveals it grapheme by grapheme through `visible_characters`, calling
+    `speak_character` and waiting its advance; `skip()` shows everything;
+    `is_typing()`; signal `finished`.
+- Tests (`tests/run_tests.gd`, run with
+  `godot --headless --path bindings/godot -s res://tests/run_tests.gd`): all
+  conformance vectors through `Mumble.render` with the FNV-1a hash computed in
+  GDScript, error codes, `MumbleVoice` defaults and ranges, typewriter reveal
+  and `finished`. CI (`godot` job, Linux): Godot 4.3 (minimum) and 4.7.2.
 
 ### 9.4 Unity [L4.7]
 
@@ -483,7 +510,7 @@ GitHub Actions, matrix:
 | core | ubuntu, macos, windows | `cargo test`, native vectors, L2.5 benchmark |
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
-| godot | ubuntu | GDExtension build, headless tests |
+| godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter) |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 
 Performance budgets (L2.5, playground R5.4) are defined for a mid-range laptop.
