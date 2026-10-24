@@ -35,6 +35,20 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match version $cargo_version"; exit 1
           fi
           echo "version=$cargo_version" >> "$GITHUB_OUTPUT"
+      - name: Registry credentials (whether set, never the values)
+        env:
+          NPM_SET: ${{ secrets.NPM_TOKEN != '' }}
+          CARGO_SET: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+        run: |
+          echo "NPM_TOKEN set: $NPM_SET; CARGO_REGISTRY_TOKEN set: $CARGO_SET"
+          {
+            echo "## Registry credentials"
+            echo
+            echo "| Secret | Set | When not set |"
+            echo "|---|---|---|"
+            echo "| \`NPM_TOKEN\` | $NPM_SET | npm publishes with trusted publishing (OIDC) |"
+            echo "| \`CARGO_REGISTRY_TOKEN\` | $CARGO_SET | crates.io publishes with trusted publishing (OIDC) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   native:
     needs: version
