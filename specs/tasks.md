@@ -47,14 +47,23 @@ task cites the requirements it covers.
 
 ## Phase G — Unity
 
-- [ ] **G1** UPM package: `Runtime/Core` interop, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter, plugin `.meta` files. — L4.7, LD13
-- [ ] **G2** `Basic` sample, EditMode tests on the vectors (generated `Vectors.cs`), CI `unity-interop` job with .NET. — L4.9, L5.2, LD13
+- [x] **G1** UPM package: `Runtime/Core` interop, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter, plugin `.meta` files. — L4.7, LD13
+- [x] **G2** `Basic` sample, EditMode tests on the vectors (generated `Vectors.cs`), CI `unity-interop` job with .NET. — L4.9, L5.2, LD13
 - [ ] **G3** Manual verification in Unity 2022.3 LTS (checklist U1–U3). — L4.7
 
-## Phase H — Release
+## Phase H — Sound identifier, READMEs, site, release
 
-- [ ] **H1** `release` job on tag: Godot addon zip, Unity package, npm tarball, C archive. — L5.3
-- [ ] **H2** README for each binding with a 10-line example. — L4.8, L4.9
+- [ ] **I1** Core: `SoundId` (style + variant) in events and utterances instead of the dot; conformance vectors format 2. — L2.3, L3.1, LD14
+- [ ] **I2** Bindings follow LD14: web (`sound`), C ABI version 2, Godot (`style`, `variant`), Unity (`Style`, `Variant`, `HasSound`); the playground maps variants to colors (`src/ui/dots.ts`). — L4.x, R6.2
+  - Done when: every suite passes the format-2 vectors and the playground looks as before (headless smoke test).
+- [ ] **H2** README for each binding with a short example, and a test guide for the Unity checklist U1–U3 (for whoever runs G3). — L4.8, L4.9
+- [ ] **J1** VitePress site in `docs/`: home, guide, one page per binding, reference, contributing. — L7.1
+- [ ] **J2** `npm run build:site` (docs at `/`, playground at `/playground/`); CI `site` job on every PR, required. — L7.2, L7.3
+- [ ] **J3** Organization `mumble-speech` (created by the user), repository `mumble-speech.github.io`, deploy key and secret, Pages enabled, deploy on push to `main`. — L7.4, LD15
+  - Done when: `https://mumble-speech.github.io/` and `/playground/` serve the latest `main`.
+- [ ] **H1** `release.yml`: version check, native builds, web package, four archives, GitHub Release; manual dry run. — L8.1, L8.2
+  - Done when: a dry run on `main` produces the four archives, and they are checked (Godot addon loads, C archive links, Unity tarball has plugins and metas, npm tarball installs).
+- [ ] **H3** First release `v0.1.0`, only with the user's go-ahead. — L8.1
 
 ## Manual checklist
 
@@ -88,4 +97,6 @@ task cites the requirements it covers.
 | L4.7 | G1–G3 |
 | L4.8–L4.9 | F2, G2, H2 |
 | L5 | C1, C2, D2, E2, F2, G2, H1 |
+| L7 | J1–J3 |
+| L8 | H1, H3 |
 | L6 | A1b, A2, D3, P1–P3 |

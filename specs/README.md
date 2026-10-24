@@ -33,3 +33,4 @@ with its own specs in [`playground/`](playground/README.md).
 - [x] requirements.md approved (2026-10-19; R* from the first version, L* from the library spec)
 - [x] design.md approved (2026-10-19)
 - [x] tasks.md approved (2026-10-19)
+- [ ] Revision of 2026-10-24 (LQ6 sound identifier, L7 site, L8 release; design §12–§13, LD14–LD15; tasks I1–J3, H1–H3): pending approval
