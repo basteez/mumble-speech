@@ -42,6 +42,9 @@ bindings for the web, Godot, Unity and C.
   encoding; status codes, no panics across the boundary; shared libraries for
   Windows x64, macOS universal and Linux x64.
 - **Documentation and playground** at https://mumble-speech.github.io/.
+- **Distribution**: npm (`@mumble-speech/web`), crates.io (`mumble-speech`), Unity by
+  git URL (branch `upm`), Godot addon on branch `godot-addon`, and release archives
+  with checksums.
 
 ### Known issues
 
@@ -51,8 +54,8 @@ bindings for the web, Godot, Unity and C.
   load them, run `xattr -dr com.apple.quarantine` on the extracted folder.
 - Desktop only: no prebuilt libraries for iOS, Android or consoles, no Godot web export
   or Unity WebGL support yet.
-- Not published to npm, the Godot Asset Library or OpenUPM yet: install from the
-  release archives.
+- The OpenUPM and Godot Asset Library entries are submitted after this release and
+  appear once approved; until then use the git URL (Unity) or the release zip (Godot).
 
 [Unreleased]: https://github.com/basteez/mumble-speech/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/basteez/mumble-speech/releases/tag/v0.1.0

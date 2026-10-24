@@ -10,6 +10,24 @@
 //! - drive a [`Speaker`] one character at a time, typewriter style.
 //!
 //! Output is bit-identical across platforms and WebAssembly for the same input (L1.4).
+//!
+//! ```
+//! use mumble_speech::{render, Speaker, StyleId, Voice};
+//!
+//! let voice = Voice { pitch: 2.0, ..Voice::new(StyleId::Alphabet) };
+//!
+//! // A whole line: mono samples plus a timeline of events.
+//! let line = render("Hello!", &voice, 48_000)?;
+//! assert_eq!(line.timeline.events.len(), 5); // H, e, l, l, o; "!" is a pause
+//!
+//! // Typewriter: one character at a time, with the seconds to wait before the next.
+//! let mut speaker = Speaker::new(voice, 48_000)?;
+//! let h = speaker.next("H");
+//! assert!(!h.samples.is_empty() && h.advance > 0.0);
+//! # Ok::<(), mumble_speech::Error>(())
+//! ```
+//!
+//! Documentation and playground: <https://mumble-speech.github.io/>.
 
 #![no_std]
 

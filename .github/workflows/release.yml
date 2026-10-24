@@ -206,3 +206,132 @@ jobs:
           cp notes/SHA256SUMS.txt release/
           gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" \
             --title "mumble-speech $GITHUB_REF_NAME" --notes-file notes/notes.md --verify-tag
+
+  # Registries (design §13.1, L9). Each job is independent (L9.5) and runs only after the
+  # GitHub Release exists.
+
+  npm:
+    if: github.ref_type == 'tag'
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: npm with trusted publishing support (≥ 11.5.1)
+        run: npm install -g npm@^11.5.1 && npm --version
+      - name: Publish @mumble-speech/web (the release tarball)
+        env:
+          # Only for the first publish; once trusted publishing is set up the secret is deleted
+          # and npm authenticates with OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish "${{ runner.temp }}/release/mumble-speech-web-${{ needs.version.outputs.version }}.tgz" --access public --provenance
+
+  crates:
+    if: github.ref_type == 'tag'
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # trusted publishing
+    env:
+      HAS_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Trusted publishing token
+        id: auth
+        if: env.HAS_TOKEN != 'true'
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish the mumble-speech crate
+        env:
+          # The secret only exists for the first publish (crates.io requires the crate to exist).
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
+        run: cargo publish -p mumble-speech
+
+  upm:
+    if: github.ref_type == 'tag'
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # pushes the upm branch and tag
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - name: Commit the package (with native plugins) on branch upm
+        run: |
+          tar -xzf "$RUNNER_TEMP/release/com.mumble-speech.unity-$VERSION.tgz" -C "$RUNNER_TEMP"
+          scripts/release/publish-branch.sh upm "upm/v$VERSION" "$RUNNER_TEMP/package" \
+            "com.mumble-speech.unity $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)"
+          {
+            echo "## Unity package"
+            echo
+            echo "- Branch \`upm\`, tag \`upm/v$VERSION\`, commit \`$(git rev-parse "upm/v$VERSION")\`"
+            echo "- Install by git URL: \`https://github.com/$GITHUB_REPOSITORY.git#upm/v$VERSION\`"
+            echo "- OpenUPM picks up new \`upm/\` tags automatically once the package is submitted."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  godot-addon:
+    if: github.ref_type == 'tag'
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # pushes the godot-addon branch and tag
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+      - name: Commit the addon (with native libraries) on branch godot-addon
+        run: |
+          content="$RUNNER_TEMP/godot-addon"
+          mkdir -p "$content"
+          unzip -q "$RUNNER_TEMP/release/mumble-speech-godot-$VERSION.zip" -d "$content"
+          # The Asset Library wants a LICENSE file at the root; the project is MIT OR Apache-2.0.
+          cp LICENSE-MIT "$content/LICENSE"
+          cp LICENSE-APACHE "$content/"
+          cat > "$content/README.md" <<EOF
+          # mumble-speech $VERSION for Godot
+
+          Generated from [basteez/mumble-speech](https://github.com/$GITHUB_REPOSITORY) — do not edit.
+          Copy \`addons/mumble_speech\` into your project (Godot 4.3+, Windows x64, macOS universal, Linux x64).
+          Documentation: https://mumble-speech.github.io/bindings/godot
+          EOF
+          scripts/release/publish-branch.sh godot-addon "godot/v$VERSION" "$content" \
+            "mumble-speech Godot addon $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)"
+          commit=$(git rev-parse "godot/v$VERSION^{commit}")
+          {
+            echo "## Godot Asset Library: values for this release"
+            echo
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Version | \`$VERSION\` |"
+            echo "| Godot version | 4.3 |"
+            echo "| Repository host | GitHub |"
+            echo "| Repository URL | https://github.com/$GITHUB_REPOSITORY |"
+            echo "| Issues URL | https://github.com/$GITHUB_REPOSITORY/issues |"
+            echo "| Download commit | \`$commit\` |"
+            echo "| Icon URL | https://mumble-speech.github.io/icon.png |"
+            echo "| License | MIT |"
+          } >> "$GITHUB_STEP_SUMMARY"
+

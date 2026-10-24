@@ -133,6 +133,14 @@ existing tests and commits continue to refer to them.
 - **L8.3** The release notes SHALL contain: links to the documentation, the playground and the changelog; the changelog section of the version; a table of the archives with platforms, size and SHA-256 (plus a `SHA256SUMS.txt` asset); install instructions for each binding from the release archives, linking its documentation page; compatibility (minimum Godot, Unity and Node versions, platforms, C ABI version, conformance vector format); what was verified before publishing, with a link to the CI run; the list of merged pull requests and the comparison with the previous release. Values such as versions and checksums SHALL be read from the repository and the archives, not written by hand. [auto]
 - **L8.4** `CHANGELOG.md` (Keep a Changelog format) SHALL have an *Unreleased* section that every pull request changing behavior or public API updates; a release renames it to the version. The release job SHALL fail if the changelog has no section for the tagged version. The changelog SHALL be published on the documentation site. [auto] [rev]
 
+### L9 — Package registries
+
+- **L9.1** (npm) A tag SHALL publish `@mumble-speech/web` to npm, the same tarball as the GitHub Release, with provenance. After the first release, publishing SHALL use trusted publishing (OIDC), with no long-lived token stored. [auto]
+- **L9.2** (crates.io) A tag SHALL publish the `mumble-speech` crate. Pull requests SHALL run `cargo publish --dry-run` on it. After the first release, publishing SHALL use trusted publishing. [auto]
+- **L9.3** (Unity) A tag SHALL update the branch `upm` with the complete Unity package (native plugins included, `package.json` at the root) and tag it `upm/vX.Y.Z`, so that it installs by git URL and is tracked by OpenUPM. [auto]
+- **L9.4** (Godot) A tag SHALL update the branch `godot-addon` with the complete addon (`addons/mumble_speech` with the native libraries, a `LICENSE` file) and tag it `godot/vX.Y.Z`, the commit the Godot Asset Library entry points to. The run summary SHALL list the values to paste into the Asset Library form. [auto]
+- **L9.5** Registry jobs SHALL run only after the GitHub Release is published, and SHALL be independent: a failure in one SHALL NOT stop the others. [auto]
+
 ## 5. Out of scope (v1)
 
 - Prebuilt libraries for iOS, Android and consoles (the C ABI makes them possible later).
@@ -140,7 +148,9 @@ existing tests and commits continue to refer to them.
 - Dedicated Unreal plugin (usable via the C ABI, without a wrapper).
 - Custom or data-defined styles.
 - Streaming synthesis in the audio thread.
-- Publication to registries (npm, Godot Asset Library, OpenUPM).
+- Unity Asset Store, vcpkg, Conan, NuGet.
+- The new Godot Asset Store (in beta, no documented publishing process or API): assets will have to be uploaded there by hand when it replaces the Asset Library.
+- Automatic updates of the Godot Asset Library entry (only a community tool exists, which needs the account password as a secret): each release is updated by hand with the values from the run summary.
 
 ## 6. Resolved questions
 
