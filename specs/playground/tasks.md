@@ -72,9 +72,12 @@ Legend: **Done when** = verifiable condition for closing the task.
 Depends on the library's task D3 ([`../tasks.md`](../tasks.md)): package
 `@mumble-speech/web` available in the npm workspace.
 
-- [ ] **P1** Add `@mumble-speech/web` as an npm workspace dependency and replace core, styles, synthesis and WAV with the package API. The player becomes `WebAudioPlayer`. — R1–R8
-- [ ] **P2** Remove `src/core`, `src/styles`, `src/audio/synth.ts`, `src/audio/wav.ts`, `src/audio/player.ts` and the tests migrated to the library; the UI, cache and file name tests remain. Update design §3–§6 to a reference. — R8.5
+- [x] **P1** Add `@mumble-speech/web` as an npm workspace dependency and replace core, styles, synthesis and WAV with the package API. The player becomes `WebAudioPlayer`. — R1–R8
+- [x] **P2** Remove `src/core`, `src/styles`, `src/audio/synth.ts`, `src/audio/wav.ts`, `src/audio/player.ts` and the tests migrated to the library; the UI, cache and file name tests remain. Update design §3–§6 to a reference. — R8.5
 - [ ] **P3** Repeat the manual checklist M1–M10; verify the R8.6 budget (JS + CSS under 50 KB gzip, WASM excluded). — R8.6
+  - Automated part (headless Chrome, 2026-10-24): every grapheme highlighted in all three styles (accents and emoji included), stop on slider change, M9, WAV export at 44,100 Hz, 320 px without overflow, no network requests. First click 304 ms (includes `AudioContext` start-up in headless Chrome), later clicks 24–93 ms: confirm R5.4 by hand.
+  - R8.6: production JS 58.2 KB gzip, of which about 52 KB is the inlined WASM (library LD12, budget L4.2), so about 6 KB of playground JS plus 5.1 KB of CSS.
+  - Still to do by hand: listening (M4, M10), M1, M3, M7, M8 and the four browsers.
 
 ## Manual checklist
 

@@ -1,30 +1,38 @@
 import '@fontsource/pixelify-sans/400.css';
 import './style.css';
+import { encodeWav, init, render, timeline as buildTimeline, WebAudioPlayer, type Timeline, type Voice } from '@mumble-speech/web';
 import { createBufferCache } from './audio/cache.ts';
-import { Player } from './audio/player.ts';
-import { SAMPLE_RATE, synthesize } from './audio/synth.ts';
-import { encodeWav } from './audio/wav.ts';
-import { buildTimeline, eventAt } from './core/timeline.ts';
-import { hasAudibleTokens } from './core/tokenize.ts';
-import type { Timeline } from './core/types.ts';
-import { DEFAULT_STYLE, STYLES } from './styles/index.ts';
 import { createControls } from './ui/controls.ts';
+import { eventAt } from './ui/event-at.ts';
 import { exportFilename } from './ui/filename.ts';
+import { DEFAULT_STYLE } from './ui/styles.ts';
 import { createVisualizer } from './ui/visualizer.ts';
 
-// App state: specs/design.md §7.2
+/** WAV export rate (R7.1). */
+const SAMPLE_RATE = 44_100;
+
+/** One immutable snapshot of the inputs; a new object invalidates the audio cache. */
+interface Line {
+  text: string;
+  voice: Voice;
+  timeline: Timeline;
+}
+
+await init();
+
+// App state: specs/playground/design.md §7.2
 const controls = createControls(DEFAULT_STYLE);
 const visualizer = createVisualizer(document.getElementById('viz')!);
-const player = new Player();
-const cache = createBufferCache(async (t: Timeline) => synthesize(t));
+const player = new WebAudioPlayer();
+const cache = createBufferCache(async (line: Line) => render(line.text, line.voice, SAMPLE_RATE).samples);
 
-let timeline: Timeline;
+let line: Line;
 let playback: 'idle' | 'rendering' | 'playing' = 'idle';
 let error: string | undefined;
 let frame = 0;
 
 function refreshControls() {
-  controls.update({ length: controls.text.length, audible: hasAudibleTokens(timeline.tokens), playback, error });
+  controls.update({ length: line.text.length, audible: line.timeline.events.length > 0, playback, error });
 }
 
 function stop() {
@@ -38,8 +46,10 @@ function stop() {
 function onInputChange() {
   stop();
   error = undefined;
-  timeline = buildTimeline(controls.text, STYLES[controls.style], controls.voice);
-  visualizer.render(timeline);
+  const text = controls.text;
+  const voice: Voice = { style: controls.style, ...controls.voice };
+  line = { text, voice, timeline: buildTimeline(text, voice) };
+  visualizer.render(text, line.timeline);
   refreshControls();
 }
 
@@ -50,12 +60,12 @@ function onInputChange() {
  */
 function highlight() {
   const position = player.position();
-  if (position >= timeline.duration) {
+  if (position >= line.timeline.duration) {
     stop();
     refreshControls();
     return;
   }
-  visualizer.setActive(eventAt(timeline.events, position)?.tokenIndex ?? null);
+  visualizer.setActive(eventAt(line.timeline.events, position)?.utf16Start ?? null);
   frame = requestAnimationFrame(highlight);
 }
 
@@ -68,14 +78,14 @@ controls.onPlay(async () => {
     return;
   }
   player.unlock(); // synchronously inside the click, before any await (R8.4)
-  const target = timeline;
+  const target = line;
   playback = 'rendering';
   refreshControls();
   try {
     const samples = await cache.get(target);
-    if (target !== timeline || playback !== 'rendering') return; // input changed meanwhile
+    if (target !== line || playback !== 'rendering') return; // input changed meanwhile
     await player.play(samples, SAMPLE_RATE);
-    if (target !== timeline) return player.stop();
+    if (target !== line) return player.stop();
     playback = 'playing';
     frame = requestAnimationFrame(highlight);
   } catch (e) {
@@ -88,7 +98,7 @@ controls.onPlay(async () => {
 controls.onExport(async () => {
   const style = controls.style;
   try {
-    const wav = encodeWav(await cache.get(timeline), SAMPLE_RATE);
+    const wav = encodeWav(await cache.get(line), SAMPLE_RATE);
     const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
     const a = document.createElement('a');
     a.href = url;

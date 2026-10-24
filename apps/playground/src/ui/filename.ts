@@ -1,4 +1,4 @@
-import type { StyleId } from '../core/types.ts';
+import type { StyleId } from '@mumble-speech/web';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 

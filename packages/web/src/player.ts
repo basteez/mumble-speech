@@ -16,13 +16,13 @@ export class WebAudioPlayer {
     if (this.ctx.state !== 'running') void this.ctx.resume();
   }
 
-  async play(samples: Float32Array<ArrayBuffer>, sampleRate: number): Promise<void> {
+  async play(samples: Float32Array, sampleRate: number): Promise<void> {
     this.stop();
     const ctx = (this.ctx ??= new AudioContext());
     if (ctx.state !== 'running') await ctx.resume();
 
     const buffer = new AudioBuffer({ length: samples.length, sampleRate });
-    buffer.copyToChannel(samples, 0);
+    buffer.getChannelData(0).set(samples);
     const source = new AudioBufferSourceNode(ctx, { buffer });
     source.connect(ctx.destination);
     source.onended = () => {

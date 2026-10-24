@@ -71,11 +71,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      # The playground consumes @mumble-speech/web, which is built from the Rust core.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@0.2.129
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Build @mumble-speech/web
+        run: npm run build --workspace @mumble-speech/web
       - name: Typecheck
         run: npm run typecheck --workspace @mumble-speech/playground
       - name: Tests

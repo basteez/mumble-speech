@@ -1,11 +1,18 @@
-import type { StyleId, Voice } from '../core/types.ts';
-import { STYLE_LIST } from '../styles/index.ts';
+import type { StyleId } from '@mumble-speech/web';
+import { STYLE_CARDS } from './styles.ts';
+
+/** Slider values; the style comes from the cards. */
+export interface VoiceParams {
+  pitch: number;
+  speed: number;
+  variation: number;
+}
 
 export const MAX_LENGTH = 500;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const FORMAT: Record<keyof Voice, (v: number) => string> = {
+const FORMAT: Record<keyof VoiceParams, (v: number) => string> = {
   pitch: (v) => `${v > 0 ? '+' : ''}${v} st`,
   speed: (v) => `${v} c/s`,
   variation: (v) => v.toFixed(2),
@@ -25,7 +32,7 @@ export function createControls(initialStyle: StyleId) {
   };
 
   $('style-options').replaceChildren(
-    ...STYLE_LIST.map((style, i) => {
+    ...STYLE_CARDS.map((style, i) => {
       const card = document.createElement('label');
       card.className = 'style-card';
       card.innerHTML = `
@@ -44,7 +51,7 @@ export function createControls(initialStyle: StyleId) {
     }),
   );
 
-  const readVoice = (): Voice => ({
+  const readVoice = (): VoiceParams => ({
     pitch: Number(sliders.pitch.value),
     speed: Number(sliders.speed.value),
     variation: Number(sliders.variation.value),
@@ -52,7 +59,7 @@ export function createControls(initialStyle: StyleId) {
 
   const syncOutputs = () => {
     const voice = readVoice();
-    for (const key of Object.keys(sliders) as (keyof Voice)[]) {
+    for (const key of Object.keys(sliders) as (keyof VoiceParams)[]) {
       $(`${key}-out`).textContent = FORMAT[key](voice[key]);
     }
   };
