@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
       - name: Every package has the same version, equal to the tag (L8.2)
@@ -35,6 +36,9 @@ jobs:
             echo "::error::tag $GITHUB_REF_NAME does not match version $cargo_version"; exit 1
           fi
           echo "version=$cargo_version" >> "$GITHUB_OUTPUT"
+          # 0.2.0-rc.1 and the like are prereleases (L8.5).
+          case "$cargo_version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
       - name: Registry credentials (whether set, never the values)
         env:
           NPM_SET: ${{ secrets.NPM_TOKEN != '' }}
@@ -187,7 +191,7 @@ jobs:
         run: |
           mkdir -p notes
           node scripts/release/notes.mjs "$VERSION" release notes/notes.md \
-            ${{ github.ref_type == 'tag' && '--require-changelog' || '' }} \
+            ${{ github.ref_type == 'tag' && needs.version.outputs.prerelease == 'false' && '--require-changelog' || '' }} \
             --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --generated generated.md
           mv release/SHA256SUMS.txt notes/
@@ -219,7 +223,8 @@ jobs:
         run: |
           cp notes/SHA256SUMS.txt release/
           gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" \
-            --title "mumble-speech $GITHUB_REF_NAME" --notes-file notes/notes.md --verify-tag
+            --title "mumble-speech $GITHUB_REF_NAME" --notes-file notes/notes.md --verify-tag \
+            ${{ needs.version.outputs.prerelease == 'true' && '--prerelease' || '' }}
 
   # Registries (design §13.1, L9). Each job is independent (L9.5) and runs only after the
   # GitHub Release exists.
@@ -247,7 +252,10 @@ jobs:
           # Only for the first publish; once trusted publishing is set up the secret is deleted
           # and npm authenticates with OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish "${{ runner.temp }}/release/mumble-speech-web-${{ needs.version.outputs.version }}.tgz" --access public --provenance
+        run: |
+          # Prereleases go to the dist-tag "next", so "latest" stays on the last stable release (L8.5).
+          npm publish "${{ runner.temp }}/release/mumble-speech-web-${{ needs.version.outputs.version }}.tgz" \
+            --access public --provenance --tag ${{ needs.version.outputs.prerelease == 'true' && 'next' || 'latest' }}
 
   crates:
     if: github.ref_type == 'tag'
@@ -291,7 +299,8 @@ jobs:
         run: |
           tar -xzf "$RUNNER_TEMP/release/com.mumble-speech.unity-$VERSION.tgz" -C "$RUNNER_TEMP"
           scripts/release/publish-branch.sh upm "upm/v$VERSION" "$RUNNER_TEMP/package" \
-            "com.mumble-speech.unity $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)"
+            "com.mumble-speech.unity $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)" \
+            ${{ needs.version.outputs.prerelease == 'true' && '--tag-only' || '' }}
           {
             echo "## Unity package"
             echo
@@ -332,11 +341,16 @@ jobs:
           Documentation: https://mumble-speech.github.io/bindings/godot
           EOF
           scripts/release/publish-branch.sh godot-addon "godot/v$VERSION" "$content" \
-            "mumble-speech Godot addon $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)"
+            "mumble-speech Godot addon $VERSION (generated from basteez/mumble-speech@$GITHUB_SHA)" \
+            ${{ needs.version.outputs.prerelease == 'true' && '--tag-only' || '' }}
           commit=$(git rev-parse "godot/v$VERSION^{commit}")
           {
             echo "## Godot Asset Library: values for this release"
             echo
+            if [ "${{ needs.version.outputs.prerelease }}" = "true" ]; then
+              echo "> Prerelease: do **not** update the Asset Library entry with these values."
+              echo
+            fi
             echo "| Field | Value |"
             echo "|---|---|"
             echo "| Version | \`$VERSION\` |"

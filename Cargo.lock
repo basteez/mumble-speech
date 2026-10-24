@@ -132,7 +132,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mumble-conformance"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "mumble-speech",
  "serde",
@@ -141,14 +141,14 @@ dependencies = [
 
 [[package]]
 name = "mumble-ffi"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "mumble-speech",
 ]
 
 [[package]]
 name = "mumble-godot"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "godot",
  "mumble-speech",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "mumble-speech"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "libm",
  "unicode-normalization",
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "mumble-wasm"
-version = "0.1.0"
+version = "0.1.1-rc.1"
 dependencies = [
  "mumble-speech",
  "wasm-bindgen",

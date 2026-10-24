@@ -7,6 +7,15 @@ or public API adds an entry to *Unreleased*.
 
 ## [Unreleased]
 
+### Changed
+
+- Release notes link the release on every registry (npm, crates.io, docs.rs, the Unity
+  and Godot branches).
+- Tags with a suffix such as `v0.2.0-rc.1` are published as prereleases: npm dist-tag
+  `next`, a crates.io prerelease, and the Unity and Godot branches stay on the last
+  stable release.
+- Publishing to npm and crates.io uses trusted publishing (OIDC): no tokens are stored.
+
 ## [0.1.0] - 2026-10-24
 
 First release: one Rust core that turns text into video-game mumble speech, with

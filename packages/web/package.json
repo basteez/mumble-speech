@@ -1,6 +1,6 @@
 {
   "name": "@mumble-speech/web",
-  "version": "0.1.0",
+  "version": "0.1.1-rc.1",
   "description": "Video-game mumble speech synthesis for the web (WebAssembly).",
   "license": "MIT OR Apache-2.0",
   "repository": {
