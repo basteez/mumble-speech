@@ -23,6 +23,7 @@ export default defineConfig({
         ],
       },
       { text: 'Playground', link: '/playground/', target: '_self' },
+      { text: 'Releases', link: 'https://github.com/basteez/mumble-speech/releases' },
     ],
     sidebar: [
       {
@@ -49,6 +50,7 @@ export default defineConfig({
           { text: 'Conformance vectors', link: '/reference/conformance' },
         ],
       },
+      { text: 'Changelog', link: '/changelog' },
       { text: 'Contributing', link: '/contributing' },
     ],
     socialLinks: [{ icon: 'github', link: repo }],

@@ -639,8 +639,24 @@ built and verified, no GitHub Release):
    packaged library; the packaged Godot addon passes the headless tests on
    Godot 4.3; the Unity tarball has the three plugins and a `.meta` for every
    file; the npm tarball installs in an empty project and renders a vector.
-6. `publish` (tags only, after `verify`): `gh release create vX.Y.Z
-   --generate-notes` with the four files [L8.1].
+6. `notes` (`scripts/release/notes.mjs`) [L8.3, L8.4]: writes
+   `SHA256SUMS.txt` next to the archives and composes the release notes from
+   `CHANGELOG.md` (the version's section; on tags it must exist, dry runs fall
+   back to *Unreleased*), the archives (size, SHA-256, download URLs) and
+   repository metadata (`MUMBLE_ABI_VERSION` from `mumble.h`, vector format and
+   count from `vectors.json`, `compatibility_minimum` from the `.gdextension`,
+   `unity` from the Unity `package.json`, `engines.node` from the web
+   `package.json`). GitHub's generated notes (merged pull requests and compare
+   link, from the `releases/generate-notes` API) are appended. The notes are
+   shown in the run summary and uploaded as an artifact, so dry runs give a
+   preview.
+7. `publish` (tags only, after `verify` and `notes`): `gh release create vX.Y.Z
+   --notes-file notes.md` with the four archives and `SHA256SUMS.txt` [L8.1].
+
+`CHANGELOG.md` follows Keep a Changelog: `## [Unreleased]`, then
+`## [X.Y.Z] - YYYY-MM-DD` sections with `### Added`, `### Changed`,
+`### Fixed`, `### Removed` and `### Known issues`. The site includes it as the
+*Changelog* page.
 
 Publishing a release is an outward-facing action: the first tag is pushed
 only with the user's go-ahead.
