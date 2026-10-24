@@ -11,7 +11,14 @@ checked by hand with [this guide](https://github.com/basteez/mumble-speech/blob/
 
 ## Install
 
-In Unity: **Package Manager → + → Add package from git URL…**
+From [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/), with the
+[openupm CLI](https://openupm.com/docs/getting-started-cli.html):
+
+```sh
+openupm add com.mumble-speech.unity
+```
+
+Or in Unity: **Package Manager → + → Add package from git URL…**
 
 ```
 https://github.com/basteez/mumble-speech.git#upm
