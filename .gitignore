@@ -28,3 +28,7 @@ target
 
 # CMake
 build
+
+# VitePress
+docs/.vitepress/dist
+docs/.vitepress/cache
