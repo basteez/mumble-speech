@@ -12,9 +12,11 @@ characters speak in games, in three styles.
 One implementation in Rust, deterministic and bit-identical across platforms,
 with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
 
-> **Status:** early development, nothing published to package registries yet.
+> **Status:** early development (0.x: the API may still change).
 > Documentation and playground: **https://mumble-speech.github.io/** ·
-> [Releases](https://github.com/basteez/mumble-speech/releases) · [Changelog](CHANGELOG.md)
+> [Releases](https://github.com/basteez/mumble-speech/releases) · [Changelog](CHANGELOG.md) ·
+> [npm](https://www.npmjs.com/package/@mumble-speech/web) ·
+> [crates.io](https://crates.io/crates/mumble-speech) · [docs.rs](https://docs.rs/mumble-speech)
 
 ## Repository layout
 

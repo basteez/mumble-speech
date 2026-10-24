@@ -1,0 +1,5 @@
+{
+  "$comment": "Pages of the registry entries that need manual approval; empty until they exist (design §13, L8.3).",
+  "openupm": "",
+  "godotAssetLibrary": ""
+}
