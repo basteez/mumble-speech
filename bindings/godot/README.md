@@ -38,7 +38,8 @@ $MumbleTypewriter.type_text("Guh-huh! Did you bring the honey?")   # skip(), is_
 | `Mumble` (static) | `render(text, voice, sample_rate) → { samples, duration, events }`, `encode_wav(samples, sample_rate)` |
 
 Nothing is drawn by the addon: the typewriter only sets `visible_characters` on
-the label you point it to.
+the label you point it to. `Mumble.render` events also carry `style` and `variant`
+(which grunt 0–3, which letter 0–25, 26 neutral): use them for mouth shapes or effects.
 
 ## This folder
 

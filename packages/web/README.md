@@ -38,6 +38,11 @@ Voice: `style`, `pitch` (−12..12 semitones, default 0), `speed` (5..30 charact
 default 15), `variation` (0..1, default 0), `seed` (default 0). Invalid values throw a
 `MumbleError` with a `code`.
 
+Each timeline event has `start`/`duration` (seconds), `utf16Start`/`utf16Length` (index
+your JavaScript string with them) and `sound: { style, variant }`: which sound plays
+(`grunt` 0–3, `alphabet` 0–25 for a–z, 26 neutral, `beep` 0). Map it to whatever you
+like — mouth shapes, particles, colors. Nothing is drawn by the package.
+
 ## License
 
 MIT OR Apache-2.0.

@@ -39,8 +39,11 @@ typewriter.TypeText("Guh-huh! Did you bring the honey?");   // Skip(), IsTyping,
 | `Mumble`, `Speaker` (plain C#) | raw samples and events, typewriter speaker, WAV encoding |
 
 Nothing is drawn by the package: the TMP typewriter only sets `maxVisibleCharacters`.
+Events from `Mumble.Render` carry `Style` and `Variant` (which grunt 0–3, which letter
+0–25, 26 neutral): use them for mouth shapes or effects.
 
 ## Tests
 
-Window → General → Test Runner → EditMode → run `MumbleSpeech.Tests.EditMode`
-(all conformance vectors through the native library).
+See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U3) for trying the package
+in the Unity editor, including the EditMode tests that run all conformance vectors
+through the native library.
