@@ -48,16 +48,19 @@ export interface Timeline {
   duration: number;
 }
 
+/** Samples copied out of WebAssembly memory: always backed by a plain `ArrayBuffer`. */
+export type Samples = Float32Array<ArrayBuffer>;
+
 export interface Render {
   /** Mono samples. */
-  samples: Float32Array;
+  samples: Samples;
   sampleRate: number;
   timeline: Timeline;
 }
 
 export interface Utterance {
   /** Mono samples, empty for spaces and pauses. */
-  samples: Float32Array;
+  samples: Samples;
   /** Seconds to wait before the next character. */
   advance: number;
   dot: Dot | null;
@@ -150,7 +153,7 @@ export function render(text: string, voice: Voice, sampleRate = DEFAULT_SAMPLE_R
   return call(() => {
     const result = wasm.render(text, ...args(voice), sampleRate);
     try {
-      const samples = result.takeSamples();
+      const samples = result.takeSamples() as Samples;
       return { samples, sampleRate, timeline: unpack(result.takeEvents(), result.duration) };
     } finally {
       result.free();
@@ -171,8 +174,8 @@ export function timeline(text: string, voice: Voice): Timeline {
 }
 
 /** 16-bit PCM mono WAV file (L2.4). */
-export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
-  return call(() => wasm.encodeWav(samples, sampleRate));
+export function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array<ArrayBuffer> {
+  return call(() => wasm.encodeWav(samples, sampleRate) as Uint8Array<ArrayBuffer>);
 }
 
 /**
@@ -191,7 +194,7 @@ export class Speaker {
     return call(() => {
       const u = this.#inner.next(text);
       try {
-        return { samples: u.takeSamples(), advance: u.advance, dot: u.dotRgb < 0 ? null : dot(u.dotRgb, u.dotSize) };
+        return { samples: u.takeSamples() as Samples, advance: u.advance, dot: u.dotRgb < 0 ? null : dot(u.dotRgb, u.dotSize) };
       } finally {
         u.free();
       }

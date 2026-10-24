@@ -30,7 +30,7 @@ task cites the requirements it covers.
 
 - [x] **D1** `mumble-wasm` + `@mumble-speech/web` (API from design §9.1, `WebAudioPlayer`). — L4.1
 - [x] **D2** Vitest tests of the package: vectors in Node, size budget. — L1.4, L4.2, L5.2
-- [ ] **D3** External consumption check in CI: `npm pack`, installation of the tarball in an empty project, use of the public API. — L6.2
+- [x] **D3** External consumption check in CI: `npm pack`, installation of the tarball in an empty project, use of the public API. — L6.2
   - After D3, the playground migrates to the package: tasks P1–P3 in `playground/tasks.md`.
 
 ## Phase E — C ABI
