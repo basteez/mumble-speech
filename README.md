@@ -54,6 +54,11 @@ bindings/unity/build.sh        # native library into the Unity package's Plugins
 
 Changes start from the specs: see [`specs/README.md`](specs/README.md) for the process.
 
+## Inspiration
+
+The project was inspired by UnitOfTime's video
+[I Gave My NPCs Voices Without Recording Anything](https://www.youtube.com/watch?v=NaW0d7Tghw0).
+
 ## License
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
