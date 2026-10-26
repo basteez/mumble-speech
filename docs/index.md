@@ -37,3 +37,5 @@ features:
     details: You get audio and timing data. What appears on screen is up to you; the playground is just one example.
     link: /guide/concepts#sound-identifier
 ---
+
+Inspired by UnitOfTime's video [I Gave My NPCs Voices Without Recording Anything](https://www.youtube.com/watch?v=NaW0d7Tghw0).
