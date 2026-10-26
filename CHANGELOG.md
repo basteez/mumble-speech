@@ -15,6 +15,8 @@ or public API adds an entry to *Unreleased*.
   `next`, a crates.io prerelease, and the Unity and Godot branches stay on the last
   stable release.
 - Publishing to npm and crates.io uses trusted publishing (OIDC): no tokens are stored.
+- The Godot addon is on the [Godot Asset Library](https://godotengine.org/asset-library/asset/5553)
+  and the Unity package on [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/).
 
 ## [0.1.0] - 2026-10-24
 

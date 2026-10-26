@@ -152,7 +152,7 @@ https://github.com/${repo}.git#upm/v${version}
 \`\`\`
 or **Add package from tarball…** with \`${fileOf(/^com\.mumble-speech\.unity-/)}\`${registries.openupm ? `, or from [OpenUPM](${registries.openupm}): \`openupm add com.mumble-speech.unity@${version}\`` : ''}.
 
-**Godot** ([docs](${site}/bindings/godot)): unzip \`${fileOf(/^mumble-speech-godot-/)}\` into your project, so that \`addons/mumble_speech/\` sits at its root (also on branch [\`godot-addon\`](https://github.com/${repo}/tree/godot/v${version})).
+**Godot** ([docs](${site}/bindings/godot)): unzip \`${fileOf(/^mumble-speech-godot-/)}\` into your project, so that \`addons/mumble_speech/\` sits at its root (also on branch [\`godot-addon\`](https://github.com/${repo}/tree/godot/v${version}))${registries.godotAssetLibrary && !version.includes('-') ? `, or install *Mumble Speech* from the [Asset Library](${registries.godotAssetLibrary}) in the editor's **AssetLib** tab` : ''}.
 
 **C, C++, C#, Python…** ([docs](${site}/bindings/c)): unzip \`${fileOf(/^mumble-speech-c-/)}\`; include \`include/mumble.h\` and link the library for your platform from \`lib/\`.
 

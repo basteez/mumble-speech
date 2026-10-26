@@ -75,6 +75,7 @@ task cites the requirements it covers.
   - Outcome: `v0.1.0` released on 2026-10-24: GitHub Release, npm, crates.io (after re-running the job once the maintainer's crates.io email was verified), `upm` and `godot-addon` branches.
 - [ ] **K4** Prerelease support (L8.5) and a test prerelease `v0.1.1-rc.1` to check trusted publishing on npm and crates.io, only with the user's go-ahead. — L8.5, L9.1, L9.2
 - [ ] **K3** After the first release: trusted publishing on npm and crates.io, tokens deleted; OpenUPM submission; Godot Asset Library submission. — L9
+  - Progress: tokens revoked (2026-10-24); OpenUPM entry approved (2026-10-24); Godot Asset Library entry published as asset 5553 (2026-10-26). Trusted publishing still to be confirmed by K4.
 
 ## Manual checklist
 
