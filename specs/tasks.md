@@ -50,6 +50,15 @@ task cites the requirements it covers.
 - [x] **G1** UPM package: `Runtime/Core` interop, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter, plugin `.meta` files. — L4.7, LD13
 - [x] **G2** `Basic` sample, EditMode tests on the vectors (generated `Vectors.cs`), CI `unity-interop` job with .NET. — L4.9, L5.2, LD13
 - [ ] **G3** Manual verification in Unity 2022.3 LTS (checklist U1–U3). — L4.7
+- [ ] **G4** Source checkouts without native plugins (issue #24): `Native.EnsureLoaded` and `Native.LoadFailureMessage` in `Runtime/Core`, called by the four entry points; `build.sh` fallback branch; install and build-from-source text in `bindings/unity/README.md` (drop the stale "no prebuilt release yet" note), `docs/bindings/unity.md` (*From source* section) and the root README; CI `unity-interop` second run. — L4.10, L4.11, LD17, LD18
+  - Done when:
+    - library present (happy path): the existing `unity-interop` run passes every vector and error case unchanged, and calling an entry point twice checks the library once;
+    - library missing: the second run (`--expect-load-failure`, no `LD_LIBRARY_PATH`) asserts that `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and `new Speaker` each throw `DllNotFoundException`, with a non-null `InnerException` of the same type and the Linux message (`libmumble_ffi.so`, `Plugins/Linux/x86_64/`, `#upm`, `openupm add com.mumble-speech.unity`, the `#from-source` URL); a second call throws again (failure not cached);
+    - message per platform: `LoadFailureMessage` checked for Windows x64 (`mumble_ffi.dll`, `Plugins/Windows/x86_64/`), macOS arm64 and x64 (`libmumble_ffi.dylib`, `Plugins/macOS/`), Linux x64; edge cases: Windows and Linux arm64 mention x86_64-only libraries, an unknown OS lists the three folders and the supported platforms; no message contains a package version;
+    - `build.sh` on an unsupported `uname -s` (simulated with a stub `uname` on `PATH`) prints the manual steps to standard error and exits 1; on Linux it still copies the library;
+    - the site builds (the new anchor `#from-source` exists, no dead links), and review confirms the READMEs and the docs page match design §9.4 (L4.11);
+    - a release dry run still passes `verify.sh` (no new file in the package without its `.meta`);
+    - manual U4 is added to `TESTING.md` and run when a Unity editor is available (it does not block closing the task).
 
 ## Phase H — Sound identifier, READMEs, site, release
 
@@ -87,6 +96,7 @@ task cites the requirements it covers.
 | U1 | Import the package from a local path in Unity 2022.3, open the `Basic` sample | The sample plays without errors in the console | L4.7, L4.9 |
 | U2 | Run the EditMode tests | All vectors pass | L5.2 |
 | U3 | With TextMeshPro installed, use the typewriter | Text and sound synchronized | L4.7 |
+| U4 | Without building, add `bindings/unity/package.json` from a source checkout and call `Say` | The console shows the exception naming the missing library, its `Plugins/` folder and the install options; after installing by git URL, the sample plays | L4.10 |
 
 ## Verifiability on this machine
 
@@ -108,6 +118,7 @@ task cites the requirements it covers.
 | L4.6 | F1–F3 |
 | L4.7 | G1–G3 |
 | L4.8–L4.9 | F2, G2, H2 |
+| L4.10–L4.11 | G4 |
 | L5 | C1, C2, D2, E2, F2, G2, H1 |
 | L7 | J1–J3 |
 | L8 | H1, H3, H4 |
