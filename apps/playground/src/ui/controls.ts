@@ -1,4 +1,5 @@
 import type { StyleId } from '@mumble-speech/web';
+import type { CopyFeedback } from './copy-link.ts';
 import { MAX_TEXT_LENGTH, SLIDER_LIMITS, type Settings } from './share-url.ts';
 import { STYLE_CARDS } from './styles.ts';
 
@@ -26,6 +27,11 @@ export function createControls(initial: Settings) {
   const message = $('message');
   const play = $<HTMLButtonElement>('play');
   const exportButton = $<HTMLButtonElement>('export');
+  const copyButton = $<HTMLButtonElement>('copy-link');
+  const copyStatus = $('copy-status');
+  const copyFallback = $('copy-fallback');
+  const copyUrl = $<HTMLInputElement>('copy-url');
+  let announce = 0;
   const sliders = {
     pitch: $<HTMLInputElement>('pitch'),
     speed: $<HTMLInputElement>('speed'),
@@ -99,6 +105,36 @@ export function createControls(initial: Settings) {
     },
     onExport(fn: () => void) {
       exportButton.addEventListener('click', fn);
+    },
+    onCopyLink(fn: () => void) {
+      copyButton.addEventListener('click', fn);
+    },
+    get copyButton() {
+      return copyButton;
+    },
+
+    /** Label, live region and fallback field for the Copy link button (R9.16, R9.17). */
+    showCopyFeedback(feedback: CopyFeedback) {
+      cancelAnimationFrame(announce);
+      copyButton.textContent = feedback.kind === 'copied' ? 'Link copied' : 'Copy link';
+      if (feedback.kind !== 'manual') copyFallback.hidden = true;
+      if (feedback.kind === 'idle') {
+        copyStatus.textContent = '';
+      } else {
+        // Clear first, set on the next frame: a live region whose text does not change is not re-announced.
+        copyStatus.textContent = '';
+        const message =
+          feedback.kind === 'copied' ? 'Link copied' : 'Could not copy automatically. The link is selected below.';
+        announce = requestAnimationFrame(() => {
+          copyStatus.textContent = message;
+        });
+      }
+      if (feedback.kind === 'manual') {
+        copyFallback.hidden = false;
+        copyUrl.value = feedback.link;
+        copyUrl.focus();
+        copyUrl.select();
+      }
     },
 
     update(state: { length: number; audible: boolean; playback: 'idle' | 'rendering' | 'playing'; error?: string }) {

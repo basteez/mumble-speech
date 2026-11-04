@@ -278,3 +278,41 @@ button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* Copy link (R9.13, R9.16, R9.17, R9.19) */
+button#copy-link {
+  min-width: 14ch; /* fits "Link copied" so the label change does not resize the button */
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.copy-fallback {
+  display: grid;
+  gap: 4px;
+}
+
+.copy-fallback[hidden] {
+  display: none;
+}
+
+.copy-fallback input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
