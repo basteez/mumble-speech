@@ -136,4 +136,4 @@ manual verification: the audio was not listened to.
 | R6 | T2.x, T4.3, T4.4 |
 | R7 | T1.3, T3.1, T3.4, T4.5 |
 | R8 | T0.1, T1.x, T3.3, T4.6, T5.x |
-| R9 | U1–U3 |
+| R9 | T7.1–T7.3 |

@@ -162,8 +162,9 @@ always uses the library default (0) and has no seed control (D13).
   system SHALL ignore them (and keep them, R9.3). [auto]
 - **R9.9** The text SHALL be encoded as UTF-8 with percent-encoding
   (`application/x-www-form-urlencoded`, space as `+`). Parsing SHALL accept both `+`
-  and `%20` as a space, and SHALL decode an invalid percent or UTF-8 sequence to
-  U+FFFD instead of failing. For every valid settings value `s` (any Unicode text up
+  and `%20` as a space, and SHALL NOT fail on malformed input: percent-escaped bytes
+  that are not valid UTF-8 decode to U+FFFD, and a `%` not followed by two hex
+  digits stays a literal `%` (WHATWG `application/x-www-form-urlencoded` parsing). For every valid settings value `s` (any Unicode text up
   to 500 code units, including emoji, combining marks, line breaks, `&`, `=`, `+`,
   `%`, `#`), parsing the canonical serialization of `s` SHALL return `s`. [auto]
 - **R9.10** The canonical form SHALL contain all five settings parameters, defaults

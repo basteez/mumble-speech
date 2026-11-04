@@ -48,7 +48,8 @@ src/
   main.ts           # composition and state
   style.css
 tests/ui.test.ts    # cache, eventAt, file name
-tests/share-url.test.ts  # parse, serialize, URL sync [R9]
+tests/share-url.test.ts  # parse, serialize [R9]
+tests/url-sync.test.ts   # debounced URL sync [R9]
 ```
 
 The first version had its own TypeScript core (`src/core`, `src/styles`,
@@ -194,14 +195,14 @@ function serializeSettings(settings: Settings, search: string): string;
 
 /** Debounced `history.replaceState` (R9.2, R9.11). `history`, `location` and
  *  the timer are injected so tests run with fakes. */
-function createUrlSync(deps: { history: History; location: Location; delayMs?: number }): {
+function createUrlSync(deps: { history: Pick<History, 'replaceState' | 'state'>; location: Pick<Location, 'pathname' | 'search' | 'hash'>; delayMs?: number }): {
   schedule(settings: Settings): void;   // restarts the timer
   flush(): void;                        // writes now (used on load, R9.4)
 };
 ```
 
 **Parsing.** `new URLSearchParams(search)` does the decoding (`+` and `%20` as
-space, invalid sequences to U+FFFD, R9.9) and `get()` returns the first
+space, invalid UTF-8 to U+FFFD, a `%` without two hex digits kept literal, R9.9) and `get()` returns the first
 occurrence (R9.8). Numbers must match `^-?\d+(\.\d+)?$` (otherwise default),
 then are clamped and snapped with `round(v / step) × step` (`Math.round`, ties
 up); variation is computed as `Math.round(v × 20) / 20` to avoid floating-point

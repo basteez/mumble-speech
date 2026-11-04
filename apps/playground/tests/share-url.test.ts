@@ -18,7 +18,7 @@ const qs = (pairs: Record<string, string>) => `?${new URLSearchParams(pairs)}`;
 
 const withSettings = (overrides: Partial<Settings>): Settings => ({ ...DEFAULT_SETTINGS, ...overrides });
 
-/** Parse the string, check it came back with no owned values changed, return the settings. */
+/** The parsed settings only, for cases that do not check `present`. */
 const parse = (search: string) => parseSettings(search).settings;
 
 const STYLES: StyleId[] = ['beep', 'grunt', 'alphabet'];
@@ -253,9 +253,8 @@ describe('text (R9.7)', () => {
     expect(parse('?text=%FF').text).toBe('�');
   });
 
-  it('a malformed percent escape does not throw', () => {
-    // R9.9 says an invalid percent sequence decodes to U+FFFD, but URLSearchParams (WHATWG) keeps a
-    // non-hex "%ZZ" literally. This pins the platform behavior; the spec wording is ambiguous.
+  it('a malformed percent escape stays literal and does not throw', () => {
+    // R9.9: a `%` not followed by two hex digits stays literal (WHATWG form-urlencoded parsing).
     expect(() => parse('?text=%ZZ')).not.toThrow();
     expect(parse('?text=%ZZ').text).toBe('%ZZ');
   });
