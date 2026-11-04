@@ -549,14 +549,14 @@ later, C# 9). Namespace `MumbleSpeech`.
   marshalling and UTF-16 indices. The `UnityEngine` parts (components, TMP,
   sample) are verified manually (U1–U3), since Unity in CI needs a license.
 
-### 9.4.1 Unity on Android [L4.10, L4.11] (LD17–LD22)
+### 9.4.1 Unity on Android [L4.13, L4.14] (LD21–LD26)
 
 Issue #25. The C# code does not change: `[DllImport("mumble_ffi")]` resolves to
 `libmumble_ffi.so` on Android under both Mono and IL2CPP, and the C ABI has no
 callbacks (so no `MonoPInvokeCallback` is needed). The work is building,
 packaging and checking the native library.
 
-**Architectures and Rust targets** (LD17):
+**Architectures and Rust targets** (LD21):
 
 | Android ABI | Rust target | Unity `CPU` | Why |
 |---|---|---|---|
@@ -567,13 +567,13 @@ packaging and checking the native library.
 32-bit `x86` is not built: Unity offers it only for ChromeOS, and current
 ChromeOS devices and emulator images are 64-bit.
 
-**Minimum API level 21** (Android 5.0) (LD18): the lowest level the current NDK
+**Minimum API level 21** (Android 5.0) (LD22): the lowest level the current NDK
 and Rust's Android targets support, and not higher than the minimum of any
 supported Unity version (2022.3: 22; Unity 6: 23). A library linked against a
 higher level fails to load on older devices; the library uses only basic `libc`
 and `libm` symbols, so a lower level costs nothing.
 
-**Toolchain** (LD19): `cargo-ndk` (version pinned in CI) with a pinned Android
+**Toolchain** (LD23): `cargo-ndk` (version pinned in CI) with a pinned Android
 NDK (an LTS release, r27 or later, version recorded in the workflow; on GitHub's
 Ubuntu runners via `nttld/setup-ndk` rather than the preinstalled "latest" NDK).
 `cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -P 21 -o <out> build --release
@@ -589,7 +589,7 @@ Scripts, one source for local builds, CI and release:
 
 - `scripts/android/build.sh <out>`: the `cargo ndk` command above; requires
   `ANDROID_NDK_HOME` (or `ANDROID_NDK_ROOT`) and installs the three Rust targets.
-- `scripts/android/check.sh <dir> <mumble.h>` [L4.11], with `llvm-readelf` from
+- `scripts/android/check.sh <dir> <mumble.h>` [L4.14], with `llvm-readelf` from
   the NDK; for each `<dir>/<abi>/libmumble_ffi.so` it fails unless:
   - the three ABI folders are present, and nothing else;
   - the ELF header is a shared object (`DYN`) for the folder's machine
@@ -607,7 +607,7 @@ Scripts, one source for local builds, CI and release:
   `Plugins/Android/libs/` and then `check.sh`; without an argument it keeps
   building the desktop library for the host.
 
-**Package layout** (LD22): `Plugins/Android/libs/{arm64-v8a,armeabi-v7a,x86_64}/libmumble_ffi.so`.
+**Package layout** (LD26): `Plugins/Android/libs/{arm64-v8a,armeabi-v7a,x86_64}/libmumble_ffi.so`.
 The binaries are not committed (`.gitignore` already covers `Plugins/**/*.so`);
 the folder `.meta` files (`Plugins/Android`, `libs`, the three ABI folders) and
 the three `libmumble_ffi.so.meta` are committed, with fixed GUIDs. Each library
@@ -647,11 +647,11 @@ The desktop `.meta` files already leave Android disabled (it has no entry and
 <package dir>` (run in the `android` CI job and in release `verify`) fails
 unless each Android library `.meta` enables Android only, with the `CPU` of its
 folder, and no desktop library `.meta` enables Android. The exact Unity
-serialization (key names and values above) is confirmed by U4, the inspector
+serialization (key names and values above) is confirmed by U6, the inspector
 check on a real project; if Unity rewrites the file on import, the committed file
 is updated to Unity's form.
 
-**Conformance on Android** (LD21): CI cannot run Android code without an
+**Conformance on Android** (LD25): CI cannot run Android code without an
 emulator, and the emulator GitHub runners can host (with KVM) is x86_64, the
 architecture least likely to differ. Instead:
 
@@ -665,7 +665,7 @@ architecture least likely to differ. Instead:
   `android` CI job. It is glibc, not Bionic, but the floating-point code is the
   same (VFP, IEEE 754).
 - On a device, the conformance vectors run through the Unity package with the
-  Test Runner's *Run in player* (U5). For that, the shared checks move to a test
+  Test Runner's *Run in player* (U7). For that, the shared checks move to a test
   assembly that is not editor-only: `Tests/Runtime/` (assembly
   `MumbleSpeech.Tests.Runtime`, all platforms, `UNITY_INCLUDE_TESTS`) holds
   `Vectors.cs`, `VectorChecks.cs` and a PlayMode `[Test]` that calls
@@ -676,7 +676,7 @@ architecture least likely to differ. Instead:
 
 **Release**: a separate `android` job (Ubuntu) runs `scripts/android/build.sh`
 and `check.sh` and uploads `native-android/<abi>/libmumble_ffi.so`; `assemble`
-copies them into the Unity package only (LD20: the C archive and the Godot addon
+copies them into the Unity package only (LD24: the C archive and the Godot addon
 stay desktop-only). `verify` checks the three Android libraries and their `.meta`
 in the Unity tarball, and runs `check.sh` and `check-metas.sh` on the extracted
 package. The `upm` branch gets them through the tarball, unchanged.
@@ -696,7 +696,7 @@ GitHub Actions, matrix:
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter) |
 | unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13] |
-| android | ubuntu, pinned NDK + `cargo-ndk` | Android libraries for three ABIs, `check.sh` (symbols, ELF machine, 16 KB alignment, dependencies) and `check-metas.sh`, plus their negative self-tests; core vectors on `armv7` under QEMU [L4.10, L4.11, L5.2] (§9.4.1) |
+| android | ubuntu, pinned NDK + `cargo-ndk` | Android libraries for three ABIs, `check.sh` (symbols, ELF machine, 16 KB alignment, dependencies) and `check-metas.sh`, plus their negative self-tests; core vectors on `armv7` under QEMU [L4.13, L4.14, L5.2] (§9.4.1) |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 
 Performance budgets (L2.5, playground R5.4) are defined for a mid-range laptop.
@@ -762,7 +762,7 @@ built and verified, no GitHub Release):
 2. `native` (Linux x64, Windows x64, macOS): release builds of `mumble-ffi`
    and `mumble-godot`; on macOS both architectures joined with `lipo`.
    `android` (Ubuntu): `mumble-ffi` for the three Android ABIs, checked
-   (§9.4.1) [L4.10, L4.11].
+   (§9.4.1) [L4.13, L4.14].
 3. `web`: `@mumble-speech/web` build and `npm pack`.
 4. `assemble`: from the artifacts of 2–3, with `LICENSE-MIT`, `LICENSE-APACHE`
    and the binding README in each archive:
@@ -772,7 +772,7 @@ built and verified, no GitHub Release):
      the three platforms;
    - `com.mumble-speech.unity-X.Y.Z.tgz`: the UPM package (`package/` prefix,
      as npm tarballs) with `Plugins/` filled, Android included (the only
-     archive with Android libraries, LD20);
+     archive with Android libraries, LD24);
    - `mumble-speech-web-X.Y.Z.tgz`: the npm tarball;
    (`scripts/release/assemble.sh`).
 5. `verify` (Linux, `scripts/release/verify.sh`): the C tests link against the
@@ -838,9 +838,9 @@ serves the Asset Library.
 | `gdext` compatibility with Godot versions | Pin the minimum version (4.3) and test it in CI |
 | WASM size | No `serde`, `opt-level = "z"`, `wasm-opt`, budget verified in CI |
 | Unity not verifiable in CI | EditMode tests in the package + manual checklist |
-| Android library that does not load on a device (missing symbol, wrong ABI, 4 KB alignment rejected by Google Play, missing `libc++_shared.so`) | `check.sh` in CI on every PR and before every release (L4.11); device run U4–U5 |
-| Android `.meta` serialization written by hand differs from Unity's | `check-metas.sh` guards intent; U4 confirms in the inspector and the committed file is updated to Unity's form if needed |
-| Determinism on Android without vectors in CI | Same code on every target; AArch64 covered on macOS arm64, 32-bit ARM under QEMU; vectors on a device in U5 (LD21) |
+| Android library that does not load on a device (missing symbol, wrong ABI, 4 KB alignment rejected by Google Play, missing `libc++_shared.so`) | `check.sh` in CI on every PR and before every release (L4.14); device run U6–U7 |
+| Android `.meta` serialization written by hand differs from Unity's | `check-metas.sh` guards intent; U6 confirms in the inspector and the committed file is updated to Unity's form if needed |
+| Determinism on Android without vectors in CI | Same code on every target; AArch64 covered on macOS arm64, 32-bit ARM under QEMU; vectors on a device in U7 (LD25) |
 
 ## 15. Decision log
 
@@ -859,12 +859,12 @@ serves the Asset Library.
 | LD14 | Events carry a sound identifier (style + variant) instead of a dot (color + size); C ABI version 2 | Keep the dot; keep both | Colors are a presentation choice of the playground; a neutral identifier is useful to games (mouth shapes, effects) and keeps the library free of UI decisions (LQ6, user decision) |
 | LD15 | Site on a dedicated free organization (`mumble-speech.github.io`), deployed from this repository with a deploy key | Pages on `basteez` (forced onto `bstz.it/mumble-speech` by the user site's custom domain); Cloudflare Pages; a `bstz.it` subdomain | GitHub applies the user site's custom domain to every project site of the account (documented behavior); an organization keeps a default `github.io` domain with no third-party account (LQ7, user decision) |
 | LD16 | Registries: npm and crates.io from CI (token only for the first publish, then OIDC); Unity and Godot through generated git branches (`upm`, `godot-addon`) with the binaries, tracked by OpenUPM and the Asset Library | Commit binaries to `main`; store long-lived tokens; automate the Asset Library with the account password | OpenUPM and the Asset Library build from git commits, and the native libraries are not in `main`; generated branches keep `main` clean. npm and crates.io require the package to exist before trusted publishing can be configured |
-| LD17 | Unity Android ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64` | `arm64-v8a` only; also 32-bit `x86` | `arm64-v8a` is required by Google Play. Unity 2022.3 and 6 still offer ARMv7, and a project that ticks it without our library crashes on 32-bit devices; each library is a few hundred KB. `x86_64` serves ChromeOS and the emulator. 32-bit `x86` is ChromeOS-only in Unity and those devices are 64-bit now |
-| LD18 | Android minimum API level 21 | 22 or 23 (the Unity minimums) | The lowest level the NDK and Rust support, at or below every supported Unity's minimum, so the library never limits a project; it uses only basic `libc`/`libm` symbols |
-| LD19 | `cargo-ndk` with a pinned NDK, 16 KB alignment set explicitly in `.cargo/config.toml` and checked on the binaries | Hand-written linker config per target; relying on the NDK r28+ default | `cargo-ndk` finds the NDK clang and writes the `<abi>/` layout Unity uses; a pinned NDK gives reproducible builds; the explicit flag keeps alignment independent of the NDK version, and the ELF check catches anything that bypasses it |
-| LD20 | Android libraries only in the Unity package | Also in the C archive and the Godot addon | Issue #25 asks for Unity; the C archive and Godot Android export bring their own packaging and testing questions (Godot export templates, NDK consumers), left for a later request |
-| LD21 | Android conformance: library checks in CI, core vectors on `armv7` under QEMU, vectors on a device by hand (PlayMode test assembly, *Run in player*) | Android emulator in CI (`android-emulator-runner`) | The CI emulator is x86_64 (ARM images are too slow without hardware acceleration), the architecture already covered by Linux and Windows, and it is slow and flaky. The only new instruction set is 32-bit ARM, which QEMU covers cheaply; AArch64 is covered on macOS arm64 |
-| LD22 | Android libraries in `Plugins/Android/libs/<abi>/` with committed `.meta` files setting Android and the `CPU` explicitly | Rely on Unity inferring the CPU from the folder name; an `.aar` | The folder name is the common convention, but explicit settings do not depend on inference rules across Unity versions; an `.aar` would add a Gradle build for a plain `.so` |
+| LD21 | Unity Android ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64` | `arm64-v8a` only; also 32-bit `x86` | `arm64-v8a` is required by Google Play. Unity 2022.3 and 6 still offer ARMv7, and a project that ticks it without our library crashes on 32-bit devices; each library is a few hundred KB. `x86_64` serves ChromeOS and the emulator. 32-bit `x86` is ChromeOS-only in Unity and those devices are 64-bit now |
+| LD22 | Android minimum API level 21 | 22 or 23 (the Unity minimums) | The lowest level the NDK and Rust support, at or below every supported Unity's minimum, so the library never limits a project; it uses only basic `libc`/`libm` symbols |
+| LD23 | `cargo-ndk` with a pinned NDK, 16 KB alignment set explicitly in `.cargo/config.toml` and checked on the binaries | Hand-written linker config per target; relying on the NDK r28+ default | `cargo-ndk` finds the NDK clang and writes the `<abi>/` layout Unity uses; a pinned NDK gives reproducible builds; the explicit flag keeps alignment independent of the NDK version, and the ELF check catches anything that bypasses it |
+| LD24 | Android libraries only in the Unity package | Also in the C archive and the Godot addon | Issue #25 asks for Unity; the C archive and Godot Android export bring their own packaging and testing questions (Godot export templates, NDK consumers), left for a later request |
+| LD25 | Android conformance: library checks in CI, core vectors on `armv7` under QEMU, vectors on a device by hand (PlayMode test assembly, *Run in player*) | Android emulator in CI (`android-emulator-runner`) | The CI emulator is x86_64 (ARM images are too slow without hardware acceleration), the architecture already covered by Linux and Windows, and it is slow and flaky. The only new instruction set is 32-bit ARM, which QEMU covers cheaply; AArch64 is covered on macOS arm64 |
+| LD26 | Android libraries in `Plugins/Android/libs/<abi>/` with committed `.meta` files setting Android and the `CPU` explicitly | Rely on Unity inferring the CPU from the folder name; an `.aar` | The folder name is the common convention, but explicit settings do not depend on inference rules across Unity versions; an `.aar` would add a Gradle build for a plain `.so` |
 
 Decisions inherited from the first version (IDs unchanged):
 

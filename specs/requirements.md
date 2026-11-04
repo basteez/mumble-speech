@@ -104,16 +104,16 @@ existing tests and commits continue to refer to them.
 - **L4.4** (C ABI) No function SHALL propagate a panic across the C boundary: errors SHALL be return codes. The ownership of every pointer SHALL be documented in the header. [auto] [rev]
 - **L4.5** (C ABI) The header SHALL expose `mumble_abi_version()`. An incompatible change SHALL increment the version. [rev]
 - **L4.6** (Godot) An addon for Godot ≥ 4.3 SHALL offer a `MumbleVoice` resource configurable from the inspector, a `MumbleSpeaker` node that plays sentences or single characters, and a `MumbleTypewriter` node that reveals a `Label` or `RichTextLabel` character by character synchronized with the audio. Platforms: desktop (Windows, macOS, Linux). [auto] [man]
-- **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop and Android (L4.10). [man]
+- **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop and Android (L4.13). [man]
 - **L4.8** Every binding SHALL use the same concepts (Voice, render, timeline, Speaker, advance) with names adapted to the platform's conventions. [rev]
 - **L4.9** Every binding SHALL include a minimal runnable example. [man]
-- **L4.10** (Unity, Android) WHEN a Unity project is built for Android, the package SHALL provide the C ABI library for the `arm64-v8a`, `armeabi-v7a` and `x86_64` architectures, running on Android 5.0 (API level 21) or later, with import settings such that the player includes exactly one library per selected architecture and the editor and desktop players never load an Android library (LD17–LD19, LD22). [auto] [man]
-- **L4.11** (Unity, Android) Each Android library SHALL export exactly the functions declared in `mumble.h`, be an ELF shared object for its own architecture, have every loadable segment aligned to 16 KB (Google Play requirement for Android 15+), and depend only on Android system libraries (`libc`, `libm`, `libdl`, `liblog`). IF any of these does not hold, CI SHALL fail. [auto]
+- **L4.13** (Unity, Android) WHEN a Unity project is built for Android, the package SHALL provide the C ABI library for the `arm64-v8a`, `armeabi-v7a` and `x86_64` architectures, running on Android 5.0 (API level 21) or later, with import settings such that the player includes exactly one library per selected architecture and the editor and desktop players never load an Android library (LD21–LD23, LD26). [auto] [man]
+- **L4.14** (Unity, Android) Each Android library SHALL export exactly the functions declared in `mumble.h`, be an ELF shared object for its own architecture, have every loadable segment aligned to 16 KB (Google Play requirement for Android 15+), and depend only on Android system libraries (`libc`, `libm`, `libdl`, `liblog`). IF any of these does not hold, CI SHALL fail. [auto]
 
 ### L5 — Conformance and quality
 
 - **L5.1** The repository SHALL contain at least 30 conformance vectors (styles, voices, seeds, sample rates, edge-case texts). The PCM hash is 64-bit FNV-1a over the little-endian `f32` bytes, easy to implement in any language. [auto]
-- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.10). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD21). [auto] [man]
+- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). [auto] [man]
 - **L5.3** All packages SHALL share the same semver version. [rev]
 
 ### L6 — Playground and external use
@@ -147,8 +147,8 @@ existing tests and commits continue to refer to them.
 ## 5. Out of scope (v1)
 
 - Prebuilt libraries for iOS and consoles (the C ABI makes them possible later). iOS needs a static library loaded through `__Internal`, a different integration from the shared libraries used elsewhere.
-- Android outside the Unity package: Android libraries in the C archive, and Godot Android export (L4.10 covers Unity only, LD20).
-- Conformance vectors on Android in CI (an emulator on the CI runners is x86_64 only and slow; LD21): Android is verified by the CI library checks (L4.11) and a manual device run (U5).
+- Android outside the Unity package: Android libraries in the C archive, and Godot Android export (L4.13 covers Unity only, LD24).
+- Conformance vectors on Android in CI (an emulator on the CI runners is x86_64 only and slow; LD25): Android is verified by the CI library checks (L4.14) and a manual device run (U7).
 - Godot web export with GDExtension and Unity WebGL.
 - Dedicated Unreal plugin (usable via the C ABI, without a wrapper).
 - Custom or data-defined styles.
@@ -179,6 +179,6 @@ they close with the approval of the revision.
 
 | # | Question | Proposed default |
 |---|---|---|
-| LQ9 | Should the Android libraries also go into the C archive (`lib/android-<abi>/`)? It costs little once they are built. | No, Unity only (LD20); a later request can add them with their own README and checks. |
-| LQ10 | Is the `armv7` conformance run under QEMU worth its CI time (about a few minutes per PR)? | Yes: it is the only check of 32-bit ARM arithmetic before a device run (LD21). |
+| LQ9 | Should the Android libraries also go into the C archive (`lib/android-<abi>/`)? It costs little once they are built. | No, Unity only (LD24); a later request can add them with their own README and checks. |
+| LQ10 | Is the `armv7` conformance run under QEMU worth its CI time (about a few minutes per PR)? | Yes: it is the only check of 32-bit ARM arithmetic before a device run (LD25). |
 | LQ11 | Which version ships it? | `0.2.0`: a new platform is a minor change under semver. |

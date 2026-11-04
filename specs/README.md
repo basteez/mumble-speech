@@ -36,4 +36,4 @@ with its own specs in [`playground/`](playground/README.md).
 - [x] design.md approved (2026-10-19)
 - [x] tasks.md approved (2026-10-19)
 - [x] Revision of 2026-10-24 (LQ6 sound identifier, L7 site, L8 release; design §12–§13, LD14–LD15; tasks I1–J3, H1–H3): approved (2026-10-24, PR #8)
-- [ ] Revision of 2026-11-04, Unity on Android (issue #25): L4.10–L4.11 new, L4.7, L5.2, L8.1 and *Out of scope* amended; design §9.4.1, §10, §13, §14, LD17–LD22; tasks M1–M7, checklist U4–U6: pending approval in the PR
+- [ ] Revision of 2026-11-04, Unity on Android (issue #25): L4.13–L4.14 new, L4.7, L5.2, L8.1 and *Out of scope* amended; design §9.4.1, §10, §13, §14, LD21–LD26; tasks N1–N7, checklist U6–U8: pending approval in the PR
