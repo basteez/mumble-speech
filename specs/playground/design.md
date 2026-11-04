@@ -219,7 +219,7 @@ does the UTF-8 percent-encoding (R9.9). An empty text is written as `text=`.
 
 1. on start, `parseSettings(location.search)` → `createControls(settings)`; if
    `present`, `flush()` writes the canonical URL once (R9.4);
-2. at the end of `onInputChange`, `urlSync.schedule(settings)` (R9.2).
+2. in the `controls.onChange` handler (user changes only, not the initial `onInputChange` call at startup, which would rewrite a parameterless URL against R9.4), `urlSync.schedule(settings)` (R9.2).
 
 Playback is not involved in either step (R9.12).
 
