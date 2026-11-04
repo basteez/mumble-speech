@@ -36,4 +36,4 @@ with its own specs in [`playground/`](playground/README.md).
 - [x] design.md approved (2026-10-19)
 - [x] tasks.md approved (2026-10-19)
 - [x] Revision of 2026-10-24 (LQ6 sound identifier, L7 site, L8 release; design §12–§13, LD14–LD15; tasks I1–J3, H1–H3): approved (2026-10-24, PR #8)
-- [ ] Revision of 2026-11-04 (issue #24, Unity source checkouts without native plugins: L4.10–L4.11; design §9.4, §10, §14, LD17–LD18; task G4, checklist U4): pending approval in its pull request
+- [ ] Revision of 2026-11-04 (issue #24, Unity source checkouts without native plugins: L4.11–L4.12; design §9.4, §10, §14, LD19–LD20; task G4, checklist U5): pending approval in its pull request
