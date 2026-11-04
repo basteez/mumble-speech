@@ -1,4 +1,4 @@
-# Testing the Unity package (checklist U1–U3)
+# Testing the Unity package (checklist U1–U4)
 
 A guide for whoever tries the package in Unity. It takes about 20 minutes. Please
 report the results with the template at the end, even if everything works.
@@ -68,6 +68,17 @@ components, the sample and the TextMeshPro typewriter.
 7. Optional: **Assets → Create → Mumble Speech → Voice**, change style and pitch, assign
    it to the `MumbleSpeaker`'s **Voice** field, Play again: the voice changes.
 
+## U4 — The speaker renders at 48 kHz on any output rate
+
+1. Use the scene from U1 (`AudioSource` + `MumbleSpeaker`), with a script that calls
+   `GetComponent<MumbleSpeaker>().Say("Hello")` on a key press and logs
+   `GetComponent<AudioSource>().clip.frequency` and `.samples` right after.
+2. **Edit → Project Settings → Audio → System Sample Rate**: set 44100, restart Play
+   mode, press the key. Repeat with 48000 (and 22050 or 96000 if your device allows).
+   Also try `SpeakCharacter` with the typewriter from U3.
+3. Expected, at every setting: the clip has `frequency` 48000 and 16800 samples;
+   `onCharacter` fires 5 times, then `onFinished`; pitch and tempo sound the same.
+
 ## Report template
 
 The easiest way: open a
@@ -81,5 +92,6 @@ U1 install + sample:      pass / fail — notes:
 U1 plugin settings:       pass / fail — notes:
 U2 EditMode tests:        pass / fail — notes:
 U3 TMP typewriter:        pass / fail — notes:
+U4 48 kHz at any rate:    pass / fail — notes:
 Console errors or warnings (copy them):
 ```

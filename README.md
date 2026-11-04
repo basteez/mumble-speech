@@ -9,8 +9,10 @@ characters speak in games, in three styles.
 | `grunt` | A few grunts per voice, never the same twice in a row | Banjo-Kazooie |
 | `alphabet` | A vowel-based sound for every letter | Animal Crossing |
 
-One implementation in Rust, deterministic and bit-identical across platforms,
-with bindings for the web (WebAssembly/npm), Godot, Unity and a C ABI.
+One implementation in Rust, deterministic and bit-identical across platforms for the
+same text, voice and sample rate, with bindings for the web (WebAssembly/npm), Godot,
+Unity and a C ABI. The Godot and Unity speakers always render at 48 kHz and let the
+engine resample to the output device, so a line gives the same samples on every machine.
 
 > **Status:** early development (0.x: the API may still change).
 > Documentation and playground: **https://mumble-speech.github.io/** ·

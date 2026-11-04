@@ -106,8 +106,17 @@ jobs:
           mv godot/Godot_v*_linux.x86_64 godot/godot
       - name: Import project
         run: godot/godot --headless --path bindings/godot --import || true
-      - name: Headless tests (vectors, typewriter, say)
-        run: godot/godot --headless --path bindings/godot -s res://tests/run_tests.gd
+      - name: Headless tests (vectors, typewriter, speaker) under several output rates
+        # The speakers synthesize at a fixed 48 kHz whatever the mix rate (L4.10, LD17). Each run
+        # sets the rate with an override.cfg; the test fails if the engine did not apply it.
+        run: |
+          for rate in 44100 48000 22050 96000; do
+            echo "::group::mix rate $rate"
+            printf '[audio]\ndriver/mix_rate=%s\n' "$rate" > bindings/godot/override.cfg
+            MUMBLE_EXPECT_MIX_RATE=$rate godot/godot --headless --path bindings/godot -s res://tests/run_tests.gd
+            echo "::endgroup::"
+          done
+          rm -f bindings/godot/override.cfg
       - name: Example scene runs without errors
         run: |
           godot/godot --headless --path bindings/godot --quit-after 300 2>&1 | tee example.log

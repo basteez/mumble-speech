@@ -59,6 +59,14 @@ typewriter.TypeText("Guh-huh! Did you bring the honey?");
 | `Mumble` (static, plain C#) | `Render(text, settings, sampleRate)`, `EncodeWav`, `NativeAbiVersion` |
 | `Speaker` (plain C#, `IDisposable`) | `Next(text)` → samples, advance, sound; `Reset` |
 
+`MumbleSpeaker` always synthesizes at `Mumble.SpeakerSampleRate` (48,000 Hz), whatever
+the output rate of the device (*Project Settings → Audio → System Sample Rate*), and
+Unity resamples the clip on playback; nothing is resampled on a 48 kHz output. A line
+therefore gives the same samples on every machine (bit-identity holds for the same
+text, voice and sample rate; what the player hears is identical up to Unity's
+resampler, which the library does not control). For another rate, call `Mumble.Render`
+with an explicit `sampleRate`.
+
 `Mumble` and `Speaker` live in the `MumbleSpeech.Core` assembly, which has no
 `UnityEngine` reference: you can use them from any C# code. Events carry `CharIndex`
 and `CharLength` (UTF-16, so they index C# strings), `Style` and `Variant`.

@@ -16,12 +16,23 @@ func check(condition: bool, message: String) -> void:
 		printerr("FAIL: ", message)
 
 
+# CI runs the tests once per output rate (override.cfg, audio/driver/mix_rate) and sets
+# MUMBLE_EXPECT_MIX_RATE; a run where the override did not apply must not pass silently.
+func check_mix_rate() -> void:
+	var expected := OS.get_environment("MUMBLE_EXPECT_MIX_RATE")
+	if expected == "":
+		return
+	check(int(AudioServer.get_mix_rate()) == expected.to_int(),
+		"AudioServer mix rate is %d, expected %s (MUMBLE_EXPECT_MIX_RATE)" % [AudioServer.get_mix_rate(), expected])
+
+
 func _initialize() -> void:
 	_run.call_deferred()
 
 
 func _run() -> void:
-	print("Godot ", Engine.get_version_info().string)
+	print("Godot ", Engine.get_version_info().string, ", mix rate ", AudioServer.get_mix_rate())
+	check_mix_rate()
 	test_voice_defaults()
 	test_vectors()
 	await test_typewriter()

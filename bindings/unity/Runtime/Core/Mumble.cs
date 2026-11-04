@@ -101,6 +101,12 @@ namespace MumbleSpeech
     {
         public const int DefaultSampleRate = 48000;
 
+        /// <summary>
+        /// The rate MumbleSpeaker synthesizes at, whatever the output rate of the device: Unity
+        /// resamples the clip on playback.
+        /// </summary>
+        public const int SpeakerSampleRate = 48000;
+
         /// <summary>Version of the native C ABI this package expects.</summary>
         public const uint ExpectedAbiVersion = 2;
 

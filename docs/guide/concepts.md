@@ -51,6 +51,14 @@ every platform and binding: Linux, Windows, macOS (Apple Silicon and Intel), Web
 through Rust, C, C#, GDScript and TypeScript. All math runs in a portable software
 implementation, and shared [conformance vectors](/reference/conformance) check it in CI.
 
+Bit-identity is per text, voice (seed included) **and sample rate**: the same line at
+44,100 Hz and at 48,000 Hz has a different number of samples. The core never picks a
+rate, the caller does. The Godot and Unity speakers always render at 48,000 Hz, whatever
+the output rate of the device, and the engine resamples to it on playback: the speaker
+gives the same samples on every machine, and what the player hears is identical up to
+the engine's own resampling, which the library does not control. The web binding takes
+the rate from the caller (default 48,000 Hz).
+
 The random choices depend only on the style, the seed and the characters already
 spoken, never on the text that follows. Identical lines therefore sound identical:
 pass a different seed (a line id, for example) to vary them.
