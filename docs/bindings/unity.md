@@ -1,7 +1,7 @@
 # Unity
 
-A UPM package for **Unity 2022.3 LTS and later** (Unity 6 included) on Windows, macOS
-and Linux. Audio is generated at runtime; nothing is drawn by the package.
+A UPM package for **Unity 2022.3 LTS and later** (Unity 6 included) on Windows, macOS,
+Linux and Android. Audio is generated at runtime; nothing is drawn by the package.
 
 ::: warning Manual verification in progress
 The C# interop layer is tested in CI with .NET against the native library. The parts
@@ -53,6 +53,26 @@ Copy-Item target\release\mumble_ffi.dll bindings\unity\Plugins\Windows\x86_64\
 Then **Package Manager → + → Add package from disk…** and pick
 `bindings/unity/package.json`. Build **before** adding the folder to a project:
 otherwise Unity may drop the plugins' `.meta` files, and with them the platform settings.
+
+## Android
+
+The package carries the native library for `arm64-v8a`, `armeabi-v7a` and `x86_64`
+(`Plugins/Android/libs/<abi>/`), for Android 5.0 (API level 21) or later. Nothing to
+configure: build your project for Android and the player includes the library of each
+architecture you select in **Player Settings → Other Settings → Target Architectures**.
+
+- Unity needs the **IL2CPP** scripting backend to build for ARM64, which Google Play
+  requires; ARMv7 works with Mono or IL2CPP.
+- The libraries are linked with 16 KB page alignment, as Google Play requires for apps
+  targeting Android 15 and later.
+- 32-bit `x86` is not included, and iOS is not supported yet.
+- The libraries are built and checked in CI (exported functions, architecture,
+  alignment, dependencies), but have not been run on a device yet: see
+  [the testing guide](https://github.com/basteez/mumble-speech/blob/main/bindings/unity/TESTING.md)
+  (U6–U8) and please report what you find.
+
+To build the Android libraries from source (Rust, the Android NDK r27 or later and
+`cargo install cargo-ndk --locked`): `ANDROID_NDK_HOME=<ndk> bindings/unity/build.sh android`.
 
 ## Use
 

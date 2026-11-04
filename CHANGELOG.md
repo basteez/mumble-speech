@@ -14,6 +14,11 @@ or public API adds an entry to *Unreleased*.
   URL shares the exact sound. Opening a link restores the controls without playing anything.
   A *Copy link* button copies the link in one click, with a fallback when the browser blocks
   clipboard access.
+- **Unity on Android** ([#25](https://github.com/basteez/mumble-speech/issues/25)): the
+  Unity package includes the native library for `arm64-v8a`, `armeabi-v7a` and
+  `x86_64`, Android 5.0 (API level 21) or later, aligned to 16 KB pages as Google Play
+  requires. No code changes are needed: build your project for Android. Other ways of
+  using Android (C archive, Godot) and iOS are not covered yet.
 
 ### Changed
 
@@ -42,6 +47,11 @@ or public API adds an entry to *Unreleased*.
   libraries (git URL `#upm`, OpenUPM, release tarball) or build it from source. The
   Unity README and documentation page lead with those install options and explain the
   build from source on Windows without a POSIX shell.
+
+### Known issues
+
+- Unity on Android is built and checked in CI (exported functions, architecture, 16 KB
+  alignment) but has not been run on a device yet; please report problems.
 
 ## [0.1.0] - 2026-10-24
 

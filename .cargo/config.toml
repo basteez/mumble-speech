@@ -1,0 +1,12 @@
+# Android libraries are aligned to 16 KB pages, as Google Play requires for Android 15+
+# (specs/design.md §9.4.1, LD23). NDK r28 and later already do this by default; the explicit
+# flag keeps the result independent of the NDK version. scripts/android/check.sh verifies it.
+# Note: a RUSTFLAGS environment variable replaces these settings; the check catches that.
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.armv7-linux-androideabi]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

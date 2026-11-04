@@ -2,6 +2,7 @@
 # Builds the four release archives from the CI artifacts (specs/design.md §13, L8.1).
 # Usage: scripts/release/assemble.sh <version> <artifacts dir> <output dir>
 #   <artifacts dir>/native-{linux-x64,windows-x64,macos-universal}/  libraries from the native job
+#   <artifacts dir>/native-android/<abi>/libmumble_ffi.so              Android libraries (Unity package only, LD24)
 #   <artifacts dir>/web/mumble-speech-web-<version>.tgz                npm pack of @mumble-speech/web
 set -euo pipefail
 
@@ -16,6 +17,7 @@ trap 'rm -rf "$work"' EXIT
 linux=$artifacts/native-linux-x64
 windows=$artifacts/native-windows-x64
 macos=$artifacts/native-macos-universal
+android=$artifacts/native-android
 licenses=("$root/LICENSE-MIT" "$root/LICENSE-APACHE")
 
 # C archive: header, shared libraries per platform, README, licenses.
@@ -39,10 +41,14 @@ cp "$root/bindings/godot/README.md" "${licenses[@]}" "$g/addons/mumble_speech/"
 # Unity package: the UPM folder with Plugins/ filled, as an npm-style tarball (package/ prefix).
 u=$work/unity/package
 mkdir -p "$u"
-(cd "$root/bindings/unity" && tar --exclude='./DotnetTests~' --exclude='./.gitignore' --exclude='./build.sh' --exclude='./build.sh.meta' -cf - .) | (cd "$u" && tar -xf -)
+(cd "$root/bindings/unity" && tar --exclude='./DotnetTests~' --exclude='./.gitignore' --exclude='./build.sh' --exclude='./build.sh.meta' --exclude='./build.test.sh' --exclude='./build.test.sh.meta' -cf - .) | (cd "$u" && tar -xf -)
 cp "$macos/libmumble_ffi.dylib" "$u/Plugins/macOS/"
 cp "$windows/mumble_ffi.dll" "$u/Plugins/Windows/x86_64/"
 cp "$linux/libmumble_ffi.so" "$u/Plugins/Linux/x86_64/"
+# Android: the .meta files for the folders and libraries are already in the package (L4.13).
+for abi in arm64-v8a armeabi-v7a x86_64; do
+  cp "$android/$abi/libmumble_ffi.so" "$u/Plugins/Android/libs/$abi/"
+done
 for license in "${licenses[@]}"; do
   name=$(basename "$license")
   cp "$license" "$u/$name.md"

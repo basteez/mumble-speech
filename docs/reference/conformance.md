@@ -36,7 +36,7 @@ They are generated from the core by `cargo run -p mumble-conformance -- generate
 
 - `conformance/vectors.json` (format 2);
 - `bindings/c/tests/vectors.h` for C;
-- `bindings/unity/Tests/EditMode/Vectors.cs` for C#.
+- `bindings/unity/Tests/Runtime/Vectors.cs` for C#.
 
 `cargo run -p mumble-conformance -- check` (and `cargo test`) fails if the committed
 files differ from what the core produces. They are regenerated only for an intentional

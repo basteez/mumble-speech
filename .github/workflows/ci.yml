@@ -152,6 +152,65 @@ jobs:
         # Stubs uname and cargo; no Rust build happens here (scripts/unity/build-sh.test.sh).
         run: sh scripts/unity/build-sh.test.sh
 
+  android:
+    # Unity on Android (specs/design.md §9.4.1, L4.13, L4.14, LD21-LD25): the three libraries are built,
+    # checked and their import settings verified; the core vectors run on 32-bit ARM under QEMU.
+    runs-on: ubuntu-latest
+    env:
+      # Pinned: an LTS NDK (LD23). Bump together with the NDK in release.yml.
+      NDK_VERSION: r27c
+      CARGO_NDK_VERSION: 3.5.4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,armv7-unknown-linux-gnueabihf
+      - uses: Swatinem/rust-cache@v2
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: false
+      - name: Export the NDK location
+        run: echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+      - name: Build the libraries for arm64-v8a, armeabi-v7a, x86_64
+        run: scripts/android/build.sh target/android
+      - name: Check the libraries (exports, machine, 16 KB alignment, dependencies)
+        run: scripts/android/check.sh target/android bindings/c/include/mumble.h
+      - name: Check the Unity import settings
+        run: scripts/android/check-metas.sh bindings/unity
+      - name: Negative self-tests of the checks
+        run: scripts/android/selftest.sh target/android
+      - name: Install QEMU and the 32-bit ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+      - name: Core conformance vectors on 32-bit ARM (QEMU user mode, LD25)
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER: qemu-arm -L /usr/arm-linux-gnueabihf
+        run: cargo test -p mumble-conformance --target armv7-unknown-linux-gnueabihf
+
+  scripts-tests:
+    # Tests of the Android checks, the Unity build script and the release scripts with fakes: no NDK,
+    # cmake or Godot needed (specs/tasks.md N3, N5).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Android checks, fake llvm-readelf and fixture metas
+        run: scripts/android/check.test.sh
+      - name: Unity build script, arguments and the desktop path
+        run: bindings/unity/build.test.sh
+      - name: Release verification, broken archives fail
+        run: scripts/release/verify.test.sh
+      - name: Release notes, Android in the Unity row only
+        run: node --test scripts/release/notes.test.mjs
+
   site:
     # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.
     runs-on: ubuntu-latest

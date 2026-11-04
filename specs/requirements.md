@@ -104,17 +104,19 @@ existing tests and commits continue to refer to them.
 - **L4.4** (C ABI) No function SHALL propagate a panic across the C boundary: errors SHALL be return codes. The ownership of every pointer SHALL be documented in the header. [auto] [rev]
 - **L4.5** (C ABI) The header SHALL expose `mumble_abi_version()`. An incompatible change SHALL increment the version. [rev]
 - **L4.6** (Godot) An addon for Godot ≥ 4.3 SHALL offer a `MumbleVoice` resource configurable from the inspector, a `MumbleSpeaker` node that plays sentences or single characters, and a `MumbleTypewriter` node that reveals a `Label` or `RichTextLabel` character by character synchronized with the audio. Platforms: desktop (Windows, macOS, Linux). [auto] [man]
-- **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop. [man]
+- **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop and Android (L4.13). [man]
 - **L4.8** Every binding SHALL use the same concepts (Voice, render, timeline, Speaker, advance) with names adapted to the platform's conventions. [rev]
 - **L4.9** Every binding SHALL include a minimal runnable example. [man]
 - **L4.10** (Godot, Unity) The `MumbleSpeaker` SHALL synthesize every line and character at a fixed 48,000 Hz, whatever the engine's output rate, and leave the conversion to the output rate to the engine's playback, so that the same text and voice give the same samples on every device. Event times, advances and the end of the line SHALL stay in seconds. The low-level APIs (`Mumble.render`, `Mumble.Render`, `Speaker`) keep an explicit sample rate. [auto] [man]
 - **L4.11** (Unity) IF the native library cannot be loaded (missing from `Plugins/`, or not loadable on this platform or architecture), THEN the first call into the interop layer (`Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion`, `new Speaker`) SHALL throw an exception of the same type the runtime raised, with the original as inner exception, whose message names the library file and the `Plugins/` folder expected for the current platform and says how to get the library: install the package by git URL (`#upm`), from OpenUPM or from the release tarball, or build it from source. WHEN the library loads, behavior SHALL be unchanged. [auto]
 - **L4.12** (Unity) The Unity README and documentation page SHALL present installation by git URL, OpenUPM or release tarball as the way to install the package, and SHALL state that `bindings/unity` in a source checkout contains no native libraries and must be built before it is added to a project, with build instructions for macOS, Linux and Windows (including Windows without a POSIX shell). The build script SHALL exit with an error, not silently, on a platform it does not support. [rev]
+- **L4.13** (Unity, Android) WHEN a Unity project is built for Android, the package SHALL provide the C ABI library for the `arm64-v8a`, `armeabi-v7a` and `x86_64` architectures, running on Android 5.0 (API level 21) or later, with import settings such that the player includes exactly one library per selected architecture and the editor and desktop players never load an Android library (LD21–LD23, LD26). [auto] [man]
+- **L4.14** (Unity, Android) Each Android library SHALL export exactly the functions declared in `mumble.h`, be an ELF shared object for its own architecture, have every loadable segment aligned to 16 KB (Google Play requirement for Android 15+), and depend only on Android system libraries (`libc`, `libm`, `libdl`, `liblog`). IF any of these does not hold, CI SHALL fail. [auto]
 
 ### L5 — Conformance and quality
 
 - **L5.1** The repository SHALL contain at least 30 conformance vectors (styles, voices, seeds, sample rates, edge-case texts). The PCM hash is 64-bit FNV-1a over the little-endian `f32` bytes, easy to implement in any language. [auto]
-- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license). [auto] [man]
+- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). [auto] [man]
 - **L5.3** All packages SHALL share the same semver version. [rev]
 
 ### L6 — Playground and external use
@@ -132,7 +134,7 @@ existing tests and commits continue to refer to them.
 
 ### L8 — Release
 
-- **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms), the Unity package tarball (with its native plugins) and the npm tarball of `@mumble-speech/web`. [auto]
+- **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms), the Unity package tarball (with its native plugins, desktop and Android) and the npm tarball of `@mumble-speech/web`. [auto]
 - **L8.2** The release job SHALL fail if the tag does not match the version of every package (L5.3). [auto]
 - **L8.3** The release notes SHALL contain: links to the documentation, the playground and the changelog; links to the release in every package registry where it is published (npm, crates.io, docs.rs, the Unity and Godot branches, and OpenUPM and the Godot Asset Library once their entries exist); the changelog section of the version; a table of the archives with platforms, size and SHA-256 (plus a `SHA256SUMS.txt` asset); install instructions for each binding from the release archives, linking its documentation page; compatibility (minimum Godot, Unity and Node versions, platforms, C ABI version, conformance vector format); what was verified before publishing, with a link to the CI run; the list of merged pull requests and the comparison with the previous release. Values such as versions and checksums SHALL be read from the repository and the archives, not written by hand. [auto]
 - **L8.5** A tag with a prerelease suffix (`vX.Y.Z-rc.N`) SHALL publish a prerelease: the GitHub Release marked as prerelease, npm with the dist-tag `next` (so `latest` is unchanged), the crate as a prerelease version, and the `upm/` and `godot/` tags without moving the `upm` and `godot-addon` branches. A prerelease does not need its own changelog section (the notes show *Unreleased*). [auto]
@@ -148,7 +150,9 @@ existing tests and commits continue to refer to them.
 
 ## 5. Out of scope (v1)
 
-- Prebuilt libraries for iOS, Android and consoles (the C ABI makes them possible later).
+- Prebuilt libraries for iOS and consoles (the C ABI makes them possible later). iOS needs a static library loaded through `__Internal`, a different integration from the shared libraries used elsewhere.
+- Android outside the Unity package: Android libraries in the C archive, and Godot Android export (L4.13 covers Unity only, LD24).
+- Conformance vectors on Android in CI (an emulator on the CI runners is x86_64 only and slow; LD25): Android is verified by the CI library checks (L4.14) and a manual device run (U7).
 - Godot web export with GDExtension and Unity WebGL.
 - Dedicated Unreal plugin (usable via the C ABI, without a wrapper).
 - Custom or data-defined styles.
@@ -174,4 +178,11 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 
 ## 7. Open questions
 
-None.
+Raised by the Unity Android revision (issue #25), each with a proposed default;
+they close with the approval of the revision.
+
+| # | Question | Proposed default |
+|---|---|---|
+| LQ9 | Should the Android libraries also go into the C archive (`lib/android-<abi>/`)? It costs little once they are built. | No, Unity only (LD24); a later request can add them with their own README and checks. |
+| LQ10 | Is the `armv7` conformance run under QEMU worth its CI time (about a few minutes per PR)? | Yes: it is the only check of 32-bit ARM arithmetic before a device run (LD25). |
+| LQ11 | Which version ships it? | `0.2.0`: a new platform is a minor change under semver. |

@@ -17,6 +17,9 @@ cmake -S "$root/bindings/c" -B "$work/c-build" -DCMAKE_BUILD_TYPE=Release -DMUMB
 cmake --build "$work/c-build" >/dev/null
 ctest --test-dir "$work/c-build" --output-on-failure
 cmp "$c/include/mumble.h" "$root/bindings/c/include/mumble.h"
+# Android libraries are in the Unity package only (LD24). grep reads the whole listing (no -q): with
+# pipefail, an early exit would make unzip fail on SIGPIPE and hide the match.
+if unzip -l "$archives/mumble-speech-c-$version.zip" | grep -i android >/dev/null; then echo "Android files in the C archive"; exit 1; fi
 
 echo "== Godot addon: the packaged addon passes the headless tests"
 # Same layout as the repository: the tests read ../../conformance/vectors.json.
@@ -31,13 +34,20 @@ for lib in libmumble_godot.so mumble_godot.dll libmumble_godot.dylib; do
 done
 "$godot" --headless --path "$project" --import >/dev/null 2>&1 || true
 "$godot" --headless --path "$project" -s res://tests/run_tests.gd
+if unzip -l "$archives/mumble-speech-godot-$version.zip" | grep -i android >/dev/null; then echo "Android files in the Godot addon"; exit 1; fi
 
-echo "== Unity package: plugins for three platforms and a .meta for every file"
+echo "== Unity package: desktop and Android plugins, a .meta for every file, Android libraries checked"
 mkdir -p "$work/unity" && tar -xzf "$archives/com.mumble-speech.unity-$version.tgz" -C "$work/unity"
 p=$work/unity/package
 for lib in Plugins/macOS/libmumble_ffi.dylib Plugins/Windows/x86_64/mumble_ffi.dll Plugins/Linux/x86_64/libmumble_ffi.so; do
   test -f "$p/$lib" && test -f "$p/$lib.meta" || { echo "missing $lib or its .meta"; exit 1; }
 done
+for abi in arm64-v8a armeabi-v7a x86_64; do
+  lib=Plugins/Android/libs/$abi/libmumble_ffi.so
+  test -f "$p/$lib" && test -f "$p/$lib.meta" || { echo "missing $lib or its .meta"; exit 1; }
+done
+"$root/scripts/android/check.sh" "$p/Plugins/Android/libs" "$root/bindings/c/include/mumble.h"
+"$root/scripts/android/check-metas.sh" "$p"
 missing=$(cd "$p" && find . -mindepth 1 ! -name '*.meta' ! -path '*/Samples~*' ! -name 'Samples~' | while read -r f; do [ -f "$f.meta" ] || echo "$f"; done)
 if [ -n "$missing" ]; then echo "files without .meta:"; echo "$missing"; exit 1; fi
 grep -q "\"version\": \"$version\"" "$p/package.json"

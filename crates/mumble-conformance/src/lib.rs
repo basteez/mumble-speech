@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 pub const JSON_PATH: &str = "conformance/vectors.json";
 pub const HEADER_PATH: &str = "bindings/c/tests/vectors.h";
-pub const CSHARP_PATH: &str = "bindings/unity/Tests/EditMode/Vectors.cs";
+pub const CSHARP_PATH: &str = "bindings/unity/Tests/Runtime/Vectors.cs";
 /// 2: events carry the sound variant instead of a dot (LD14).
 pub const FORMAT_VERSION: u32 = 2;
 
@@ -250,7 +250,7 @@ pub fn vectors_header() -> String {
     out
 }
 
-/// `bindings/unity/Tests/EditMode/Vectors.cs` as produced by the current core.
+/// `bindings/unity/Tests/Runtime/Vectors.cs` as produced by the current core.
 pub fn vectors_csharp() -> String {
     let mut out = String::from(
         "// Conformance vectors (specs/design.md §3.1).\n\
