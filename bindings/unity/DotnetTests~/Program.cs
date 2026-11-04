@@ -9,7 +9,8 @@ internal static class Program
     {
         if (Array.IndexOf(args, "--expect-load-failure") >= 0) return ExpectLoadFailure();
 
-        var failures = VectorChecks.Run();
+        var failures = LoadFailureChecks.Run();
+        failures.AddRange(VectorChecks.Run());
         foreach (string f in failures) Console.Error.WriteLine("FAIL: " + f);
         if (failures.Count > 0) return 1;
         Console.WriteLine($"{Vectors.All.Length} vectors and error cases passed through the C# interop layer");
@@ -60,6 +61,8 @@ internal static class Program
                 }
             }
         }
+        // Failures are not remembered as a load: the library is still not loaded (L4.11).
+        if (Native.IsLoaded) failures.Add("IsLoaded is true although the library is missing");
         foreach (string f in failures) Console.Error.WriteLine("FAIL: " + f);
         if (failures.Count > 0) return 1;
         Console.WriteLine("every entry point reports the missing native library with an actionable message");

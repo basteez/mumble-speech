@@ -132,6 +132,9 @@ jobs:
       - name: Missing native library gives an actionable error (L4.11)
         # No LD_LIBRARY_PATH: the library is not found, as in a source checkout.
         run: dotnet run -c Release --no-build --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj" -- --expect-load-failure
+      - name: build.sh stops on unsupported platforms and runs the Linux and Git Bash branches (L4.12)
+        # Stubs uname and cargo; no Rust build happens here (scripts/unity/build-sh.test.sh).
+        run: sh scripts/unity/build-sh.test.sh
 
   site:
     # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.
