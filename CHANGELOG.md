@@ -9,6 +9,14 @@ or public API adds an entry to *Unreleased*.
 
 ### Changed
 
+- The Godot and Unity `MumbleSpeaker` always synthesize at 48 kHz and let the engine
+  resample to the output rate, so a line gives the same samples on every machine
+  (before, a 44.1 kHz device got a different render from a 48 kHz one). Godot's
+  `render_stream` now returns a 48 kHz stream instead of one at the mix rate. New
+  constants: `MumbleSpeaker.SAMPLE_RATE` (Godot) and `Mumble.SpeakerSampleRate` (Unity).
+  Nothing changes on 48 kHz devices. The documentation states that bit-identity holds
+  for the same text, voice and sample rate.
+
 - Release notes link the release on every registry (npm, crates.io, docs.rs, the Unity
   and Godot branches).
 - Tags with a suffix such as `v0.2.0-rc.1` are published as prereleases: npm dist-tag
