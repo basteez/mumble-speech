@@ -120,12 +120,124 @@ verification (checklist in `tasks.md`).
 - **R8.6** The production bundle (JS + CSS, gzip, font excluded) SHALL stay under 50 KB. [man]
 - **R8.7** Dark theme as in the reference, with text/background contrast of at least WCAG AA. [man]
 
+### R9 — Shareable URL
+
+*As a user I want the page address to describe the sound I set up, so that I can
+send it to a friend and they hear exactly the same thing.* (Issue #20; design §7.6,
+§7.7, D10–D16.)
+
+"Settings" below means the inputs that determine the sound in the playground:
+text, style, pitch, speed and variation. The seed is not a setting: the playground
+always uses the library default (0) and has no seed control (D13).
+
+- **R9.1** The query string of the page URL SHALL carry the settings, one parameter
+  each, with the names and formats in design §7.6. [auto]
+- **R9.2** WHEN the user changes the text, the style or a voice parameter, the system
+  SHALL update the URL to the canonical form of the new settings (R9.10) within
+  500 ms of the last change, replacing the current history entry: editing SHALL NOT
+  add history entries, so *Back* leaves the page (D11). [auto] [man]
+- **R9.3** The URL update SHALL change only the query string: the path (the site
+  serves the page under `/playground/`), the fragment and any query parameter the
+  playground does not own SHALL be preserved. [auto]
+- **R9.4** WHEN the page loads with at least one settings parameter in the URL, the
+  system SHALL initialize every control from the URL (applying R9.5–R9.8 to each
+  value) and SHALL replace the URL with its canonical form without adding a history
+  entry. WHEN the page loads with no settings parameter, the system SHALL use the
+  defaults (R1.1, R2.2, R4.1) and SHALL leave the URL unchanged. [auto]
+- **R9.5** IF a numeric parameter (`pitch`, `speed`, `variation`) is missing or is
+  not a plain decimal number (for example empty, `abc`, `NaN`, `Infinity`, `0x10`,
+  `1e3`, ` 3`), the system SHALL use that parameter's default (R4.1). IF it is a
+  plain decimal number outside the R4.1 range, the system SHALL clamp it to the
+  range; IF it is not a multiple of the R4.1 step, the system SHALL round it to the
+  nearest step, ties rounding up (D14). [auto]
+- **R9.6** IF `style` is missing or is not exactly one of `beep`, `grunt`, `alphabet`
+  (case-sensitive), the system SHALL use the default style `beep` (R2.2). [auto]
+- **R9.7** IF `text` is missing, the system SHALL use the default text `Hello`
+  (R1.1). IF it is present, including empty, the system SHALL use its decoded value
+  with line breaks normalized to `\n` (as the textarea does), truncated to the R1.2
+  limit of 500 UTF-16 code units; truncation SHALL NOT split a surrogate pair (an
+  unpaired high surrogate left at the end is dropped). [auto]
+- **R9.8** IF a settings parameter appears more than once, the system SHALL use its
+  first occurrence. IF the URL contains parameters the playground does not own, the
+  system SHALL ignore them (and keep them, R9.3). [auto]
+- **R9.9** The text SHALL be encoded as UTF-8 with percent-encoding
+  (`application/x-www-form-urlencoded`, space as `+`). Parsing SHALL accept both `+`
+  and `%20` as a space, and SHALL NOT fail on malformed input: percent-escaped bytes
+  that are not valid UTF-8 decode to U+FFFD, and a `%` not followed by two hex
+  digits stays a literal `%` (WHATWG `application/x-www-form-urlencoded` parsing). For every valid settings value `s` (any Unicode text up
+  to 500 code units, including emoji, combining marks, line breaks, `&`, `=`, `+`,
+  `%`, `#`), parsing the canonical serialization of `s` SHALL return `s`. [auto]
+- **R9.10** The canonical form SHALL contain all five settings parameters, defaults
+  included, exactly once each, in the order `text`, `style`, `pitch`, `speed`,
+  `variation`, followed by the parameters the playground does not own in their
+  original order. Numbers SHALL be written in shortest decimal form after the R9.5
+  rounding (`-3`, `15`, `0`, `0.05`, `1`) (D12). [auto]
+- **R9.11** IF the browser rejects a URL update (for example because of its rate
+  limit on the History API), the system SHALL keep working without showing an
+  error, and the next change SHALL try again. [auto]
+- **R9.12** Updating the URL SHALL NOT reload the page, start or stop playback by
+  itself, or make a network request (R8.1). Loading a URL with settings SHALL NOT
+  start playback (R8.4). [man]
+
+*As a user I want to copy the link in one click, so that I do not have to find and
+select the address bar (on mobile it is often hidden).* (Maintainer review of
+PR #27; design §7.7, D15–D16.)
+
+- **R9.13** The page SHALL show a *Copy link* button in the action row, after *Play*
+  and *Export WAV* (design §7.1). The button SHALL stay enabled in every state,
+  including when R1.3 disables *Play* and *Export WAV* and during playback, because
+  every settings state has a link. [man]
+- **R9.14** WHEN the user presses *Copy link*, the system SHALL copy to the clipboard
+  the absolute link of the current settings: the page's origin and path, the
+  canonical query string of the current control values (R9.10, including the
+  parameters the playground does not own, R9.3) and the current fragment, so the
+  copied link is the address the bar shows once it is up to date (D15). The link
+  SHALL be computed from the controls, not read from the address bar, so it is
+  current even while a URL update is still pending (R9.2). [auto]
+- **R9.15** WHEN the user presses *Copy link*, the system SHALL also write the URL of
+  the current settings immediately (cancelling any pending debounced update),
+  replacing the current history entry, so the address bar matches the copied link.
+  This applies also when the page was loaded without settings parameters (R9.4
+  covers only the load). IF that write fails (R9.11), the copy SHALL still happen.
+  [auto]
+- **R9.16** WHEN the copy succeeds, the button label SHALL change to *Link copied*
+  and the text "Link copied" SHALL be announced to screen readers through a polite
+  live region dedicated to this button (the R1.3 message region is rewritten on
+  every state update). 2 s after the last successful press the label SHALL return
+  to *Copy link* and the live region SHALL be cleared. Pressing again while the
+  feedback is shown SHALL copy again, announce again and restart the 2 s. WHEN a
+  setting changes, the feedback SHALL return to the idle state at once. Only the
+  outcome of the most recent press SHALL be shown. [auto] [man]
+- **R9.17** IF the Clipboard API is unavailable (for example in an insecure context,
+  where `navigator.clipboard` is undefined) or `writeText` throws or rejects (for
+  example permission denied), THEN the system SHALL copy the same link with the
+  legacy fallback: a temporary off-screen read-only textarea, selected, and
+  `document.execCommand('copy')` (D16); on success the feedback is the R9.16 one.
+  IF the fallback also fails, THEN the system SHALL show the link in a visible,
+  read-only, labelled text field below the action row, with the whole link selected
+  and the focus moved to it, and SHALL announce "Could not copy automatically. The
+  link is selected below." in the R9.16 live region. The field SHALL be hidden at
+  the next settings change or the next successful copy. [auto] [man]
+- **R9.18** Pressing *Copy link* SHALL NOT throw, leave an unhandled promise
+  rejection or log an error, whatever the clipboard outcome. [auto]
+- **R9.19** The *Copy link* button SHALL be a native `<button>`, activatable with
+  Enter and Space, with an accessible name equal to its visible label, the visible
+  focus of R8.3 and the styling of *Export WAV* (R8.7). Changing the label SHALL NOT
+  change the button's size or move the other buttons. WHEN the fallback restores
+  the page after copying, the focus SHALL return to the button. [man]
+- **R9.20** Pressing *Copy link* SHALL NOT start or stop playback, change any
+  setting, redraw the visualizer or make a network request (R8.1). [auto] [man]
+
 ## 5. Out of scope (v1)
 
 - Real text-to-speech or syllable recognition.
 - Sounds based on audio samples or uploaded by the user.
 - Multiple voices/characters per style, savable presets.
-- Shareable links, settings persistence.
+- Settings persistence across visits (for example in local storage); shareable
+  links are in scope since R9.
+- A share sheet (Web Share API) or buttons for specific social networks: the
+  address bar and the *Copy link* button (R9.13) are the share affordances.
+- A seed control, and the seed in the URL (D13).
 - Automatic intonation (for example rising pitch on `?`).
 - Playback while typing.
 - Export in formats other than WAV.

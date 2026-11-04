@@ -48,6 +48,13 @@
       <div class="actions">
         <button id="play" type="button" aria-pressed="false">▶ Play</button>
         <button id="export" type="button">⤓ Export WAV</button>
+        <button id="copy-link" type="button">Copy link</button>
+      </div>
+
+      <p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+      <div id="copy-fallback" class="copy-fallback" hidden>
+        <label for="copy-url">Link</label>
+        <input id="copy-url" type="text" readonly />
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>

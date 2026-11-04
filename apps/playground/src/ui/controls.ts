@@ -1,4 +1,6 @@
 import type { StyleId } from '@mumble-speech/web';
+import type { CopyFeedback } from './copy-link.ts';
+import { MAX_TEXT_LENGTH, SLIDER_LIMITS, type Settings } from './share-url.ts';
 import { STYLE_CARDS } from './styles.ts';
 
 /** Slider values; the style comes from the cards. */
@@ -8,7 +10,7 @@ export interface VoiceParams {
   variation: number;
 }
 
-export const MAX_LENGTH = 500;
+export const MAX_LENGTH = MAX_TEXT_LENGTH;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -18,18 +20,29 @@ const FORMAT: Record<keyof VoiceParams, (v: number) => string> = {
   variation: (v) => v.toFixed(2),
 };
 
-/** DOM bindings for the inputs and buttons. Holds no app state. */
-export function createControls(initialStyle: StyleId) {
+/** DOM bindings for the inputs and buttons. Holds no app state. `initial` comes from the URL or the defaults (R9.4). */
+export function createControls(initial: Settings) {
   const text = $<HTMLTextAreaElement>('text');
   const counter = $('counter');
   const message = $('message');
   const play = $<HTMLButtonElement>('play');
   const exportButton = $<HTMLButtonElement>('export');
+  const copyButton = $<HTMLButtonElement>('copy-link');
+  const copyStatus = $('copy-status');
+  const copyFallback = $('copy-fallback');
+  const copyUrl = $<HTMLInputElement>('copy-url');
+  let announce = 0;
   const sliders = {
     pitch: $<HTMLInputElement>('pitch'),
     speed: $<HTMLInputElement>('speed'),
     variation: $<HTMLInputElement>('variation'),
   };
+
+  text.value = initial.text;
+  for (const key of Object.keys(sliders) as (keyof VoiceParams)[]) {
+    const { min, max, step } = SLIDER_LIMITS[key];
+    Object.assign(sliders[key], { min: String(min), max: String(max), step: String(step), value: String(initial[key]) });
+  }
 
   $('style-options').replaceChildren(
     ...STYLE_CARDS.map((style, i) => {
@@ -43,7 +56,7 @@ export function createControls(initialStyle: StyleId) {
         <span class="style-card__ref"></span>`;
       const input = card.querySelector('input')!;
       input.value = style.id;
-      input.checked = style.id === initialStyle;
+      input.checked = style.id === initial.style;
       card.querySelector('.style-card__label')!.textContent = style.label;
       card.querySelector('.style-card__desc')!.textContent = style.description;
       card.querySelector('.style-card__ref')!.textContent = style.reference;
@@ -92,6 +105,36 @@ export function createControls(initialStyle: StyleId) {
     },
     onExport(fn: () => void) {
       exportButton.addEventListener('click', fn);
+    },
+    onCopyLink(fn: () => void) {
+      copyButton.addEventListener('click', fn);
+    },
+    get copyButton() {
+      return copyButton;
+    },
+
+    /** Label, live region and fallback field for the Copy link button (R9.16, R9.17). */
+    showCopyFeedback(feedback: CopyFeedback) {
+      cancelAnimationFrame(announce);
+      copyButton.textContent = feedback.kind === 'copied' ? 'Link copied' : 'Copy link';
+      if (feedback.kind !== 'manual') copyFallback.hidden = true;
+      if (feedback.kind === 'idle') {
+        copyStatus.textContent = '';
+      } else {
+        // Clear first, set on the next frame: a live region whose text does not change is not re-announced.
+        copyStatus.textContent = '';
+        const message =
+          feedback.kind === 'copied' ? 'Link copied' : 'Could not copy automatically. The link is selected below.';
+        announce = requestAnimationFrame(() => {
+          copyStatus.textContent = message;
+        });
+      }
+      if (feedback.kind === 'manual') {
+        copyFallback.hidden = false;
+        copyUrl.value = feedback.link;
+        copyUrl.focus();
+        copyUrl.select();
+      }
     },
 
     update(state: { length: number; audible: boolean; playback: 'idle' | 'rendering' | 'playing'; error?: string }) {

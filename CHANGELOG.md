@@ -9,6 +9,11 @@ or public API adds an entry to *Unreleased*.
 
 ### Added
 
+- **Shareable playground links**: the text, style, pitch, speed and variation are kept in the
+  page address (`?text=Hello&style=grunt&pitch=-3&speed=15&variation=0.25`), so copying the
+  URL shares the exact sound. Opening a link restores the controls without playing anything.
+  A *Copy link* button copies the link in one click, with a fallback when the browser blocks
+  clipboard access.
 - **Unity on Android** ([#25](https://github.com/basteez/mumble-speech/issues/25)): the
   Unity package includes the native library for `arm64-v8a`, `armeabi-v7a` and
   `x86_64`, Android 5.0 (API level 21) or later, aligned to 16 KB pages as Google Play
