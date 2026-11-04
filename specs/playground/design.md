@@ -293,7 +293,7 @@ type CopyFeedback =
 function createCopyLink(deps: {
   link(): string;                       // flushes the URL sync, then returns shareLink(...) (R9.14, R9.15)
   clipboard: Pick<Clipboard, 'writeText'> | undefined;   // navigator.clipboard
-  legacyCopy(text: string): boolean;    // true = copied; may throw
+  legacyCopy(text: string): boolean;    // true = copied; a throw counts as false
   render(feedback: CopyFeedback): void; // controls.showCopyFeedback
   revertMs?: number;                    // 2000
 }): {
@@ -302,7 +302,8 @@ function createCopyLink(deps: {
 };
 
 /** Off-screen readonly textarea + select + execCommand('copy'); removes the
- *  textarea and returns the focus to `returnFocus` (R9.17, R9.19). */
+ *  textarea and returns the focus to `returnFocus` (R9.17, R9.19). Never throws:
+ *  an exception returns false. */
 function legacyCopy(text: string, doc: Document, returnFocus: HTMLElement): boolean;
 ```
 
@@ -314,11 +315,13 @@ function legacyCopy(text: string, doc: Document, returnFocus: HTMLElement): bool
 2. If `clipboard` is defined, call `clipboard.writeText(text)` **synchronously in
    the click handler**, before any `await`, so the browser sees the user gesture.
    A synchronous throw counts as a rejection. Await the promise.
-3. If there is no clipboard or the write failed, call `legacyCopy(text)` (a throw
+3. If `seq !== counter`, a later press or a settings change (`reset()`) owns the
+   clipboard and the feedback: stop here, without the fallback, so a stale link is
+   never copied (R9.16).
+4. If there is no clipboard or the write failed, call `legacyCopy(text)` (a throw
    counts as `false`). When `clipboard` is undefined this also runs synchronously
    inside the click; after a rejection it runs a few milliseconds later, still
    inside the browsers' transient user activation window.
-4. If `seq !== counter`, a later press owns the feedback: stop here (R9.16).
 5. Success → `render({ kind: 'copied' })` and restart the single revert timer
    (`revertMs`), which renders `idle`. Failure of both → cancel the timer and
    `render({ kind: 'manual', link: text })`.

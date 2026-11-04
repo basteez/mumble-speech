@@ -231,10 +231,9 @@ describe('press: repeated presses (R9.16)', () => {
     expect(render).toHaveBeenCalledTimes(2);
   });
 
-  // BUG: the fallback runs for a press that reset() superseded, so a stale link can reach the clipboard. Kept failing.
-  it('BUG: a superseded press does not write the clipboard through the fallback', async () => {
+  it('a superseded press does not write the clipboard through the fallback', async () => {
     // Its settings were replaced by reset() while writeText was pending; if the clipboard then fails,
-    // the fallback currently copies the stale link even though its outcome is discarded (R9.16, R9.17).
+    // the fallback must not copy the stale link (R9.16, R9.17).
     const d1 = deferred();
     const { copy, legacy, render } = makeCopy({ writeText: () => d1.promise });
     const p1 = copy.press();
@@ -243,6 +242,18 @@ describe('press: repeated presses (R9.16)', () => {
     await p1;
     expect(legacy).not.toHaveBeenCalled();
     expect(render.mock.calls).toEqual([[{ kind: 'idle' }]]);
+  });
+  it('a press superseded by a second press does not run the fallback when its writeText rejects', async () => {
+    const d1 = deferred();
+    const writes = [d1.promise, Promise.resolve()];
+    const { copy, legacy, render } = makeCopy({ writeText: () => writes.shift()! });
+    const p1 = copy.press();
+    const p2 = copy.press();
+    await p2;
+    d1.reject(notAllowed());
+    await p1;
+    expect(legacy).not.toHaveBeenCalled();
+    expect(render.mock.calls).toEqual([[{ kind: 'copied' }]]);
   });
 });
 
@@ -355,6 +366,16 @@ describe('press: clipboard errors fall back to legacyCopy (R9.17)', () => {
     await copy.press();
     expect(render).toHaveBeenLastCalledWith({ kind: 'copied' });
     expect(render.mock.calls.map((c) => c[0].kind)).toEqual(['manual', 'idle', 'copied']);
+  });
+
+  it('a manual outcome after a copied one cancels the pending revert', async () => {
+    const { copy, render, writeText } = makeCopy({ legacyCopy: () => false });
+    await copy.press();
+    vi.advanceTimersByTime(500);
+    writeText.mockImplementation(() => Promise.reject(notAllowed()));
+    await copy.press();
+    vi.advanceTimersByTime(10_000);
+    expect(render.mock.calls).toEqual([[{ kind: 'copied' }], [{ kind: 'manual', link: LINK }]]);
   });
 
   it('a manual outcome is not replaced by a timer, and a later manual press shows the new link', async () => {
@@ -474,6 +495,19 @@ describe('pending debounce is flushed by press (R9.2, R9.11, R9.15)', () => {
     expect(writeText).toHaveBeenCalledWith(canonical);
     expect(history.replaceState).toHaveBeenCalledTimes(1);
     expect(history.replaceState).toHaveBeenCalledWith(null, '', '/playground/?text=Hello&style=beep&pitch=0&speed=15&variation=0');
+  });
+
+  it('special characters: the copied link parses back to the settings and equals the address bar', async () => {
+    const env = fakeBrowser('/playground/#top');
+    const { copy, change, writeText } = wire(env, DEFAULT_SETTINGS);
+    const s = at({ text: TEXT, style: 'grunt', pitch: -2, speed: 9, variation: 0.35 });
+    change(s);
+    await copy.press();
+    const copied = writeText.mock.calls[0][0];
+    expect(parseSettings(new URL(copied).search).settings).toEqual(s);
+    expect(copied).not.toMatch(/ /);
+    expect(copied.split('#')).toEqual([expect.any(String), 'top']);
+    expect(env.addressBar()).toBe(copied);
   });
 
   it('replaceState throwing SecurityError: the copy still happens and renders copied', async () => {
@@ -636,17 +670,12 @@ describe('legacyCopy (R9.17, R9.19, D16)', () => {
     const { doc, returnFocus } = fakeDocument(() => {
       throw new DOMException('not allowed', 'NotAllowedError');
     });
-    try {
-      legacyCopy(LINK, doc as unknown as Document, returnFocus);
-    } catch {
-      // execCommand's exception is allowed to propagate here; press() catches it.
-    }
+    legacyCopy(LINK, doc as unknown as Document, returnFocus);
     expect(doc.body.children).toEqual([]);
     expect(doc.activeElement).toBe(returnFocus);
   });
 
-  // BUG: legacyCopy lets execCommand's exception escape instead of returning false. Kept failing.
-  it('BUG: legacyCopy returns false when execCommand throws (press() maps the throw to manual, but the contract is false)', () => {
+  it('legacyCopy returns false when execCommand throws', () => {
     const { doc, returnFocus } = fakeDocument(() => {
       throw new DOMException('not allowed', 'NotAllowedError');
     });

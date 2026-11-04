@@ -281,7 +281,7 @@ button:disabled {
 
 /* Copy link (R9.13, R9.16, R9.17, R9.19) */
 button#copy-link {
-  min-width: 14ch; /* fits "Link copied" so the label change does not resize the button */
+  min-width: 16ch; /* fits "Link copied" (also in Arial and Segoe UI) so the label change does not resize the button */
 }
 
 .visually-hidden {

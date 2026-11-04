@@ -68,8 +68,10 @@ export function createCopyLink(deps: {
             copied = false;
           }
         }
+        // A later press or a settings change owns the clipboard and the feedback: a stale
+        // press must not copy its link through the fallback nor render (R9.16).
+        if (seq !== counter) return;
         if (!copied) copied = legacy(text);
-        if (seq !== counter) return; // a later press owns the feedback (R9.16)
         cancelTimer();
         if (copied) {
           safeRender({ kind: 'copied' });
@@ -95,20 +97,23 @@ export function createCopyLink(deps: {
 
 /**
  * Off-screen read-only textarea + `execCommand('copy')`. Removes the textarea
- * and returns the focus to `returnFocus` (R9.17, R9.19).
+ * and returns the focus to `returnFocus` (R9.17, R9.19). Never throws: any
+ * exception counts as a failed copy.
  */
 export function legacyCopy(text: string, doc: Document, returnFocus: HTMLElement): boolean {
   const area = doc.createElement('textarea');
-  area.value = text;
-  area.readOnly = true;
-  area.setAttribute('aria-hidden', 'true');
-  area.style.cssText = 'position:fixed;top:0;left:-9999px;width:1px;height:1px;opacity:0;';
-  doc.body.append(area);
   try {
+    area.value = text;
+    area.readOnly = true;
+    area.setAttribute('aria-hidden', 'true');
+    area.style.cssText = 'position:fixed;top:0;left:-9999px;width:1px;height:1px;opacity:0;';
+    doc.body.append(area);
     area.focus();
     area.select();
     area.setSelectionRange(0, text.length);
     return doc.execCommand('copy');
+  } catch {
+    return false;
   } finally {
     area.remove();
     returnFocus.focus();
