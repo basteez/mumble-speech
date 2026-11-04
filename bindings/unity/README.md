@@ -3,10 +3,14 @@
 Video-game "mumble speech" generated at runtime: `Beep` (Undertale), `Grunt`
 (Banjo-Kazooie) and `Alphabet` (Animal Crossing). Same output, bit for bit, as
 the web, C and Godot bindings. Unity 2022.3 LTS or later, desktop (Windows,
-macOS, Linux).
+macOS, Linux) and Android (`arm64-v8a`, `armeabi-v7a`, `x86_64`; Android 5.0 / API 21
+or later, IL2CPP needed for ARM64).
 
 > Early development: no prebuilt release yet. Build the native library first:
 > `bindings/unity/build.sh` (needs Rust).
+
+For Android, build the libraries with `ANDROID_NDK_HOME=<ndk> bindings/unity/build.sh android`
+(needs the NDK r27 or later and `cargo-ndk`); released packages already include them.
 
 ## Install
 
@@ -44,6 +48,6 @@ Events from `Mumble.Render` carry `Style` and `Variant` (which grunt 0–3, whic
 
 ## Tests
 
-See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U3) for trying the package
+See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U3, and U6–U8 for Android) for trying the package
 in the Unity editor, including the EditMode tests that run all conformance vectors
 through the native library.

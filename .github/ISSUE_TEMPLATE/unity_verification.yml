@@ -1,4 +1,4 @@
-name: Unity verification report (U1–U3)
+name: Unity verification report (U1–U3, U6–U8)
 description: Results of the manual Unity checklist in bindings/unity/TESTING.md.
 title: "[Unity check]: Unity <version> on <OS>"
 labels: ["unity", "verification"]
@@ -54,6 +54,27 @@ body:
     id: u3
     attributes:
       label: "U3: TextMeshPro typewriter"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u6
+    attributes:
+      label: "U6: Android build of the Basic sample (device and Android version in the notes)"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u7
+    attributes:
+      label: "U7: conformance vectors in an Android player"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u8
+    attributes:
+      label: "U8: other architectures and 16 KB alignment (optional)"
       options: ["Pass", "Fail", "Not tested"]
     validations:
       required: true
