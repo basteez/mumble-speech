@@ -1,4 +1,4 @@
-use crate::audio::{char_index, mix_rate, stream};
+use crate::audio::{char_index, stream};
 use crate::voice::{core_voice, error_name, MumbleVoice};
 use godot::classes::{AudioServer, AudioStreamPlayer, AudioStreamWav, INode};
 use godot::prelude::*;
@@ -68,6 +68,11 @@ impl INode for MumbleSpeaker {
 
 #[godot_api]
 impl MumbleSpeaker {
+    /// The rate every line and character is synthesized at, whatever the output rate of the
+    /// engine: Godot resamples the stream on playback (L4.10).
+    #[constant]
+    pub const SAMPLE_RATE: i64 = 48_000;
+
     /// Emitted when the sound of the character at `char_index` is heard.
     #[signal]
     pub fn character_spoken(char_index: i64);
@@ -80,7 +85,7 @@ impl MumbleSpeaker {
     #[func]
     pub fn say(&mut self, text: GString) {
         let text = text.to_string();
-        let sample_rate = mix_rate();
+        let sample_rate = Self::RATE;
         let render = match core::render(&text, &core_voice(&self.voice), sample_rate) {
             Ok(r) => r,
             Err(e) => {
@@ -100,7 +105,7 @@ impl MumbleSpeaker {
     /// in order; call `reset()` before a new line.
     #[func]
     pub fn speak_character(&mut self, text: GString) -> f64 {
-        let sample_rate = mix_rate();
+        let sample_rate = Self::RATE;
         if self.typewriter.is_none() {
             match core::Speaker::new(core_voice(&self.voice), sample_rate) {
                 Ok(s) => self.typewriter = Some(s),
@@ -136,10 +141,10 @@ impl MumbleSpeaker {
         self.speaking
     }
 
-    /// The line as a 16-bit stream at the mix rate, to play or save yourself.
+    /// The line as a 16-bit stream at `SAMPLE_RATE`, to play or save yourself.
     #[func]
     pub fn render_stream(&self, text: GString) -> Option<Gd<AudioStreamWav>> {
-        let sample_rate = mix_rate();
+        let sample_rate = Self::RATE;
         match core::render(&text.to_string(), &core_voice(&self.voice), sample_rate) {
             Ok(r) => Some(stream(&r.samples, sample_rate)),
             Err(e) => {
@@ -151,6 +156,8 @@ impl MumbleSpeaker {
 }
 
 impl MumbleSpeaker {
+    const RATE: u32 = Self::SAMPLE_RATE as u32;
+
     fn play(&mut self, stream: Gd<AudioStreamWav>) {
         let bus = self.bus.clone();
         let volume = self.volume_db as f32;

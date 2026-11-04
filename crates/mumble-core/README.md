@@ -4,8 +4,8 @@ Video-game "mumble speech" generated at runtime: turn a line of text into the ba
 that game characters speak, in three styles — `Beep` (Undertale), `Grunt`
 (Banjo-Kazooie) and `Alphabet` (Animal Crossing).
 
-`no_std` (with `alloc`), deterministic: the same input gives the same samples, bit for
-bit, on every platform and in WebAssembly. This crate is the core behind the web, Godot,
+`no_std` (with `alloc`), deterministic: the same input (text, voice and sample rate) gives
+the same samples, bit for bit, on every platform and in WebAssembly. This crate is the core behind the web, Godot,
 Unity and C bindings of [mumble-speech](https://github.com/basteez/mumble-speech).
 
 ```rust

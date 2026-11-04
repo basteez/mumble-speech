@@ -50,6 +50,15 @@ task cites the requirements it covers.
 - [x] **G1** UPM package: `Runtime/Core` interop, `MumbleVoice`, `MumbleSpeaker`, optional TMP typewriter, plugin `.meta` files. — L4.7, LD13
 - [x] **G2** `Basic` sample, EditMode tests on the vectors (generated `Vectors.cs`), CI `unity-interop` job with .NET. — L4.9, L5.2, LD13
 - [ ] **G3** Manual verification in Unity 2022.3 LTS (checklist U1–U3). — L4.7
+- [ ] **G4** Source checkouts without native plugins (issue #24): `Native.EnsureLoaded` and `Native.LoadFailureMessage` in `Runtime/Core`, called by the four entry points; `build.sh` fallback branch; install and build-from-source text in `bindings/unity/README.md` (drop the stale "no prebuilt release yet" note), `docs/bindings/unity.md` (*From source* section) and the root README; CI `unity-interop` second run. — L4.11, L4.12, LD19, LD20
+  - Done when:
+    - library present (happy path): the existing `unity-interop` run passes every vector and error case unchanged, and calling an entry point twice checks the library once;
+    - library missing: the second run (`--expect-load-failure`, no `LD_LIBRARY_PATH`) asserts that `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and `new Speaker` each throw `DllNotFoundException`, with a non-null `InnerException` of the same type and the Linux message (`libmumble_ffi.so`, `Plugins/Linux/x86_64/`, `#upm`, `openupm add com.mumble-speech.unity`, the `#from-source` URL); a second call throws again (failure not cached);
+    - message per platform: `LoadFailureMessage` checked for Windows x64 (`mumble_ffi.dll`, `Plugins/Windows/x86_64/`), macOS arm64 and x64 (`libmumble_ffi.dylib`, `Plugins/macOS/`), Linux x64; edge cases: Windows and Linux arm64 mention x86_64-only libraries, an unknown OS lists the three folders and the supported platforms; no message contains a package version;
+    - `build.sh` on an unsupported `uname -s` (simulated with a stub `uname` on `PATH`) prints the manual steps to standard error and exits 1; on Linux it still copies the library;
+    - the site builds (the new anchor `#from-source` exists, no dead links), and review confirms the READMEs and the docs page match design §9.4 (L4.12);
+    - a release dry run still passes `verify.sh` (no new file in the package without its `.meta`);
+    - manual U5 is added to `TESTING.md` and run when a Unity editor is available (it does not block closing the task).
 
 ## Phase H — Sound identifier, READMEs, site, release
 
@@ -76,6 +85,18 @@ task cites the requirements it covers.
 - [ ] **K4** Prerelease support (L8.5) and a test prerelease `v0.1.1-rc.1` to check trusted publishing on npm and crates.io, only with the user's go-ahead. — L8.5, L9.1, L9.2
 - [ ] **K3** After the first release: trusted publishing on npm and crates.io, tokens deleted; OpenUPM submission; Godot Asset Library submission. — L9
   - Progress: tokens revoked (2026-10-24); OpenUPM entry approved (2026-10-24); Godot Asset Library entry published as asset 5553 (2026-10-26). Trusted publishing still to be confirmed by K4.
+
+## Phase M — Fixes after the first release
+
+- [ ] **M1** Engine speakers at a fixed 48 kHz (issue #21): Godot `MumbleSpeaker.SAMPLE_RATE` and Unity `Mumble.SpeakerSampleRate` (48,000) used by `say`/`Say`, `speak_character`/`SpeakCharacter` and `render_stream`; no read of the device rate; CI runs the Godot tests under four mix rates; README, `docs/guide/concepts.md` (determinism), `docs/bindings/godot.md`, `docs/bindings/unity.md` and the binding READMEs state the scope of bit-identity and the fixed rate. — L4.10, L7.5, L1.4, LD17, LD18
+  - Done when, Godot (`run_tests.gd`, each CI run with `MUMBLE_EXPECT_MIX_RATE` set; the test fails if `AudioServer.get_mix_rate()` differs from it):
+    - happy path, under mix rates 44,100, 48,000, 22,050 and 96,000: `render_stream("Hello")` has `mix_rate` 48,000 and data equal to the 16-bit encoding of `Mumble.render("Hello", voice, 48000)` (16,800 samples), the same bytes in every run; the same check for a `grunt` and an `alphabet` voice with variation and seed;
+    - `speak_character("H")` returns `1 / speed` and the internal player's stream has `mix_rate` 48,000; `speak_character(" ")` plays nothing and returns 1 slot; `say("Hé 👋!")` emits `character_spoken` in order and then `finished` under every mix rate;
+    - edge cases: empty text (`render_stream("")` is a 48 kHz stream equal to the encoding of `Mumble.render("", …, 48000)`, `say("")` emits `finished` and no `character_spoken`); a ~1,000-character line (stream length equals the render's sample count at 48 kHz); the 48,000 run is the no-resampling case and matches what a 48 kHz device produced before the change;
+    - errors: an invalid voice still logs the error, `speak_character` returns 0 and `render_stream` returns null; no `SampleRateOutOfRange` at any mix rate;
+    - the vectors and existing tests still pass in every run.
+  - Done when, Unity: `unity-interop` checks `Mumble.SpeakerSampleRate == 48000` and that `Render("Hello", default, SpeakerSampleRate)` has 16,800 samples; review confirms `Runtime/` does not read `AudioSettings.outputSampleRate`; checklist U4 added (run with G3 by whoever verifies Unity).
+  - Done when, docs: the site builds (L7.3) and the pages above no longer suggest bit-identity per device without the 48 kHz note (L7.5).
 
 ## Phase N — Unity on Android (issue #25)
 
@@ -107,6 +128,8 @@ requirement IDs.
 | U1 | Import the package from a local path in Unity 2022.3, open the `Basic` sample | The sample plays without errors in the console | L4.7, L4.9 |
 | U2 | Run the EditMode tests | All vectors pass | L5.2 |
 | U3 | With TextMeshPro installed, use the typewriter | Text and sound synchronized | L4.7 |
+| U4 | Set *Project Settings → Audio → System Sample Rate* to 44,100, then 48,000 (and 22,050 or 96,000 if the device allows); each time call `Say("Hello")` and type a line with `SpeakCharacter` | The clip has `frequency` 48,000 and 16,800 samples every time; `OnCharacter` fires 5 times then `OnFinished`; pitch and tempo sound the same at every setting | L4.10 |
+| U5 | Without building, add `bindings/unity/package.json` from a source checkout and call `Say` | The console shows the exception naming the missing library, its `Plugins/` folder and the install options; after installing by git URL, the sample plays | L4.11 |
 | U6 | Install the package in Unity 2022.3 or 6 with Android Build Support; select each `Plugins/Android/libs/<abi>/libmumble_ffi.so` in the inspector; build the `Basic` sample for Android (IL2CPP, ARM64 and ARMv7 ticked) and run it on an ARM64 device | Inspector: only Android ticked, with the folder's CPU; the desktop libraries have Android unticked. On the device: the sample speaks and types the lines, no `DllNotFoundException` or `EntryPointNotFoundException` in `adb logcat`. The APK contains `lib/arm64-v8a/` and `lib/armeabi-v7a/libmumble_ffi.so` and no desktop library | L4.13, L4.9 |
 | U7 | With `testables` set (U2) and the device connected: Test Runner → PlayMode → *Run All in Player* (Android) | `MumbleSpeech.Tests.Runtime` passes: every conformance vector is bit-identical on the device | L5.2, L1.4 |
 | U8 | Optional: run the U6 build on a 32-bit ARM device (or with ARMv7 only) and on an x86_64 emulator or ChromeOS device; open the APK in Android Studio's APK Analyzer | The sample speaks on each; APK Analyzer reports no 16 KB alignment warning for `libmumble_ffi.so` | L4.13, L4.14 |
@@ -132,8 +155,10 @@ requirement IDs.
 | L4.7 | G1–G3 |
 | L4.13–L4.14 | N1–N7 |
 | L4.8–L4.9 | F2, G2, H2 |
+| L4.10 | M1 |
+| L4.11–L4.12 | G4 |
 | L5 | C1, C2, D2, E2, F2, G2, H1, N3, N4, N7 |
-| L7 | J1–J3 |
+| L7 | J1–J3, M1 (L7.5) |
 | L8 | H1, H3, H4, N5 |
 | L9 | K1–K3, H3 |
 | L6 | A1b, A2, D3, P1–P3 |

@@ -1,4 +1,4 @@
-# Testing the Unity package (checklist U1–U3 and U6–U8)
+# Testing the Unity package (checklist U1–U8)
 
 A guide for whoever tries the package in Unity. It takes about 20 minutes. Please
 report the results with the template at the end, even if everything works.
@@ -69,6 +69,28 @@ components, the sample and the TextMeshPro typewriter.
 7. Optional: **Assets → Create → Mumble Speech → Voice**, change style and pitch, assign
    it to the `MumbleSpeaker`'s **Voice** field, Play again: the voice changes.
 
+## U4 — The speaker renders at 48 kHz on any output rate
+
+1. Use the scene from U1 (`AudioSource` + `MumbleSpeaker`), with a script that calls
+   `GetComponent<MumbleSpeaker>().Say("Hello")` on a key press and logs
+   `GetComponent<AudioSource>().clip.frequency` and `.samples` right after.
+2. **Edit → Project Settings → Audio → System Sample Rate**: set 44100, restart Play
+   mode, press the key. Repeat with 48000 (and 22050 or 96000 if your device allows).
+   Also try `SpeakCharacter` with the typewriter from U3.
+3. Expected, at every setting: the clip has `frequency` 48000 and 16800 samples;
+   `onCharacter` fires 5 times, then `onFinished`; pitch and tempo sound the same.
+
+## U5 — Source checkout without native libraries
+
+1. Clone the repository (or download the ZIP) and create a new 3D project.
+2. **Package Manager → + → Add package from disk…** and pick `bindings/unity/package.json`
+   from the checkout. Do **not** run `build.sh`.
+3. Make a `MumbleSpeaker` with a voice, as in U1, and press **Play** (or call `Say`).
+4. Expected: the Console shows a `DllNotFoundException` that names the library file for
+   your OS, its `Plugins/` folder, and the install options (git URL `#upm`, OpenUPM,
+   release tarball, build from source with a link).
+5. Remove the package and install it by git URL as in U1: the sample plays.
+
 ## Android (U6–U8)
 
 For whoever has an Android device. Needs Unity with **Android Build Support** (and its
@@ -118,6 +140,8 @@ U1 install + sample:      pass / fail — notes:
 U1 plugin settings:       pass / fail — notes:
 U2 EditMode tests:        pass / fail — notes:
 U3 TMP typewriter:        pass / fail — notes:
+U4 48 kHz at any rate:    pass / fail — notes:
+U5 source checkout error: pass / fail — notes:
 U6 Android sample:        pass / fail / not tested — device, notes:
 U7 Android vectors:       pass / fail / not tested — notes:
 U8 other ABIs, 16 KB:     pass / fail / not tested — notes:

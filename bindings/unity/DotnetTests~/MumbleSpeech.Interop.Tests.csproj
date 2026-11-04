@@ -14,6 +14,7 @@
     <Compile Include="../Runtime/Core/*.cs" />
     <Compile Include="../Tests/Runtime/Vectors.cs" />
     <Compile Include="../Tests/Runtime/VectorChecks.cs" />
+    <Compile Include="LoadFailureChecks.cs" />
     <Compile Include="Program.cs" />
   </ItemGroup>
 </Project>

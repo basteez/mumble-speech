@@ -103,6 +103,14 @@ dev-dependency, used to generate and verify the folding tables (§4.1, LD11).
 - Sample positions with `libm`'s `round`.
 - Verification: the same conformance vectors run on native (macOS, Windows,
   Linux) and on WASM in CI, comparing the PCM hash.
+- Scope (L1.4, L7.5): bit-identity is per text, voice (seed included) **and
+  sample rate**. The core never picks a rate; the caller does. The engine
+  speakers used to pick the device's output rate, so the same line differed
+  between a 44.1 kHz and a 48 kHz machine (issue #21: `Hello` is 15,435 samples
+  at 44.1 kHz and 16,800 at 48 kHz). They now always use 48 kHz and let the
+  engine resample on playback (L4.10, §9.3, §9.4, LD17). The web binding
+  already takes the rate from the caller (default 48 kHz) and `WebAudioPlayer`
+  hands it to an `AudioBuffer`, which the browser resamples: no change there.
 
 ### 3.1 Conformance vectors [L5.1, L5.2] (LD7)
 
@@ -118,6 +126,13 @@ dev-dependency, used to generate and verify the folding tables (§4.1, LD11).
 Vectors are regenerated only for an intentional behavior change, which per the
 process rules is in the specs first; the PR diff of `vectors.json` shows exactly
 which outputs changed.
+
+Sample-rate coverage: the cases already span 8,000, 22,050, 44,100 (cases 02
+and 10), 48,000, 96,000 and 192,000 Hz on every CI platform, so the core is
+covered at 44.1 kHz. Issue #21 was not a core gap but a rate *choice* in the
+engine speakers, which vectors cannot see (they pass the rate explicitly). It is
+covered instead by the Godot speaker tests run under several mix rates and by
+the Unity checks in §9.4 (L4.10). The vector set and format are unchanged.
 
 Cases (34): for each style, the same 10 inputs, plus 4 error cases.
 
@@ -481,13 +496,26 @@ void mumble_bytes_free(uint8_t *p, size_t len);
     (`PackedFloat32Array`), `duration` and `events` (array of dictionaries:
     `char_index`, `char_count`, `start`, `duration`, `style`, `variant`), or
     `{ "error": "<code>" }`; `encode_wav(samples, sample_rate) → PackedByteArray`.
-  - `MumbleSpeaker` (`Node`): `voice`, `bus`, `volume_db`; `say(text)`,
-    `speak_character(text) → float` (plays one character, returns the advance
-    in seconds), `stop()`, `is_speaking()`, `render_stream(text) →
-    AudioStreamWAV` (16-bit, at the `AudioServer` mix rate); signals
+  - `MumbleSpeaker` (`Node`): `voice`, `bus`, `volume_db`; constant
+    `SAMPLE_RATE = 48000`; `say(text)`, `speak_character(text) → float` (plays
+    one character, returns the advance in seconds), `stop()`, `is_speaking()`,
+    `render_stream(text) → AudioStreamWAV` (16-bit, at `SAMPLE_RATE`); signals
     `character_spoken(char_index)` and `finished`. Playback goes through an
     internal `AudioStreamPlayer`; `character_spoken` follows the audio clock
     (playback position + time since last mix − output latency, as in D7).
+  - Fixed rate (L4.10, LD17): `say`, `speak_character` (its core `Speaker`)
+    and `render_stream` all synthesize at `SAMPLE_RATE`, never at
+    `AudioServer.get_mix_rate()`. The `AudioStreamWAV` carries
+    `mix_rate = 48000` and the `AudioServer` resamples it to the output rate
+    during playback (no resampling on a 48 kHz output, so those devices hear
+    exactly what they heard before). Timing needs no change: event starts,
+    the line duration and advances are seconds from the core, and
+    `AudioStreamPlayer.get_playback_position()` is in seconds of the stream,
+    independent of either rate. Since 48,000 is inside L1.5, the speakers can
+    no longer fail with `SampleRateOutOfRange` on an output rate outside
+    8,000–192,000 Hz. Voice errors are reported as before (`godot_error!`;
+    `speak_character` returns 0, `render_stream` returns null). The
+    `mix_rate()` helper goes away.
   - `MumbleTypewriter` (`Node`): `label: NodePath` (`Label` or
     `RichTextLabel`), `speaker: NodePath`; `type_text(text)` sets the text and
     reveals it grapheme by grapheme through `visible_characters`, calling
@@ -497,7 +525,17 @@ void mumble_bytes_free(uint8_t *p, size_t len);
   `godot --headless --path bindings/godot -s res://tests/run_tests.gd`): all
   conformance vectors through `Mumble.render` with the FNV-1a hash computed in
   GDScript, error codes, `MumbleVoice` defaults and ranges, typewriter reveal
-  and `finished`. CI (`godot` job, Linux): Godot 4.3 (minimum) and 4.7.2.
+  and `finished`, and the fixed rate (L4.10): `render_stream` gives a stream
+  with `mix_rate` 48,000 whose data equals
+  `Mumble.encode_wav(Mumble.render(text, voice, 48000).samples, 48000)`
+  without the 44-byte header; streams played by `speak_character` are at
+  48,000; `say` still emits `character_spoken` in order and `finished`.
+  CI (`godot` job, Linux): Godot 4.3 (minimum) and 4.7.2; each runs the tests
+  once per output rate, 44,100 (Godot's default), 48,000, 22,050 and 96,000,
+  set with an `override.cfg` (`audio/driver/mix_rate`) written before the
+  run. The test reads the expected rate from `MUMBLE_EXPECT_MIX_RATE` and
+  fails if `AudioServer.get_mix_rate()` differs, so a run where the override
+  did not apply cannot pass silently.
 
 ### 9.4 Unity [L4.7]
 
@@ -522,12 +560,22 @@ later, C# 9). Namespace `MumbleSpeech`.
   - `MumbleVoice` (`ScriptableObject`, `CreateAssetMenu`): the settings, with
     `[Range]` attributes.
   - `MumbleSpeaker` (`MonoBehaviour`, requires `AudioSource`): `Say(text)`
-    renders at `AudioSettings.outputSampleRate`, builds an `AudioClip`
+    renders at `Mumble.SpeakerSampleRate`, builds an `AudioClip`
     (`AudioClip.Create` + `SetData`) and starts it with `PlayScheduled`;
     `SpeakCharacter(text)` → seconds to wait; `ResetSpeaker()`, `Stop()`,
     `IsSpeaking`; `UnityEvent<int> OnCharacter` (UTF-16 index) and
     `UnityEvent OnFinished`, driven by `AudioSettings.dspTime` (the audio
     clock, as in D7).
+  - Fixed rate (L4.10, LD17): `Mumble.SpeakerSampleRate` is a `const int`
+    (48,000) in `MumbleSpeech.Core`, so the plain .NET CI job can see it.
+    `Say` and the typewriter `Speaker` of `SpeakCharacter` both use it;
+    `AudioSettings.outputSampleRate` is not read anywhere in `Runtime/`. The
+    clip is created with `frequency` 48,000 and its length in samples is the
+    render's sample count; Unity resamples it to the output rate. Timing
+    needs no change: `PlayScheduled`, `dspTime`, event starts and the line
+    duration are all seconds, and `SpeakCharacter` returns the core's advance
+    (seconds, independent of the rate). An empty render still creates a
+    one-sample clip (`AudioClip.Create` rejects zero length).
 - `Runtime/TMP/` (assembly `MumbleSpeech.TMP`, compiled only when TextMeshPro
   is available: `com.unity.textmeshpro`, or `com.unity.ugui` ≥ 2.0 which
   contains it, via `versionDefines`): `MumbleTypewriterTMP` reveals a
@@ -539,6 +587,52 @@ later, C# 9). Namespace `MumbleSpeech`.
   builds and copies them. Their `.meta` files (platform settings) are
   committed, as are `.meta` files for every package asset (required for
   immutable packages).
+- Install paths [L4.12] (LD20): users install the package that carries the
+  binaries: git URL `https://github.com/basteez/mumble-speech.git#upm` (or
+  `#upm/vX.Y.Z`), OpenUPM, or the release tarball (§13, §13.1). `bindings/unity`
+  in a source checkout (git clone or GitHub's *Download ZIP*) has empty
+  `Plugins/` folders: it is for contributors, who build the library **before**
+  adding the folder to a project (Unity may otherwise drop the plugins'
+  orphan `.meta` files, and with them the platform settings). The binding
+  README, the site's Unity page (section *From source*, anchor `#from-source`)
+  and the root README say so. Build from source:
+  - macOS, Linux, Windows with Git Bash or MSYS2: `bindings/unity/build.sh`;
+  - Windows without a POSIX shell (PowerShell, from the repository root):
+    `cargo build -p mumble-ffi --release`, then
+    `Copy-Item target\release\mumble_ffi.dll bindings\unity\Plugins\Windows\x86_64\`.
+  `build.sh` gets a fallback branch: on any other `uname -s` it prints the
+  platform and the manual steps to standard error and exits with status 1
+  (today it does nothing and exits 0).
+- Native library not loadable [L4.11] (LD19): `Native.EnsureLoaded()` runs
+  first in `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and
+  the `Speaker` constructor. It calls `mumble_abi_version()`; if that throws
+  `DllNotFoundException`, `EntryPointNotFoundException` or
+  `BadImageFormatException`, it throws a new exception of the **same type**
+  with the original as `InnerException` and the message of
+  `Native.LoadFailureMessage(os, architecture)`. Success is remembered in a
+  static flag and never checked again; failure is not remembered, so every
+  call reports it. Other functions are reached only after one of these entry
+  points, so they need no check. The message is a pure function of the
+  platform (`RuntimeInformation.IsOSPlatform`,
+  `RuntimeInformation.ProcessArchitecture`), testable on any OS; for Windows:
+
+  ```
+  mumble-speech: cannot load the native library mumble_ffi.dll (Windows x86_64).
+  It belongs in Plugins/Windows/x86_64/ inside the package. A source checkout of
+  bindings/unity does not contain it. Install the package with its native
+  libraries: Package Manager > Add package from git URL >
+  https://github.com/basteez/mumble-speech.git#upm (or OpenUPM:
+  openupm add com.mumble-speech.unity, or the tarball of a GitHub release).
+  To build it from source: https://mumble-speech.github.io/bindings/unity#from-source
+  ```
+
+  macOS names `libmumble_ffi.dylib` in `Plugins/macOS/` (universal); Linux
+  names `libmumble_ffi.so` in `Plugins/Linux/x86_64/`. On Windows or Linux with
+  a process architecture other than x64, the message adds that the package
+  provides x86_64 libraries only. On any other OS it lists the three folders
+  and says that only Windows, macOS and Linux desktop are supported. The text
+  does not depend on the package version (`#upm` follows the latest stable
+  release).
 - `Samples~/Basic`: a script that types a line with a `MumbleSpeaker` [L4.9].
 - `Tests/Runtime` (NUnit, all platforms, §9.4.1): `Vectors.cs` (generated) and
   `VectorChecks.cs`, shared with CI, and a PlayMode test that runs every
@@ -548,8 +642,19 @@ later, C# 9). Namespace `MumbleSpeech`.
 - Verification (LD13): CI job `unity-interop` builds `Runtime/Core` and the
   shared checks with the .NET SDK on Linux, **C# 9** like Unity, and runs every
   vector against the real native library: this covers struct layout,
-  marshalling and UTF-16 indices. The `UnityEngine` parts (components, TMP,
-  sample) are verified manually (U1–U3), since Unity in CI needs a license.
+  marshalling and UTF-16 indices. It also checks that
+  `Mumble.SpeakerSampleRate` is 48,000 and that `Render("Hello", default,
+  SpeakerSampleRate)` has 16,800 samples (L4.10). The `UnityEngine` parts
+  (components, TMP, sample) are verified manually (U1–U5), since Unity in CI
+  needs a license; that `MumbleSpeaker` does not read
+  `AudioSettings.outputSampleRate` is checked in code review.
+  The same program also checks `LoadFailureMessage` for every platform and
+  architecture (it compiles the `Runtime/Core` sources, so it reaches
+  `internal` members), and the job runs it a second time with
+  `--expect-load-failure` and no library on the search path: then it asserts
+  that `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and
+  `new Speaker` each throw `DllNotFoundException` with the Linux message and
+  an inner exception [L4.11].
 
 ### 9.4.1 Unity on Android [L4.13, L4.14] (LD21–LD26)
 
@@ -698,8 +803,8 @@ GitHub Actions, matrix:
 | core | ubuntu, macos, windows | `cargo test`, native vectors, L2.5 benchmark |
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
-| godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter) |
-| unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13] |
+| godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter, speaker at a fixed 48 kHz under mix rates 44.1, 48, 22.05 and 96 kHz) |
+| unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13]; second run without the library: load-failure messages [L4.11]; speaker rate constant [L4.10] |
 | android | ubuntu, pinned NDK + `cargo-ndk` | Android libraries for three ABIs, `check.sh` (symbols, ELF machine, 16 KB alignment, dependencies) and `check-metas.sh`, plus their negative self-tests; core vectors on `armv7` under QEMU [L4.13, L4.14, L5.2] (§9.4.1) |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 
@@ -842,6 +947,7 @@ serves the Asset Library.
 | `gdext` compatibility with Godot versions | Pin the minimum version (4.3) and test it in CI |
 | WASM size | No `serde`, `opt-level = "z"`, `wasm-opt`, budget verified in CI |
 | Unity not verifiable in CI | EditMode tests in the package + manual checklist |
+| Unity users add `bindings/unity` from a source checkout, which has no native libraries (issue #24) | Docs lead to the git URL / OpenUPM; the interop layer names the missing file and the fix (L4.11, L4.12, LD19–LD20) |
 | Android library that does not load on a device (missing symbol, wrong ABI, 4 KB alignment rejected by Google Play, missing `libc++_shared.so`) | `check.sh` in CI on every PR and before every release (L4.14); device run U6–U7 |
 | Android `.meta` serialization written by hand differs from Unity's | `check-metas.sh` guards intent; U6 confirms in the inspector and the committed file is updated to Unity's form if needed |
 | Determinism on Android without vectors in CI | Same code on every target; AArch64 covered on macOS arm64, 32-bit ARM under QEMU; vectors on a device in U7 (LD25) |
@@ -863,6 +969,10 @@ serves the Asset Library.
 | LD14 | Events carry a sound identifier (style + variant) instead of a dot (color + size); C ABI version 2 | Keep the dot; keep both | Colors are a presentation choice of the playground; a neutral identifier is useful to games (mouth shapes, effects) and keeps the library free of UI decisions (LQ6, user decision) |
 | LD15 | Site on a dedicated free organization (`mumble-speech.github.io`), deployed from this repository with a deploy key | Pages on `basteez` (forced onto `bstz.it/mumble-speech` by the user site's custom domain); Cloudflare Pages; a `bstz.it` subdomain | GitHub applies the user site's custom domain to every project site of the account (documented behavior); an organization keeps a default `github.io` domain with no third-party account (LQ7, user decision) |
 | LD16 | Registries: npm and crates.io from CI (token only for the first publish, then OIDC); Unity and Godot through generated git branches (`upm`, `godot-addon`) with the binaries, tracked by OpenUPM and the Asset Library | Commit binaries to `main`; store long-lived tokens; automate the Asset Library with the account password | OpenUPM and the Asset Library build from git commits, and the native libraries are not in `main`; generated branches keep `main` clean. npm and crates.io require the package to exist before trusted publishing can be configured |
+| LD17 | The Godot and Unity `MumbleSpeaker` synthesize at a fixed 48 kHz (a constant, not a setting) and the engine resamples on playback (issue #21) | Keep the device rate and document it; an exported property (default 48,000) on the speaker | The README promise is read per line, not per device: a game must sound the same on a 44.1 kHz Mac and a 48 kHz PC. 48 kHz is the core's default (L1.5) and the most common output rate, so most devices play it without resampling; both engines already resample clips and streams of any rate, and their timing is in seconds. A property would only move the variance into project files and add API, tests and docs for no known use: whoever needs another rate calls the low-level render with an explicit rate. Cost: about 9% more samples on 44.1 kHz devices, negligible next to L2.5 |
+| LD18 | No OS matrix for the `godot` and `unity-interop` jobs (they stay on Linux) | Run them on macOS and Windows too | With LD17 the speakers' output is the core's 48 kHz render, already bit-exact on three OSes through the `core` and `ffi` jobs, which load the same code the bindings load (the core crate for Godot, the C ABI library for Unity). The device-rate case of issue #21 is reproduced on Linux by changing the Godot mix rate. What differs per OS is the engine's resampler, which the library does not own. Revisit if a binding gains OS-specific code |
+| LD19 | Unity: when the native library cannot be loaded, rethrow the runtime's own exception type (`DllNotFoundException`, `EntryPointNotFoundException`, `BadImageFormatException`) with an actionable message and the original as inner exception, checked once at the interop entry points | A new `MumbleErrorCode` in `MumbleException`; a new exception type; a placeholder README in each `Plugins/` folder | `MumbleErrorCode` mirrors the C ABI return codes, and a load failure is not one; keeping the type means code that already catches `DllNotFoundException` keeps working, so no public API changes. Placeholder files would need `.meta` files and ship in every released package, and nobody reads them when the console shows only the exception (issue #24) |
+| LD20 | Unity source checkouts: document the install paths and the build from source, with plain `cargo` + `Copy-Item` for Windows without a POSIX shell; `build.sh` fails on unsupported platforms | A PowerShell `build.ps1`; committing the binaries | Two commands do not justify a second script to keep in sync with `build.sh` (and to exclude from the package with its `.meta`, as `build.sh` is in `assemble.sh`); binaries stay out of `main` (§9.4, LD16) |
 | LD21 | Unity Android ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64` | `arm64-v8a` only; also 32-bit `x86` | `arm64-v8a` is required by Google Play. Unity 2022.3 and 6 still offer ARMv7, and a project that ticks it without our library crashes on 32-bit devices; each library is a few hundred KB. `x86_64` serves ChromeOS and the emulator. 32-bit `x86` is ChromeOS-only in Unity and those devices are 64-bit now |
 | LD22 | Android minimum API level 21 | 22 or 23 (the Unity minimums) | The lowest level the NDK and Rust support, at or below every supported Unity's minimum, so the library never limits a project; it uses only basic `libc`/`libm` symbols |
 | LD23 | `cargo-ndk` with a pinned NDK, 16 KB alignment set explicitly in `.cargo/config.toml` and checked on the binaries | Hand-written linker config per target; relying on the NDK r28+ default | `cargo-ndk` finds the NDK clang and writes the `<abi>/` layout Unity uses; a pinned NDK gives reproducible builds; the explicit flag keeps alignment independent of the NDK version, and the ELF check catches anything that bypasses it |

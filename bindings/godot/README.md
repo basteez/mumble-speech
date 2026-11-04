@@ -2,7 +2,7 @@
 
 Video-game "mumble speech" generated at runtime: `beep` (Undertale), `grunt`
 (Banjo-Kazooie) and `alphabet` (Animal Crossing). Same output, bit for bit, as
-the web, C and Unity bindings. Godot 4.3 or later, desktop (Windows, macOS, Linux).
+the web, C and Unity bindings for the same text, voice and sample rate. Godot 4.3 or later, desktop (Windows, macOS, Linux).
 
 > Early development: no prebuilt release yet, build the addon from source.
 
@@ -36,6 +36,10 @@ $MumbleTypewriter.type_text("Guh-huh! Did you bring the honey?")   # skip(), is_
 | `MumbleSpeaker` (Node) | `say(text)`, `speak_character(text) → seconds to wait`, `reset()`, `stop()`, `render_stream(text) → AudioStreamWAV`, `bus`, `volume_db` |
 | `MumbleTypewriter` (Node) | `type_text(text)`, `skip()`, `is_typing()`, signal `finished` |
 | `Mumble` (static) | `render(text, voice, sample_rate) → { samples, duration, events }`, `encode_wav(samples, sample_rate)` |
+
+`MumbleSpeaker` always synthesizes at 48 kHz (`MumbleSpeaker.SAMPLE_RATE`), whatever the
+output rate, and Godot resamples on playback, so a line gives the same samples on every
+device. Use `Mumble.render` with an explicit rate for anything else.
 
 Nothing is drawn by the addon: the typewriter only sets `visible_characters` on
 the label you point it to. `Mumble.render` events also carry `style` and `variant`

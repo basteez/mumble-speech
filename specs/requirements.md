@@ -53,7 +53,7 @@ verification, **[rev]** = verification in code review.
 - **L1.1** All mumble speech logic SHALL live in the Rust core. The bindings SHALL NOT reimplement any part of it. [rev]
 - **L1.2** The core SHALL implement the R behaviors (next section). [auto]
 - **L1.3** The core SHALL compile both for `wasm32-unknown-unknown` and for native targets, without I/O, threads or clocks. [auto]
-- **L1.4** Given the same input, the PCM produced SHALL be bit-for-bit identical on all supported platforms and in WASM. [auto]
+- **L1.4** Given the same input (text, voice and sample rate), the PCM produced SHALL be bit-for-bit identical on all supported platforms and in WASM. [auto]
 - **L1.5** The sample rate SHALL be configurable between 8,000 and 192,000 Hz, with default 48,000. [auto]
 - **L1.6** The `Voice` SHALL include an integer `seed` (default 0). Given the same style, voice and seed, the sequence of sounds SHALL depend only on the characters, not on the text that follows. [auto]
 - **L1.7** The core SHALL reject an out-of-range voice: pitch from −12 to +12 semitones, speed from 5 to 30 characters/s, variation from 0 to 1. [auto]
@@ -107,6 +107,9 @@ existing tests and commits continue to refer to them.
 - **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop and Android (L4.13). [man]
 - **L4.8** Every binding SHALL use the same concepts (Voice, render, timeline, Speaker, advance) with names adapted to the platform's conventions. [rev]
 - **L4.9** Every binding SHALL include a minimal runnable example. [man]
+- **L4.10** (Godot, Unity) The `MumbleSpeaker` SHALL synthesize every line and character at a fixed 48,000 Hz, whatever the engine's output rate, and leave the conversion to the output rate to the engine's playback, so that the same text and voice give the same samples on every device. Event times, advances and the end of the line SHALL stay in seconds. The low-level APIs (`Mumble.render`, `Mumble.Render`, `Speaker`) keep an explicit sample rate. [auto] [man]
+- **L4.11** (Unity) IF the native library cannot be loaded (missing from `Plugins/`, or not loadable on this platform or architecture), THEN the first call into the interop layer (`Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion`, `new Speaker`) SHALL throw an exception of the same type the runtime raised, with the original as inner exception, whose message names the library file and the `Plugins/` folder expected for the current platform and says how to get the library: install the package by git URL (`#upm`), from OpenUPM or from the release tarball, or build it from source. WHEN the library loads, behavior SHALL be unchanged. [auto]
+- **L4.12** (Unity) The Unity README and documentation page SHALL present installation by git URL, OpenUPM or release tarball as the way to install the package, and SHALL state that `bindings/unity` in a source checkout contains no native libraries and must be built before it is added to a project, with build instructions for macOS, Linux and Windows (including Windows without a POSIX shell). The build script SHALL exit with an error, not silently, on a platform it does not support. [rev]
 - **L4.13** (Unity, Android) WHEN a Unity project is built for Android, the package SHALL provide the C ABI library for the `arm64-v8a`, `armeabi-v7a` and `x86_64` architectures, running on Android 5.0 (API level 21) or later, with import settings such that the player includes exactly one library per selected architecture and the editor and desktop players never load an Android library (LD21–LD23, LD26). [auto] [man]
 - **L4.14** (Unity, Android) Each Android library SHALL export exactly the functions declared in `mumble.h`, be an ELF shared object for its own architecture, have every loadable segment aligned to 16 KB (Google Play requirement for Android 15+), and depend only on Android system libraries (`libc`, `libm`, `libdl`, `liblog`). IF any of these does not hold, CI SHALL fail. [auto]
 
@@ -127,6 +130,7 @@ existing tests and commits continue to refer to them.
 - **L7.2** The site SHALL publish the playground, built from `main`, at `/playground/`. [auto]
 - **L7.3** CI SHALL build the site on every change and fail on broken internal links; a push to `main` SHALL deploy it. [auto]
 - **L7.4** The site SHALL be served on a default `github.io` domain, not on the user's custom domain (LQ7). [man]
+- **L7.5** The README and the documentation SHALL state the scope of bit-identity: the same text, voice (seed included) and sample rate give the same samples; the Godot and Unity speakers always use 48 kHz (L4.10), so a line is identical on every device up to the engine's resampling to the output rate, which the library does not control. [rev]
 
 ### L8 — Release
 

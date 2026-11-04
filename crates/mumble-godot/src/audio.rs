@@ -1,12 +1,7 @@
 use godot::classes::audio_stream_wav::Format;
-use godot::classes::{AudioServer, AudioStreamWav};
+use godot::classes::AudioStreamWav;
 use godot::prelude::*;
 use mumble_speech as core;
-
-/// The rate Godot mixes at, so streams play without resampling.
-pub fn mix_rate() -> u32 {
-    AudioServer::singleton().get_mix_rate() as u32
-}
 
 /// A 16-bit mono stream with the same conversion as the core's WAV encoder.
 pub fn stream(samples: &[f32], sample_rate: u32) -> Gd<AudioStreamWav> {
