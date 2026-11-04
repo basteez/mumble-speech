@@ -59,6 +59,8 @@ internal static class Program
             if (typewriter.SampleRate != rate) failures.Add($"typewriter SampleRate {typewriter.SampleRate}, expected {rate}");
             if (Math.Abs(h.Advance - 1.0 / 15.0) > 1e-12) failures.Add($"typewriter advance {h.Advance:R}, expected 1/15");
         }
+    }
+
     // Second CI run, with no native library on the search path: every entry point must report
     // the missing library with the same exception type, an inner exception and the install help (L4.11).
     private static int ExpectLoadFailure()
