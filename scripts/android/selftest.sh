@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Negative self-tests of check.sh and check-metas.sh (specs/tasks.md N1, N2): each deliberately
-# broken input must make the check fail, and the intact input must pass.
+# Negative self-tests of check.sh and check-metas.sh on real libraries (specs/tasks.md N1, N2, N3): each
+# deliberately broken input must make the check fail, and the intact input must pass. The fixture-based
+# cases of the same checks are in check.test.sh, which needs no NDK.
 # Usage: scripts/android/selftest.sh <dir with the built <abi>/libmumble_ffi.so>
 # Needs the NDK (ANDROID_NDK_HOME) and cargo-ndk for the alignment case.
 set -euo pipefail
@@ -55,6 +56,22 @@ expect_fail "unexpected ABI folder" "unexpected entry 'x86'" "$check" "$work/ext
 (cd "$root" && CARGO_TARGET_DIR="$work/target-4k" RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=4096" \
   "$root/scripts/android/build.sh" "$work/libs-4k" >/dev/null 2>&1)
 expect_fail "library linked with 4 KB alignment" "16 KB" "$check" "$work/libs-4k" "$header"
+
+# ELF type: an executable (e_type 2 instead of 3 = ET_DYN at offset 16) instead of a shared object.
+cp -R "$libs" "$work/exec"
+printf '\002' | dd of="$work/exec/x86_64/libmumble_ffi.so" bs=1 seek=16 count=1 conv=notrunc 2>/dev/null
+expect_fail "library linked as an executable (EXEC)" "expected DYN" "$check" "$work/exec" "$header"
+
+# DT_NEEDED: the library needs libc.so; renamed to libq.so (same length, so the file stays valid) it is
+# a library outside the allowed system set.
+cp -R "$libs" "$work/needed"
+LC_ALL=C sed 's/libc\.so/libq.so/g' "$libs/arm64-v8a/libmumble_ffi.so" > "$work/needed/arm64-v8a/libmumble_ffi.so"
+expect_fail "library that depends on a non-system library" "depends on libq.so" "$check" "$work/needed" "$header"
+
+# An ABI folder present but without its library.
+cp -R "$libs" "$work/empty-abi"
+rm "$work/empty-abi/armeabi-v7a/libmumble_ffi.so"
+expect_fail "ABI folder with no library" "armeabi-v7a/libmumble_ffi.so is missing" "$check" "$work/empty-abi" "$header"
 
 # check-metas.sh, on copies of the package.
 pkg() { rm -rf "$work/pkg"; mkdir "$work/pkg"; cp -R "$root/bindings/unity/Plugins" "$work/pkg/Plugins"; }
