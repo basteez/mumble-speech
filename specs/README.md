@@ -13,7 +13,7 @@ with its own specs in [`playground/`](playground/README.md).
 | [requirements.md](requirements.md) | Numbered requirements: behavior (R*) and library (L*) | *What* it must do |
 | [design.md](design.md) | Architecture, algorithms, bindings, CI | *How* it does it |
 | [tasks.md](tasks.md) | Traceable implementation plan | *In what order* we build it |
-| [playground/](playground/README.md) | Requirements (R1–R8), design and tasks of the web playground | Same three questions, for the page |
+| [playground/](playground/README.md) | Requirements (R1–R9), design and tasks of the web playground | Same three questions, for the page |
 
 ## Process rules
 
