@@ -82,7 +82,7 @@ Depends on the library's task D3 ([`../tasks.md`](../tasks.md)): package
 
 ## Phase 7 — Shareable URL (issue #20)
 
-- [ ] **U1** `src/ui/share-url.ts`: `Settings`, `DEFAULT_SETTINGS`, `parseSettings`, `serializeSettings`, with the slider limits and steps in one table shared with `controls.ts`. — R9.1, R9.3, R9.5–R9.10 (design §7.6, D12–D14)
+- [ ] **T7.1** `src/ui/share-url.ts`: `Settings`, `DEFAULT_SETTINGS`, `parseSettings`, `serializeSettings`, with the slider limits and steps in one table shared with `controls.ts`. — R9.1, R9.3, R9.5–R9.10 (design §7.6, D12–D14)
   - Done when: `tests/share-url.test.ts` passes with at least these cases:
     - **Round trip**: for each style and a sample of pitch/speed/variation values (the extremes, the defaults, `variation=0.05` and `0.95`), `parseSettings(serializeSettings(s, ''))` returns `s` and `present = true`.
     - **Canonical form**: the defaults serialize to exactly `?text=Hello&style=beep&pitch=0&speed=15&variation=0`; `-3`, `0.05`, `1` are written in shortest form; owned keys come first in fixed order, followed by non-owned pairs in original order (`?utm=x&text=a` → `?text=a&style=…&variation=0&utm=x`).
@@ -97,9 +97,9 @@ Depends on the library's task D3 ([`../tasks.md`](../tasks.md)): package
     - **Line breaks**: `%0D%0A` and `%0D` parse as `\n`.
     - **Max length**: 500 code units kept intact; 501 truncated to 500; 499 ASCII + one emoji (501 code units) truncated to 499 (no lone surrogate); the counter value R1.2 equals `text.length` after parsing.
     - **Duplicates**: `?pitch=3&pitch=5` → 3; `?pitch=abc&pitch=5` → default (first occurrence wins, R9.8); the serialization contains each owned key once.
-- [ ] **U2** `createUrlSync` and wiring in `main.ts` and `createControls(settings)`. — R9.2, R9.4, R9.11, R9.12 (design §7.2, §7.6, D11)
+- [ ] **T7.2** `createUrlSync` and wiring in `main.ts` and `createControls(settings)`. — R9.2, R9.4, R9.11, R9.12 (design §7.2, §7.6, D11)
   - Done when: unit tests with fake timers and a fake `history`/`location` verify: ten `schedule` calls within 250 ms → one `replaceState` with the last settings; `replaceState` is never `pushState`; the path (`/playground/` and `/`) and the fragment are preserved; no call when the query is already canonical; a `replaceState` that throws `SecurityError` is swallowed and the next `schedule` writes the URL; `flush` writes immediately. `npm run typecheck`, `npm test` and `npm run build` pass.
-- [ ] **U3** Manual verification and changelog. — R9.2, R9.4, R9.12
+- [ ] **T7.3** Manual verification and changelog. — R9.2, R9.4, R9.12
   - Done when: checklist M11–M13 passes on the deployed preview or `vite preview --base /playground/`; `CHANGELOG.md` *Unreleased* has an *Added* entry for shareable playground links (L8.4, specs rule 6).
 
 ## Manual checklist
