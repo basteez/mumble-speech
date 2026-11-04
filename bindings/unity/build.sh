@@ -24,4 +24,15 @@ case "$(uname -s)" in
     cp "$root/target/release/mumble_ffi.dll" "$here/Plugins/Windows/x86_64/"
     echo "copied Plugins/Windows/x86_64/mumble_ffi.dll"
     ;;
+  *)
+    {
+      echo "build.sh: unsupported platform '$(uname -s)'. The package supports Windows, macOS and Linux desktop."
+      echo "Build the library by hand from the repository root and copy it into Plugins/:"
+      echo "  cargo build -p mumble-ffi --release"
+      echo "  Windows: target/release/mumble_ffi.dll        -> bindings/unity/Plugins/Windows/x86_64/"
+      echo "  macOS:   target/release/libmumble_ffi.dylib   -> bindings/unity/Plugins/macOS/"
+      echo "  Linux:   target/release/libmumble_ffi.so      -> bindings/unity/Plugins/Linux/x86_64/"
+    } >&2
+    exit 1
+    ;;
 esac

@@ -18,6 +18,16 @@ or public API adds an entry to *Unreleased*.
 - The Godot addon is on the [Godot Asset Library](https://godotengine.org/asset-library/asset/5553)
   and the Unity package on [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/).
 
+### Fixed
+
+- Unity: when the native library is missing, for example after adding `bindings/unity`
+  from a source checkout, which has no binaries ([#24](https://github.com/basteez/mumble-speech/issues/24)),
+  the first call now throws the same exception type with a message that names the
+  expected file and `Plugins/` folder and how to install the package with its
+  libraries (git URL `#upm`, OpenUPM, release tarball) or build it from source. The
+  Unity README and documentation page lead with those install options and explain the
+  build from source on Windows without a POSIX shell.
+
 ## [0.1.0] - 2026-10-24
 
 First release: one Rust core that turns text into video-game mumble speech, with
