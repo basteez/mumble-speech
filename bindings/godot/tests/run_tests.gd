@@ -162,3 +162,131 @@ func test_say() -> void:
 	check(ok, "say emits finished (audio clock advanced)")
 	check(state.spoken == [0, 1, 3], "character_spoken code point indices, got %s" % [state.spoken])
 	speaker.queue_free()
+
+
+# M1 (L4.10, LD17): the speakers synthesize at MumbleSpeaker.SAMPLE_RATE under every mix rate
+# (CI sets it with override.cfg, see check_mix_rate). Expected values come from the 48 kHz render.
+func wav_body(samples: PackedFloat32Array) -> PackedByteArray:
+	# The 16-bit data of the core's WAV encoding: what the stream holds after its 44-byte header.
+	return Mumble.encode_wav(samples, MumbleSpeaker.SAMPLE_RATE).slice(44)
+
+
+func styled_voice(style: int, seed_value: int) -> MumbleVoice:
+	var voice := MumbleVoice.new()
+	voice.style = style
+	voice.seed = seed_value
+	return voice
+
+
+func test_speaker_streams() -> void:
+	check(MumbleSpeaker.SAMPLE_RATE == 48000, "MumbleSpeaker.SAMPLE_RATE is 48000")
+	var speaker := MumbleSpeaker.new()
+	root.add_child(speaker)
+
+	# Hello with the default voice: 16,800 samples, the PCM of conformance vector beep-01.
+	speaker.voice = MumbleVoice.new()
+	var hello := speaker.render_stream("Hello")
+	var hello_render: Dictionary = Mumble.render("Hello", MumbleVoice.new(), 48000)
+	check(hello != null and hello.mix_rate == 48000, "Hello: stream mix_rate is 48000")
+	check(hello_render.samples.size() == 16800, "Hello: 16,800 samples at 48 kHz, got %d" % hello_render.samples.size())
+	check(hello != null and hello.data == wav_body(hello_render.samples),
+		"Hello: data is the 16-bit encoding of the 48 kHz render")
+	check(pcm_hash(hello_render.samples) == "0x773a75ba3a8ba232", "Hello: PCM hash of conformance vector beep-01")
+
+	# Grunt and alphabet, with a seed and variation: the same bytes whatever the mix rate.
+	for style in [MumbleVoice.BEEP, MumbleVoice.GRUNT, MumbleVoice.ALPHABET]:
+		var voice := styled_voice(style, 42)
+		voice.variation = 0.5
+		voice.pitch = 3.0
+		speaker.voice = voice
+		var styled_text := "Hello, world! Hé 👋"
+		var styled_stream := speaker.render_stream(styled_text)
+		var rendered: Dictionary = Mumble.render(styled_text, voice, 48000)
+		var same := (styled_stream != null and not rendered.has("error") and styled_stream.mix_rate == 48000
+			and styled_stream.data == wav_body(rendered.samples))
+		check(same, "style %d (seed 42, variation): data is the 16-bit 48 kHz render" % style)
+
+	# speak_character: 1 / speed for a letter; a space is one slot and plays nothing.
+	speaker.voice = MumbleVoice.new()
+	speaker.reset()
+	var h_advance: float = speaker.speak_character("H")
+	check(same_time(h_advance, 1.0 / 15.0), "speak_character(\"H\") returns 1 / speed, got %s" % h_advance)
+	var player: AudioStreamPlayer = null
+	if speaker.get_child_count() > 0:
+		player = speaker.get_child(0) as AudioStreamPlayer
+	check(player != null and player.stream != null, "speak_character plays through the internal player")
+	if player != null and player.stream != null:
+		var h_stream := player.stream as AudioStreamWav
+		check(h_stream != null and h_stream.mix_rate == 48000, "the typewriter's stream has mix_rate 48000")
+		var before := player.stream
+		var space_advance: float = speaker.speak_character(" ")
+		check(same_time(space_advance, 1.0 / 15.0), "speak_character(\" \") returns one slot, got %s" % space_advance)
+		check(player.stream == before, "a space plays nothing: the player keeps its stream")
+	check(speaker.speak_character("") == 0.0, "speak_character(\"\") advances 0")
+
+	# Advances placed in order give the event starts of the 48 kHz render, spaces included.
+	speaker.reset()
+	var timed_text := "Hi there, Bob!"
+	var timed: Dictionary = Mumble.render(timed_text, MumbleVoice.new(), 48000)
+	var starts := {}
+	for e in timed.events:
+		starts[e.char_index] = e.start
+	var t := 0.0
+	var matched := 0
+	for k in timed_text.length():
+		if starts.has(k):
+			matched += 1
+			check(same_time(t, starts[k]), "speak_character timing of character %d: %s, render says %s" % [k, t, starts[k]])
+		t += speaker.speak_character(timed_text.substr(k, 1))
+	check(matched == timed.events.size(), "every sounding character of the render is spoken, got %d" % matched)
+
+	# Edge cases: empty text is an empty 48 kHz stream; a line of about 1,000 characters
+	# has as many 16-bit samples as its 48 kHz render.
+	speaker.voice = MumbleVoice.new()
+	var empty_stream := speaker.render_stream("")
+	var empty_render: Dictionary = Mumble.render("", MumbleVoice.new(), 48000)
+	check(empty_stream != null and empty_stream.mix_rate == 48000 and empty_stream.data.is_empty()
+		and empty_stream.data == wav_body(empty_render.samples), "empty text: empty 48 kHz stream")
+	var line_text := ""
+	for i in 50:
+		line_text += "Hello there, friend. "
+	var fast := MumbleVoice.new()
+	fast.speed = 30.0
+	speaker.voice = fast
+	var long_stream := speaker.render_stream(line_text)
+	var long_render: Dictionary = Mumble.render(line_text, fast, 48000)
+	check(long_stream != null and not long_render.has("error") and long_stream.data.size() / 2 == long_render.samples.size()
+		and long_stream.data == wav_body(long_render.samples), "1,050-character line: as many 48 kHz samples as its render")
+
+	# Errors: an invalid voice gives no stream, no sound and no advance. The speaker takes no rate,
+	# so the rate error is the core's explicit-rate check only.
+	check(Mumble.render("Hello", MumbleVoice.new(), 7999).get("error") == "SampleRateOutOfRange",
+		"Mumble.render still rejects 7,999 Hz")
+	var bad := MumbleVoice.new()
+	bad.pitch = 50.0
+	speaker.voice = bad
+	speaker.reset()
+	check(Mumble.render("Hello", bad, 48000).get("error") == "PitchOutOfRange", "invalid voice: render reports PitchOutOfRange")
+	check(speaker.render_stream("Hello") == null, "invalid voice: render_stream returns null")
+	check(speaker.speak_character("H") == 0.0, "invalid voice: speak_character returns 0")
+	speaker.say("Hello")
+	check(not speaker.is_speaking(), "invalid voice: say does not start speaking")
+	speaker.queue_free()
+
+
+func test_say_order() -> void:
+	var speaker := MumbleSpeaker.new()
+	root.add_child(speaker)
+	var events_seen := []
+	speaker.character_spoken.connect(func(i): events_seen.append(i))
+	speaker.finished.connect(func(): events_seen.append("finished"))
+	speaker.say("Hé 👋!")
+	var ok := await wait_until(func(): return events_seen.has("finished"), 5000)
+	check(ok and events_seen == [0, 1, 3, "finished"], "say: character_spoken in order, then finished, got %s" % [events_seen])
+	check(not speaker.is_speaking(), "say: not speaking once finished")
+	# Empty text: no sound, so no character_spoken, but the line still finishes.
+	events_seen.clear()
+	speaker.say("")
+	ok = await wait_until(func(): return events_seen.has("finished"), 5000)
+	check(ok and events_seen == ["finished"], "say(\"\"): finished and no character_spoken, got %s" % [events_seen])
+	speaker.queue_free()

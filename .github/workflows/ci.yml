@@ -106,6 +106,13 @@ jobs:
           mv godot/Godot_v*_linux.x86_64 godot/godot
       - name: Import project
         run: godot/godot --headless --path bindings/godot --import || true
+      - name: Speakers never read the device rate (static guard, L4.10)
+        # Grep guard for the code review rule: no device rate in the speakers' synthesis path.
+        run: |
+          fail=0
+          if grep -rnE 'AudioSettings\.(outputSampleRate|GetConfiguration)' bindings/unity/Runtime; then fail=1; fi
+          if grep -rnE 'get_mix_rate|(^|[^A-Za-z_])mix_rate\(\)' crates/mumble-godot/src bindings/godot/addons; then fail=1; fi
+          if [ "$fail" -ne 0 ]; then echo "::error::a speaker reads the device rate (L4.10)"; exit 1; fi
       - name: Headless tests (vectors, typewriter, speaker) under several output rates
         # The speakers synthesize at a fixed 48 kHz whatever the mix rate (L4.10, LD17). Each run
         # sets the rate with an override.cfg; the test fails if the engine did not apply it.
