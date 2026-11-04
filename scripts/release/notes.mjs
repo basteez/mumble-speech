@@ -68,7 +68,7 @@ changes = unwrap(changes);
 const DESCRIPTIONS = [
   [/^mumble-speech-web-/, 'npm package `@mumble-speech/web` (WebAssembly inlined)', 'Browsers, Node ≥ 20'],
   [/^mumble-speech-godot-/, 'Godot addon `addons/mumble_speech`', 'Windows x64, macOS universal, Linux x64'],
-  [/^com\.mumble-speech\.unity-/, 'Unity package (UPM tarball, native plugins included)', 'Windows x64, macOS universal, Linux x64'],
+  [/^com\.mumble-speech\.unity-/, 'Unity package (UPM tarball, native plugins included)', 'Windows x64, macOS universal, Linux x64, Android (arm64-v8a, armeabi-v7a, x86_64)'],
   [/^mumble-speech-c-/, 'C ABI: `mumble.h` and shared libraries', 'Windows x64, macOS universal, Linux x64'],
 ];
 const files = readdirSync(archivesDir)
@@ -163,7 +163,7 @@ On macOS, if a downloaded library is blocked, run \`xattr -dr com.apple.quaranti
 | | |
 |---|---|
 | Godot | ${godotMinimum} or later, desktop |
-| Unity | ${unityMinimum} or later, desktop |
+| Unity | ${unityMinimum} or later, desktop and Android 5.0 (API level 21) or later |
 | Web | Node ${nodeEngines}; latest two versions of Chrome, Firefox, Safari (desktop and iOS) |
 | Native platforms | Windows x64, macOS universal (Apple Silicon and Intel), Linux x64 |
 | C ABI | version ${abiVersion} (\`MUMBLE_ABI_VERSION\`) |
@@ -171,7 +171,7 @@ On macOS, if a downloaded library is blocked, run \`xattr -dr com.apple.quaranti
 
 ## Verification
 
-Before publishing${runUrl ? ` ([CI run](${runUrl}))` : ''}, the archives of this release were checked on Linux: the C tests linked against the packaged library, the packaged Godot addon passed the headless tests on Godot ${godotMinimum}, every file of the Unity package has a \`.meta\` and the three native plugins are present, and the npm tarball installed in an empty project and rendered a conformance vector. On every change, CI checks that all ${vectors.vectors.length} conformance vectors give bit-identical output through the Rust core (Linux, Windows, macOS), WebAssembly, the C ABI (including macOS x86_64 under Rosetta), Godot and C#.
+Before publishing${runUrl ? ` ([CI run](${runUrl}))` : ''}, the archives of this release were checked on Linux: the C tests linked against the packaged library, the packaged Godot addon passed the headless tests on Godot ${godotMinimum}, every file of the Unity package has a \`.meta\`, the three desktop plugins and the three Android libraries (checked for exports, architecture, 16 KB alignment and dependencies) are present, and the npm tarball installed in an empty project and rendered a conformance vector. On every change, CI checks that all ${vectors.vectors.length} conformance vectors give bit-identical output through the Rust core (Linux, Windows, macOS), WebAssembly, the C ABI (including macOS x86_64 under Rosetta), Godot and C#.
 ${generated ? `\n${generated}\n` : ''}`;
 
 writeFileSync(notesFile, notes);

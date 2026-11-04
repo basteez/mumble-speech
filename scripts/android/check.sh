@@ -28,6 +28,12 @@ if [ -z "$readelf" ]; then
   readelf=$(command -v llvm-readelf || true)
 fi
 if [ -z "$readelf" ]; then
+  # Versioned names from a distribution package, e.g. /usr/bin/llvm-readelf-18.
+  for candidate in /usr/bin/llvm-readelf-* /usr/lib/llvm-*/bin/llvm-readelf; do
+    [ -x "$candidate" ] && readelf=$candidate
+  done
+fi
+if [ -z "$readelf" ]; then
   echo "check.sh: llvm-readelf not found; set LLVM_READELF, ANDROID_NDK_HOME or put it on PATH" >&2
   exit 2
 fi

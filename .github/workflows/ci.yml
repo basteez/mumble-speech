@@ -130,6 +130,47 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: dotnet run -c Release --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj"
 
+  android:
+    # Unity on Android (specs/design.md §9.4.1, L4.13, L4.14, LD21-LD25): the three libraries are built,
+    # checked and their import settings verified; the core vectors run on 32-bit ARM under QEMU.
+    runs-on: ubuntu-latest
+    env:
+      # Pinned: an LTS NDK (LD23). Bump together with the NDK in release.yml.
+      NDK_VERSION: r27c
+      CARGO_NDK_VERSION: 3.5.4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,armv7-unknown-linux-gnueabihf
+      - uses: Swatinem/rust-cache@v2
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: false
+      - name: Export the NDK location
+        run: echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+      - name: Build the libraries for arm64-v8a, armeabi-v7a, x86_64
+        run: scripts/android/build.sh target/android
+      - name: Check the libraries (exports, machine, 16 KB alignment, dependencies)
+        run: scripts/android/check.sh target/android bindings/c/include/mumble.h
+      - name: Check the Unity import settings
+        run: scripts/android/check-metas.sh bindings/unity
+      - name: Negative self-tests of the checks
+        run: scripts/android/selftest.sh target/android
+      - name: Install QEMU and the 32-bit ARM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-user gcc-arm-linux-gnueabihf libc6-dev-armhf-cross
+      - name: Core conformance vectors on 32-bit ARM (QEMU user mode, LD25)
+        env:
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER: qemu-arm -L /usr/arm-linux-gnueabihf
+        run: cargo test -p mumble-conformance --target armv7-unknown-linux-gnueabihf
+
   site:
     # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.
     runs-on: ubuntu-latest

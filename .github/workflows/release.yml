@@ -11,6 +11,8 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/release/**
+      - scripts/android/**
+      - .cargo/**
       - CHANGELOG.md
 
 permissions:
@@ -99,6 +101,37 @@ jobs:
           path: out/
           if-no-files-found: error
 
+  android:
+    # The three Android libraries for the Unity package only (LD24), checked before packaging.
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      # Same pins as ci.yml.
+      NDK_VERSION: r27c
+      CARGO_NDK_VERSION: 3.5.4
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: false
+      - name: Export the NDK location
+        run: echo "ANDROID_NDK_HOME=${{ steps.ndk.outputs.ndk-path }}" >> "$GITHUB_ENV"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+      - name: Build and check the Android libraries
+        run: |
+          scripts/android/build.sh out
+          scripts/android/check.sh out bindings/c/include/mumble.h
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-android
+          path: out/
+          if-no-files-found: error
+
   web:
     needs: version
     runs-on: ubuntu-latest
@@ -129,7 +162,7 @@ jobs:
           if-no-files-found: error
 
   assemble:
-    needs: [version, native, web]
+    needs: [version, native, android, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -156,6 +189,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      - name: llvm-readelf for the Android library checks
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends llvm
       - name: Download Godot 4.3 (minimum supported)
         run: |
           curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip"
