@@ -80,6 +80,28 @@ Depends on the library's task D3 ([`../tasks.md`](../tasks.md)): package
   - R8.6: production JS 58.2 KB gzip, of which about 52 KB is the inlined WASM (library LD12, budget L4.2), so about 6 KB of playground JS plus 5.1 KB of CSS.
   - Still to do by hand: listening (M4, M10), M1, M3, M7, M8 and the four browsers.
 
+## Phase 7 — Shareable URL (issue #20)
+
+- [ ] **U1** `src/ui/share-url.ts`: `Settings`, `DEFAULT_SETTINGS`, `parseSettings`, `serializeSettings`, with the slider limits and steps in one table shared with `controls.ts`. — R9.1, R9.3, R9.5–R9.10 (design §7.6, D12–D14)
+  - Done when: `tests/share-url.test.ts` passes with at least these cases:
+    - **Round trip**: for each style and a sample of pitch/speed/variation values (the extremes, the defaults, `variation=0.05` and `0.95`), `parseSettings(serializeSettings(s, ''))` returns `s` and `present = true`.
+    - **Canonical form**: the defaults serialize to exactly `?text=Hello&style=beep&pitch=0&speed=15&variation=0`; `-3`, `0.05`, `1` are written in shortest form; owned keys come first in fixed order, followed by non-owned pairs in original order (`?utm=x&text=a` → `?text=a&style=…&variation=0&utm=x`).
+    - **No parameters**: `''` and `?foo=1` → defaults with `present = false`.
+    - **Missing parameters**: `?text=Hi` → text `Hi`, everything else default, `present = true`.
+    - **Malformed numbers** → default: `pitch=`, `pitch=abc`, `pitch=NaN`, `pitch=Infinity`, `pitch=0x10`, `pitch=1e3`, `pitch=+3`, `pitch=%203`, `pitch=.5`.
+    - **Out of range** → clamp: `pitch=99` → 12, `pitch=-99` → −12, `speed=0` → 5, `speed=100` → 30, `variation=2` → 1, `variation=-1` → 0.
+    - **Off step** → nearest step, ties up: `pitch=2.4` → 2, `pitch=2.5` → 3, `pitch=-2.5` → −2, `variation=0.33` → 0.35, `variation=0.12` → 0.1; no floating-point residue in the serialization (`0.35`, not `0.35000000000000003`).
+    - **Style**: `grunt` and `alphabet` accepted; `Grunt`, `robot`, `` (empty) → `beep`.
+    - **Text, empty**: `?text=` → `''` (not `Hello`), and `''` serializes as `text=`.
+    - **Text, Unicode**: accented letters, CJK, emoji with ZWJ and skin tone (`👩🏽‍🚀`), combining marks, `&`, `=`, `+`, `%`, `#`, `?`, and `\n` survive the round trip; `+` and `%20` both parse as a space; `%E0%A4%A` and `%FF` parse to text with U+FFFD and do not throw.
+    - **Line breaks**: `%0D%0A` and `%0D` parse as `\n`.
+    - **Max length**: 500 code units kept intact; 501 truncated to 500; 499 ASCII + one emoji (501 code units) truncated to 499 (no lone surrogate); the counter value R1.2 equals `text.length` after parsing.
+    - **Duplicates**: `?pitch=3&pitch=5` → 3; `?pitch=abc&pitch=5` → default (first occurrence wins, R9.8); the serialization contains each owned key once.
+- [ ] **U2** `createUrlSync` and wiring in `main.ts` and `createControls(settings)`. — R9.2, R9.4, R9.11, R9.12 (design §7.2, §7.6, D11)
+  - Done when: unit tests with fake timers and a fake `history`/`location` verify: ten `schedule` calls within 250 ms → one `replaceState` with the last settings; `replaceState` is never `pushState`; the path (`/playground/` and `/`) and the fragment are preserved; no call when the query is already canonical; a `replaceState` that throws `SecurityError` is swallowed and the next `schedule` writes the URL; `flush` writes immediately. `npm run typecheck`, `npm test` and `npm run build` pass.
+- [ ] **U3** Manual verification and changelog. — R9.2, R9.4, R9.12
+  - Done when: checklist M11–M13 passes on the deployed preview or `vite preview --base /playground/`; `CHANGELOG.md` *Unreleased* has an *Added* entry for shareable playground links (L8.4, specs rule 6).
+
 ## Manual checklist
 
 *Headless* column: outcome of the automated verification in headless Chrome on
@@ -98,6 +120,9 @@ manual verification: the audio was not listened to.
 | M8 | Enable reduced motion from the operating system | Highlight without scale animations | R6.5 | — |
 | M9 | Text `"... !!!"` | Play/Export disabled, message visible | R1.3 | ✓ |
 | M10 | `alphabet` style, speed 5, text `a e i o u` | The five Italian vowels are recognizable; the letters have almost the same note | R3.9, R3.10 | — requires listening |
+| M11 | Set text `Ciao 👋`, style `grunt`, pitch −3, speed 20, variation 0.25; copy the address bar; open it in another browser | Same controls and same sound; no autoplay; the URL keeps `/playground/` | R9.1, R9.4, R9.12 | — |
+| M12 | Type a sentence and drag every slider, then press *Back* | The address bar follows the changes; *Back* leaves the page in one step; no errors in the console | R9.2, R9.11 | — |
+| M13 | Network panel open while typing and dragging | No requests; no reload | R9.12, R8.1 | — |
 
 ## Traceability
 
@@ -111,3 +136,4 @@ manual verification: the audio was not listened to.
 | R6 | T2.x, T4.3, T4.4 |
 | R7 | T1.3, T3.1, T3.4, T4.5 |
 | R8 | T0.1, T1.x, T3.3, T4.6, T5.x |
+| R9 | U1–U3 |

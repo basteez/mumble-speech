@@ -44,9 +44,11 @@ src/
     visualizer.ts   # graphemes + dots + highlight, matched by UTF-16 offset
     event-at.ts     # event sounding at a time [R6.3]
     filename.ts     # export file name [R7.3]
+    share-url.ts    # settings <-> query string, URL sync [R9]
   main.ts           # composition and state
   style.css
 tests/ui.test.ts    # cache, eventAt, file name
+tests/share-url.test.ts  # parse, serialize, URL sync [R9]
 ```
 
 The first version had its own TypeScript core (`src/core`, `src/styles`,
@@ -115,9 +117,15 @@ interface AppState {
 ```
 
 Every change of `text`, `style` or `voice` → stop [R4.5, R5.3] → new
-`timeline` → invalidation of the audio cache → redraw of the visualizer.
-Recomputing the timeline is synchronous and costs O(n) over 500 characters, so
-no debounce. Synthesis happens only on *Play* or *Export*.
+`timeline` → invalidation of the audio cache → redraw of the visualizer →
+debounced URL update [R9.2] (§7.6). Recomputing the timeline is synchronous and
+costs O(n) over 500 characters, so no debounce there. Synthesis happens only on
+*Play* or *Export*.
+
+The initial values of the controls come from the URL [R9.4], not from the
+markup: `main.ts` parses `location.search` before creating the controls and
+passes the result to `createControls`, which writes it into the textarea, the
+radios and the sliders (and their `<output>`s).
 
 ### 7.3 Visualizer [R6.1–R6.5]
 
@@ -154,12 +162,93 @@ CSS variables: `--bg #000`, `--card #0b0d0f`, `--border #2a2d31`,
 `--text #f2f2f2`, `--muted #9aa0a6`, `--teal #3f8f78`, `--blue #3f6fc4`,
 `--olive #7d8f45`, `--orange #b85a33`.
 
+### 7.6 Shareable URL [R9]
+
+**Parameters** (D12). Full words, the same names as the UI labels and the
+library's `Voice` fields, so no mapping table is needed:
+
+| Parameter | Setting | Values | Default | Invalid → |
+|---|---|---|---|---|
+| `text` | Text | any string, ≤ 500 UTF-16 code units after normalization | `Hello` (only when missing) | truncated [R9.7] |
+| `style` | Style | `beep` \| `grunt` \| `alphabet` | `beep` | default [R9.6] |
+| `pitch` | Pitch | integer −12…12 | `0` | clamp + round, or default [R9.5] |
+| `speed` | Speed | integer 5…30 | `15` | clamp + round, or default [R9.5] |
+| `variation` | Variation | 0…1, step 0.05 | `0` | clamp + round, or default [R9.5] |
+
+Example: `https://mumble-speech.github.io/playground/?text=Hello%2C+world%21&style=grunt&pitch=-3&speed=15&variation=0.25`.
+
+**Module** `src/ui/share-url.ts`, pure except for `createUrlSync`, testable in
+Node (Vitest) with `URLSearchParams`:
+
+```ts
+interface Settings { text: string; style: StyleId; pitch: number; speed: number; variation: number }
+
+const DEFAULT_SETTINGS: Settings;          // R1.1, R2.2, R4.1; ranges and steps shared with controls.ts
+
+/** `present` = at least one settings parameter in `search` (R9.4). */
+function parseSettings(search: string): { settings: Settings; present: boolean };
+
+/** Canonical query string (with leading `?`) for `settings`, keeping the
+ *  parameters of `search` that the playground does not own (R9.3, R9.10). */
+function serializeSettings(settings: Settings, search: string): string;
+
+/** Debounced `history.replaceState` (R9.2, R9.11). `history`, `location` and
+ *  the timer are injected so tests run with fakes. */
+function createUrlSync(deps: { history: History; location: Location; delayMs?: number }): {
+  schedule(settings: Settings): void;   // restarts the timer
+  flush(): void;                        // writes now (used on load, R9.4)
+};
+```
+
+**Parsing.** `new URLSearchParams(search)` does the decoding (`+` and `%20` as
+space, invalid sequences to U+FFFD, R9.9) and `get()` returns the first
+occurrence (R9.8). Numbers must match `^-?\d+(\.\d+)?$` (otherwise default),
+then are clamped and snapped with `round(v / step) × step` (`Math.round`, ties
+up); variation is computed as `Math.round(v × 20) / 20` to avoid floating-point
+residue (R9.5). Text: `\r\n` and lone `\r` → `\n`, then cut at 500 code units
+and drop a trailing high surrogate (R9.7). Slider limits and steps are taken
+from one table shared with `controls.ts` (the markup's `min`/`max`/`step` must
+match it), so URL values and slider values cannot disagree.
+
+**Serialization.** A new `URLSearchParams` with the five owned keys in fixed
+order, `String(n)` for numbers (shortest form: `-3`, `0.05`), then every
+non-owned pair of the old `search` in order (R9.10). `URLSearchParams.toString()`
+does the UTF-8 percent-encoding (R9.9). An empty text is written as `text=`.
+
+**Hook.** `main.ts`:
+
+1. on start, `parseSettings(location.search)` → `createControls(settings)`; if
+   `present`, `flush()` writes the canonical URL once (R9.4);
+2. at the end of `onInputChange`, `urlSync.schedule(settings)` (R9.2).
+
+Playback is not involved in either step (R9.12).
+
+**Writing the URL.** `history.replaceState(history.state, '', location.pathname
++ query + location.hash)`: the path is read from `location`, never from a
+constant, so the page works both at `/` (`vite dev`) and under `/playground/`
+(`--base /playground/` in `build:site`) [R9.3]. The call is skipped when the
+query string is already the canonical one, and is wrapped in `try/catch`: a
+`SecurityError` (Safari allows about 100 calls per 10 s; Chrome throttles
+navigation floods) is ignored and the next `schedule` retries [R9.11].
+
+**Debounce.** 250 ms trailing (D11): a slider drag or fast typing fires dozens of
+`input` events per second, which would hit the browser limits above; 250 ms is
+short enough that the address bar is current by the time the user reaches it
+(R9.2 bound: 500 ms).
+
+**Privacy.** The text is in the URL, so it ends up in the browser history and,
+when someone opens a shared link, in the request to the static host (GitHub
+Pages). `replaceState` makes no request, so nothing leaves the browser while
+typing [R9.12]; the page still makes no network calls after loading [R8.1].
+Accepted for the playground (D10).
+
 ## 8. Test strategy
 
 | Level | What | Requirements |
 |---|---|---|
 | Library (core, WASM, vectors) | sound, timeline, styles, WAV, determinism, performance: see the library's test strategy | R1.4, R1.5, R3.x, R4.2, R4.3, R5.5, R7.1, R7.4 |
 | Unit (Vitest, node) | render cache, `eventAt`, export file name | R6.3, R7.2, R7.3 |
+| Unit (Vitest, node) | `parseSettings`, `serializeSettings`, `createUrlSync` with fake history and timers | R9.1–R9.11 |
 | Smoke (headless Chrome, not in the repo) | play, highlight of every grapheme (accents, emoji), stop on change, export, 320 px layout, no requests | R5, R6, R7, R8.1, M2, M6, M9 |
 | Manual | checklist in `tasks.md` (audio, sync, browsers, a11y) | the rest |
 
@@ -179,3 +268,8 @@ that checks that the export uses the cached samples.
 | D7 | Highlight compensated by `outputLatency` | Raw `currentTime` | With Bluetooth headphones latency reaches 100–200 ms, beyond the R6.3 limit |
 | D8 | Pixelify Sans instead of Silkscreen | Silkscreen | Silkscreen has only uppercase and small caps; the reference shows real lowercase |
 | D9 | `alphabet`: vowels with 3 cascaded formants, each vowel sounds as itself, almost constant pitch | 2 narrow parallel band-passes, vowels from the English name, ±6 semitones between letters | Listening feedback: it did not sound like Animal Crossing and the vowels were not recognizable (the `a` sounded "e", the `i` sounded "a"). The narrow band-passes whistle, the cascade gives credible vowels; the note jumps made the result sound like a melody |
+| D10 | Settings in the query string (`?text=…`) | Fragment (`#text=…`), not sent to the server | Issue #20 asks for GET parameters; query strings are the familiar shape for shared links and survive tools that strip fragments. The cost is that a shared text reaches the static host's request logs; acceptable for a demo page that stores nothing (§7.6 *Privacy*) |
+| D11 | `history.replaceState`, debounced 250 ms | `pushState` per change; no debounce | One history entry per keystroke or slider step would make *Back* useless; undo inside the page is not a goal. Without debounce, slider drags exceed Safari's and Chrome's History API rate limits |
+| D12 | Full-word parameter names (`text`, `style`, `pitch`, `speed`, `variation`); all five always written, defaults included | The issue's `p`/`s`/`v`/`t`; omitting defaults | Single letters are ambiguous (`s` = style or speed?) and save ~25 characters on a URL dominated by the text. Writing the defaults keeps a shared link sounding the same even if a future revision changes a default |
+| D13 | No seed in the URL | A `seed` parameter | The playground has no seed control and always uses the library default 0, so the seed does not vary between links. A hidden URL-only setting would make two identical-looking pages sound different. A future seed control adds a `seed` parameter (default 0, so old links keep their sound) |
+| D14 | Out-of-range or off-step numbers are clamped and rounded; malformed ones fall back to the default | Reject the whole URL; ignore only out-of-range values | A hand-edited or truncated link still opens with the closest sound. Clamping and step rounding are exactly what the range input does to an out-of-range value, so the URL and the slider agree |

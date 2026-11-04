@@ -120,12 +120,73 @@ verification (checklist in `tasks.md`).
 - **R8.6** The production bundle (JS + CSS, gzip, font excluded) SHALL stay under 50 KB. [man]
 - **R8.7** Dark theme as in the reference, with text/background contrast of at least WCAG AA. [man]
 
+### R9 — Shareable URL
+
+*As a user I want the page address to describe the sound I set up, so that I can
+send it to a friend and they hear exactly the same thing.* (Issue #20; design §7.6,
+D10–D14.)
+
+"Settings" below means the inputs that determine the sound in the playground:
+text, style, pitch, speed and variation. The seed is not a setting: the playground
+always uses the library default (0) and has no seed control (D13).
+
+- **R9.1** The query string of the page URL SHALL carry the settings, one parameter
+  each, with the names and formats in design §7.6. [auto]
+- **R9.2** WHEN the user changes the text, the style or a voice parameter, the system
+  SHALL update the URL to the canonical form of the new settings (R9.10) within
+  500 ms of the last change, replacing the current history entry: editing SHALL NOT
+  add history entries, so *Back* leaves the page (D11). [auto] [man]
+- **R9.3** The URL update SHALL change only the query string: the path (the site
+  serves the page under `/playground/`), the fragment and any query parameter the
+  playground does not own SHALL be preserved. [auto]
+- **R9.4** WHEN the page loads with at least one settings parameter in the URL, the
+  system SHALL initialize every control from the URL (applying R9.5–R9.8 to each
+  value) and SHALL replace the URL with its canonical form without adding a history
+  entry. WHEN the page loads with no settings parameter, the system SHALL use the
+  defaults (R1.1, R2.2, R4.1) and SHALL leave the URL unchanged. [auto]
+- **R9.5** IF a numeric parameter (`pitch`, `speed`, `variation`) is missing or is
+  not a plain decimal number (for example empty, `abc`, `NaN`, `Infinity`, `0x10`,
+  `1e3`, ` 3`), the system SHALL use that parameter's default (R4.1). IF it is a
+  plain decimal number outside the R4.1 range, the system SHALL clamp it to the
+  range; IF it is not a multiple of the R4.1 step, the system SHALL round it to the
+  nearest step, ties rounding up (D14). [auto]
+- **R9.6** IF `style` is missing or is not exactly one of `beep`, `grunt`, `alphabet`
+  (case-sensitive), the system SHALL use the default style `beep` (R2.2). [auto]
+- **R9.7** IF `text` is missing, the system SHALL use the default text `Hello`
+  (R1.1). IF it is present, including empty, the system SHALL use its decoded value
+  with line breaks normalized to `\n` (as the textarea does), truncated to the R1.2
+  limit of 500 UTF-16 code units; truncation SHALL NOT split a surrogate pair (an
+  unpaired high surrogate left at the end is dropped). [auto]
+- **R9.8** IF a settings parameter appears more than once, the system SHALL use its
+  first occurrence. IF the URL contains parameters the playground does not own, the
+  system SHALL ignore them (and keep them, R9.3). [auto]
+- **R9.9** The text SHALL be encoded as UTF-8 with percent-encoding
+  (`application/x-www-form-urlencoded`, space as `+`). Parsing SHALL accept both `+`
+  and `%20` as a space, and SHALL decode an invalid percent or UTF-8 sequence to
+  U+FFFD instead of failing. For every valid settings value `s` (any Unicode text up
+  to 500 code units, including emoji, combining marks, line breaks, `&`, `=`, `+`,
+  `%`, `#`), parsing the canonical serialization of `s` SHALL return `s`. [auto]
+- **R9.10** The canonical form SHALL contain all five settings parameters, defaults
+  included, exactly once each, in the order `text`, `style`, `pitch`, `speed`,
+  `variation`, followed by the parameters the playground does not own in their
+  original order. Numbers SHALL be written in shortest decimal form after the R9.5
+  rounding (`-3`, `15`, `0`, `0.05`, `1`) (D12). [auto]
+- **R9.11** IF the browser rejects a URL update (for example because of its rate
+  limit on the History API), the system SHALL keep working without showing an
+  error, and the next change SHALL try again. [auto]
+- **R9.12** Updating the URL SHALL NOT reload the page, start or stop playback by
+  itself, or make a network request (R8.1). Loading a URL with settings SHALL NOT
+  start playback (R8.4). [man]
+
 ## 5. Out of scope (v1)
 
 - Real text-to-speech or syllable recognition.
 - Sounds based on audio samples or uploaded by the user.
 - Multiple voices/characters per style, savable presets.
-- Shareable links, settings persistence.
+- Settings persistence across visits (for example in local storage); shareable
+  links are in scope since R9.
+- A *Copy link* button or share sheet: the address bar is the share affordance (R9).
+- A seed control, and the seed in the URL (D13).
 - Automatic intonation (for example rising pitch on `?`).
 - Playback while typing.
 - Export in formats other than WAV.

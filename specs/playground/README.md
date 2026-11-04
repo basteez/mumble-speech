@@ -31,3 +31,4 @@ package `@mumble-speech/web` (tasks P1–P3).
 - [x] requirements.md approved (2026-10-19)
 - [x] design.md approved (2026-10-19), revised during implementation: D5–D9
 - [x] tasks.md approved (2026-10-19)
+- [ ] Revision for issue #20, shareable URL (R9, design §7.6, D10–D14, tasks U1–U3): pending approval in its pull request
