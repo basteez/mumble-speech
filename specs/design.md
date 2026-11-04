@@ -171,7 +171,7 @@ JSON schema (`version: 2` since LD14; values below are illustrative):
 - `vectors.h` carries, per vector, text, voice, sample rate, expected sample
   count, hash, event count and error code (events are checked by the other
   suites; C checks counts and hash).
-- `bindings/unity/Tests/EditMode/Vectors.cs` carries the same data plus every
+- `bindings/unity/Tests/Runtime/Vectors.cs` carries the same data plus every
   event (UTF-16 start and length, times, variant) as C# literals, so Unity
   needs no JSON parser; doubles are written in round-trip form and compared
   exactly. It is the third generated file checked by `check`.
@@ -540,9 +540,11 @@ later, C# 9). Namespace `MumbleSpeech`.
   committed, as are `.meta` files for every package asset (required for
   immutable packages).
 - `Samples~/Basic`: a script that types a line with a `MumbleSpeaker` [L4.9].
-- `Tests/EditMode` (NUnit): all conformance vectors through `MumbleSpeech.Core`
-  (`Vectors.cs` generated, checks in `VectorChecks.cs`, shared with CI), plus
-  Speaker/render equivalence and error codes.
+- `Tests/Runtime` (NUnit, all platforms, §9.4.1): `Vectors.cs` (generated) and
+  `VectorChecks.cs`, shared with CI, and a PlayMode test that runs every
+  conformance vector through `MumbleSpeech.Core`, in the editor or in a player.
+- `Tests/EditMode` (NUnit, editor): the same checks through
+  `MumbleSpeech.Tests.Runtime`, plus Speaker/render equivalence and error codes.
 - Verification (LD13): CI job `unity-interop` builds `Runtime/Core` and the
   shared checks with the .NET SDK on Linux, **C# 9** like Unity, and runs every
   vector against the real native library: this covers struct layout,

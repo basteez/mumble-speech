@@ -1,8 +1,23 @@
 #!/usr/bin/env sh
-# Builds the C ABI library and copies it into Plugins/ for this machine (specs/design.md §9.4).
+# Builds the C ABI library and copies it into Plugins/ (specs/design.md §9.4, §9.4.1).
+# Usage: build.sh            the library for this machine (desktop)
+#        build.sh android    the Android libraries (needs ANDROID_NDK_HOME and cargo-ndk), checked
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
+case "${1:-}" in
+  "") ;;
+  android)
+    "$root/scripts/android/build.sh" "$here/Plugins/Android/libs"
+    "$root/scripts/android/check.sh" "$here/Plugins/Android/libs" "$root/bindings/c/include/mumble.h"
+    "$root/scripts/android/check-metas.sh" "$here"
+    exit 0
+    ;;
+  *)
+    echo "usage: $0 [android]" >&2
+    exit 2
+    ;;
+esac
 case "$(uname -s)" in
   Darwin)
     # Universal library, so both Apple Silicon and Intel editors load it.

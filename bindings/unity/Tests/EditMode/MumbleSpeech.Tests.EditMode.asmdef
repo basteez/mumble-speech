@@ -1,7 +1,7 @@
 {
     "name": "MumbleSpeech.Tests.EditMode",
     "rootNamespace": "MumbleSpeech.Tests",
-    "references": ["MumbleSpeech.Core", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+    "references": ["MumbleSpeech.Core", "MumbleSpeech.Tests.Runtime", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
