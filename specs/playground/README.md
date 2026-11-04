@@ -31,4 +31,4 @@ package `@mumble-speech/web` (tasks P1–P3).
 - [x] requirements.md approved (2026-10-19)
 - [x] design.md approved (2026-10-19), revised during implementation: D5–D9
 - [x] tasks.md approved (2026-10-19)
-- [ ] Revision for issue #20, shareable URL and *Copy link* button (R9.1–R9.20, design §7.6–§7.7, D10–D16, tasks T7.1–T7.4): pending approval in its pull request
+- [x] Revision for issue #20, shareable URL and *Copy link* button (R9.1–R9.20, design §7.6–§7.7, D10–D16, tasks T7.1–T7.4): approved (2026-11-04, PR #27)
