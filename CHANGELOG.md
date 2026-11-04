@@ -7,6 +7,14 @@ or public API adds an entry to *Unreleased*.
 
 ## [Unreleased]
 
+### Added
+
+- **Unity on Android** ([#25](https://github.com/basteez/mumble-speech/issues/25)): the
+  Unity package includes the native library for `arm64-v8a`, `armeabi-v7a` and
+  `x86_64`, Android 5.0 (API level 21) or later, aligned to 16 KB pages as Google Play
+  requires. No code changes are needed: build your project for Android. Other ways of
+  using Android (C archive, Godot) and iOS are not covered yet.
+
 ### Changed
 
 - Release notes link the release on every registry (npm, crates.io, docs.rs, the Unity
@@ -17,6 +25,11 @@ or public API adds an entry to *Unreleased*.
 - Publishing to npm and crates.io uses trusted publishing (OIDC): no tokens are stored.
 - The Godot addon is on the [Godot Asset Library](https://godotengine.org/asset-library/asset/5553)
   and the Unity package on [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/).
+
+### Known issues
+
+- Unity on Android is built and checked in CI (exported functions, architecture, 16 KB
+  alignment) but has not been run on a device yet; please report problems.
 
 ## [0.1.0] - 2026-10-24
 
