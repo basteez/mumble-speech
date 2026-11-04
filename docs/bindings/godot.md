@@ -45,6 +45,14 @@ $MumbleTypewriter.type_text("Guh-huh! Did you bring the honey?")
 Indices are code point indices of the Godot `String`, which is how
 `visible_characters` counts. `Mumble.render` events carry `style` and `variant`.
 
+`MumbleSpeaker` always synthesizes at `MumbleSpeaker.SAMPLE_RATE` (48,000 Hz), whatever
+the output rate of the device, and Godot resamples the stream on playback; nothing is
+resampled on a 48 kHz output. A line therefore gives the same samples on every machine
+(bit-identity holds for the same text, voice and sample rate; what the player hears is
+identical up to Godot's resampler, which the library does not control).
+`render_stream` returns a 16-bit stream at that rate. For another rate, call
+`Mumble.render` with an explicit `sample_rate`.
+
 `character_spoken` and `finished` follow the audio clock (playback position, time since
 the last mix, output latency), so they match what the player hears.
 

@@ -2,7 +2,7 @@
 
 Video-game "mumble speech" generated at runtime: `Beep` (Undertale), `Grunt`
 (Banjo-Kazooie) and `Alphabet` (Animal Crossing). Same output, bit for bit, as
-the web, C and Godot bindings. Unity 2022.3 LTS or later, desktop (Windows,
+the web, C and Godot bindings for the same text, voice and sample rate. Unity 2022.3 LTS or later, desktop (Windows,
 macOS, Linux).
 
 ## Install
@@ -67,12 +67,16 @@ typewriter.TypeText("Guh-huh! Did you bring the honey?");   // Skip(), IsTyping,
 | `MumbleTypewriterTMP` (MonoBehaviour) | `TypeText`, `Skip`, `IsTyping`, `onFinished` |
 | `Mumble`, `Speaker` (plain C#) | raw samples and events, typewriter speaker, WAV encoding |
 
+`MumbleSpeaker` always synthesizes at 48 kHz (`Mumble.SpeakerSampleRate`), whatever the
+output rate, and Unity resamples on playback, so a line gives the same samples on every
+device. Use `Mumble.Render` with an explicit rate for anything else.
+
 Nothing is drawn by the package: the TMP typewriter only sets `maxVisibleCharacters`.
 Events from `Mumble.Render` carry `Style` and `Variant` (which grunt 0–3, which letter
 0–25, 26 neutral): use them for mouth shapes or effects.
 
 ## Tests
 
-See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U3 and U5) for trying the package
+See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U5) for trying the package
 in the Unity editor, including the EditMode tests that run all conformance vectors
 through the native library.

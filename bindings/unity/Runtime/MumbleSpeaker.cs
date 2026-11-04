@@ -45,7 +45,7 @@ namespace MumbleSpeech
         public void Say(string text)
         {
             Stop();
-            int sampleRate = AudioSettings.outputSampleRate;
+            int sampleRate = Mumble.SpeakerSampleRate;
             MumbleRender render = Mumble.Render(text, Settings, sampleRate);
             _events = render.Events;
             _nextEvent = 0;
@@ -63,7 +63,7 @@ namespace MumbleSpeech
         /// </summary>
         public float SpeakCharacter(string text)
         {
-            if (_typewriter == null) _typewriter = new Speaker(Settings, AudioSettings.outputSampleRate);
+            if (_typewriter == null) _typewriter = new Speaker(Settings, Mumble.SpeakerSampleRate);
             MumbleUtterance u = _typewriter.Next(text);
             if (u.Samples.Length > 0) Play(u.Samples, _typewriter.SampleRate, 0);
             return (float)u.Advance;

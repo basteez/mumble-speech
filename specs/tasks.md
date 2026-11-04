@@ -86,6 +86,18 @@ task cites the requirements it covers.
 - [ ] **K3** After the first release: trusted publishing on npm and crates.io, tokens deleted; OpenUPM submission; Godot Asset Library submission. — L9
   - Progress: tokens revoked (2026-10-24); OpenUPM entry approved (2026-10-24); Godot Asset Library entry published as asset 5553 (2026-10-26). Trusted publishing still to be confirmed by K4.
 
+## Phase M — Fixes after the first release
+
+- [ ] **M1** Engine speakers at a fixed 48 kHz (issue #21): Godot `MumbleSpeaker.SAMPLE_RATE` and Unity `Mumble.SpeakerSampleRate` (48,000) used by `say`/`Say`, `speak_character`/`SpeakCharacter` and `render_stream`; no read of the device rate; CI runs the Godot tests under four mix rates; README, `docs/guide/concepts.md` (determinism), `docs/bindings/godot.md`, `docs/bindings/unity.md` and the binding READMEs state the scope of bit-identity and the fixed rate. — L4.10, L7.5, L1.4, LD17, LD18
+  - Done when, Godot (`run_tests.gd`, each CI run with `MUMBLE_EXPECT_MIX_RATE` set; the test fails if `AudioServer.get_mix_rate()` differs from it):
+    - happy path, under mix rates 44,100, 48,000, 22,050 and 96,000: `render_stream("Hello")` has `mix_rate` 48,000 and data equal to the 16-bit encoding of `Mumble.render("Hello", voice, 48000)` (16,800 samples), the same bytes in every run; the same check for a `grunt` and an `alphabet` voice with variation and seed;
+    - `speak_character("H")` returns `1 / speed` and the internal player's stream has `mix_rate` 48,000; `speak_character(" ")` plays nothing and returns 1 slot; `say("Hé 👋!")` emits `character_spoken` in order and then `finished` under every mix rate;
+    - edge cases: empty text (`render_stream("")` is a 48 kHz stream equal to the encoding of `Mumble.render("", …, 48000)`, `say("")` emits `finished` and no `character_spoken`); a ~1,000-character line (stream length equals the render's sample count at 48 kHz); the 48,000 run is the no-resampling case and matches what a 48 kHz device produced before the change;
+    - errors: an invalid voice still logs the error, `speak_character` returns 0 and `render_stream` returns null; no `SampleRateOutOfRange` at any mix rate;
+    - the vectors and existing tests still pass in every run.
+  - Done when, Unity: `unity-interop` checks `Mumble.SpeakerSampleRate == 48000` and that `Render("Hello", default, SpeakerSampleRate)` has 16,800 samples; review confirms `Runtime/` does not read `AudioSettings.outputSampleRate`; checklist U4 added (run with G3 by whoever verifies Unity).
+  - Done when, docs: the site builds (L7.3) and the pages above no longer suggest bit-identity per device without the 48 kHz note (L7.5).
+
 ## Manual checklist
 
 | ID | Steps | Expected | Requirements |
@@ -96,6 +108,7 @@ task cites the requirements it covers.
 | U1 | Import the package from a local path in Unity 2022.3, open the `Basic` sample | The sample plays without errors in the console | L4.7, L4.9 |
 | U2 | Run the EditMode tests | All vectors pass | L5.2 |
 | U3 | With TextMeshPro installed, use the typewriter | Text and sound synchronized | L4.7 |
+| U4 | Set *Project Settings → Audio → System Sample Rate* to 44,100, then 48,000 (and 22,050 or 96,000 if the device allows); each time call `Say("Hello")` and type a line with `SpeakCharacter` | The clip has `frequency` 48,000 and 16,800 samples every time; `OnCharacter` fires 5 times then `OnFinished`; pitch and tempo sound the same at every setting | L4.10 |
 | U5 | Without building, add `bindings/unity/package.json` from a source checkout and call `Say` | The console shows the exception naming the missing library, its `Plugins/` folder and the install options; after installing by git URL, the sample plays | L4.11 |
 
 ## Verifiability on this machine
@@ -118,9 +131,10 @@ task cites the requirements it covers.
 | L4.6 | F1–F3 |
 | L4.7 | G1–G3 |
 | L4.8–L4.9 | F2, G2, H2 |
+| L4.10 | M1 |
 | L4.11–L4.12 | G4 |
 | L5 | C1, C2, D2, E2, F2, G2, H1 |
-| L7 | J1–J3 |
+| L7 | J1–J3, M1 (L7.5) |
 | L8 | H1, H3, H4 |
 | L9 | K1–K3, H3 |
 | L6 | A1b, A2, D3, P1–P3 |
