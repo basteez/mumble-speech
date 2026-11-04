@@ -26,7 +26,7 @@ internal static class Program
         {
             new KeyValuePair<string, Action>("Mumble.Render", () => Mumble.Render("Hello", MumbleVoiceSettings.Default)),
             new KeyValuePair<string, Action>("Mumble.EncodeWav", () => Mumble.EncodeWav(new float[] { 0f }, Mumble.DefaultSampleRate)),
-            new KeyValuePair<string, Action>("Mumble.NativeAbiVersion", () => { uint v = Mumble.NativeAbiVersion; }),
+            new KeyValuePair<string, Action>("Mumble.NativeAbiVersion", () => { _ = Mumble.NativeAbiVersion; }),
             new KeyValuePair<string, Action>("new Speaker", () => new Speaker(MumbleVoiceSettings.Default)),
         };
         string[] expected =
