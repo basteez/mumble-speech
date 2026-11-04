@@ -1,4 +1,4 @@
-name: Unity verification report (U1–U3)
+name: Unity verification report (U1–U4)
 description: Results of the manual Unity checklist in bindings/unity/TESTING.md.
 title: "[Unity check]: Unity <version> on <OS>"
 labels: ["unity", "verification"]
@@ -54,6 +54,13 @@ body:
     id: u3
     attributes:
       label: "U3: TextMeshPro typewriter"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: u4
+    attributes:
+      label: "U4: 48 kHz at any output rate"
       options: ["Pass", "Fail", "Not tested"]
     validations:
       required: true
