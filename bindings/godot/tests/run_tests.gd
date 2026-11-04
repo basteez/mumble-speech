@@ -37,6 +37,8 @@ func _run() -> void:
 	test_vectors()
 	await test_typewriter()
 	await test_say()
+	test_speaker_streams()
+	await test_say_order()
 	# The AudioServer releases finished playbacks on a later mix cycle; quitting right away
 	# would report them as leaked.
 	for i in 30:
@@ -216,7 +218,7 @@ func test_speaker_streams() -> void:
 		player = speaker.get_child(0) as AudioStreamPlayer
 	check(player != null and player.stream != null, "speak_character plays through the internal player")
 	if player != null and player.stream != null:
-		var h_stream := player.stream as AudioStreamWav
+		var h_stream := player.stream as AudioStreamWAV
 		check(h_stream != null and h_stream.mix_rate == 48000, "the typewriter's stream has mix_rate 48000")
 		var before := player.stream
 		var space_advance: float = speaker.speak_character(" ")

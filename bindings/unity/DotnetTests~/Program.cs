@@ -19,7 +19,8 @@ internal static class Program
     // The speakers synthesize at Mumble.SpeakerSampleRate, a constant: no device rate is involved (LD17).
     private static void CheckSpeakerRate(List<string> failures)
     {
-        const int rate = Mumble.SpeakerSampleRate;
+        // Not const: a constant condition below would be CS0162 (unreachable code), an error here.
+        int rate = Mumble.SpeakerSampleRate;
         if (rate != 48000) failures.Add($"SpeakerSampleRate is {rate}, expected 48000");
         MumbleVoiceSettings voice = MumbleVoiceSettings.Default;
 
