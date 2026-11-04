@@ -7,6 +7,12 @@ or public API adds an entry to *Unreleased*.
 
 ## [Unreleased]
 
+### Added
+
+- **Shareable playground links**: the text, style, pitch, speed and variation are kept in the
+  page address (`?text=Hello&style=grunt&pitch=-3&speed=15&variation=0.25`), so copying the
+  URL shares the exact sound. Opening a link restores the controls without playing anything.
+
 ### Changed
 
 - Release notes link the release on every registry (npm, crates.io, docs.rs, the Unity

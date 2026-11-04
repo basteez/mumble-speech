@@ -5,7 +5,7 @@ import { createBufferCache } from './audio/cache.ts';
 import { createControls } from './ui/controls.ts';
 import { eventAt } from './ui/event-at.ts';
 import { exportFilename } from './ui/filename.ts';
-import { DEFAULT_STYLE } from './ui/styles.ts';
+import { createUrlSync, parseSettings } from './ui/share-url.ts';
 import { createVisualizer } from './ui/visualizer.ts';
 
 /** WAV export rate (R7.1). */
@@ -21,7 +21,9 @@ interface Line {
 await init();
 
 // App state: specs/playground/design.md §7.2
-const controls = createControls(DEFAULT_STYLE);
+const initial = parseSettings(location.search); // before the controls exist (R9.4)
+const controls = createControls(initial.settings);
+const urlSync = createUrlSync({ history, location });
 const visualizer = createVisualizer(document.getElementById('viz')!);
 const player = new WebAudioPlayer();
 const cache = createBufferCache(async (line: Line) => render(line.text, line.voice, SAMPLE_RATE).samples);
@@ -69,7 +71,10 @@ function highlight() {
   frame = requestAnimationFrame(highlight);
 }
 
-controls.onChange(onInputChange);
+controls.onChange(() => {
+  onInputChange();
+  urlSync.schedule({ text: controls.text, style: controls.style, ...controls.voice }); // R9.2
+});
 
 controls.onPlay(async () => {
   if (playback === 'playing') {
@@ -112,3 +117,7 @@ controls.onExport(async () => {
 });
 
 onInputChange();
+if (initial.present) {
+  urlSync.schedule(initial.settings);
+  urlSync.flush(); // canonical URL on load, no history entry (R9.4)
+}
