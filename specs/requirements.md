@@ -107,6 +107,8 @@ existing tests and commits continue to refer to them.
 - **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop. [man]
 - **L4.8** Every binding SHALL use the same concepts (Voice, render, timeline, Speaker, advance) with names adapted to the platform's conventions. [rev]
 - **L4.9** Every binding SHALL include a minimal runnable example. [man]
+- **L4.11** (Unity) IF the native library cannot be loaded (missing from `Plugins/`, or not loadable on this platform or architecture), THEN the first call into the interop layer (`Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion`, `new Speaker`) SHALL throw an exception of the same type the runtime raised, with the original as inner exception, whose message names the library file and the `Plugins/` folder expected for the current platform and says how to get the library: install the package by git URL (`#upm`), from OpenUPM or from the release tarball, or build it from source. WHEN the library loads, behavior SHALL be unchanged. [auto]
+- **L4.12** (Unity) The Unity README and documentation page SHALL present installation by git URL, OpenUPM or release tarball as the way to install the package, and SHALL state that `bindings/unity` in a source checkout contains no native libraries and must be built before it is added to a project, with build instructions for macOS, Linux and Windows (including Windows without a POSIX shell). The build script SHALL exit with an error, not silently, on a platform it does not support. [rev]
 
 ### L5 — Conformance and quality
 
