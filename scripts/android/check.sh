@@ -61,12 +61,12 @@ if [ ! -s "$tmp/declared" ]; then
   fail "no function declarations found in $header"
 fi
 
-# Nothing but the three ABI folders.
+# Nothing but the three ABI folders (and, in the Unity package, their .meta files).
 for entry in "$dir"/* "$dir"/.[!.]*; do
   [ -e "$entry" ] || continue
   name=$(basename "$entry")
   case " $abis " in
-    *" $name "*) ;;
+    *" $name "* | *" ${name%.meta} "*) ;;
     *) fail "unexpected entry '$name' in $dir (expected only: $abis)" ;;
   esac
 done

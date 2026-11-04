@@ -578,7 +578,7 @@ and `libm` symbols, so a lower level costs nothing.
 **Toolchain** (LD23): `cargo-ndk` (version pinned in CI) with a pinned Android
 NDK (an LTS release, r27 or later, version recorded in the workflow; on GitHub's
 Ubuntu runners via `nttld/setup-ndk` rather than the preinstalled "latest" NDK).
-`cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -P 21 -o <out> build --release
+`cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 21 -o <out> build --release
 -p mumble-ffi` writes `<out>/<abi>/libmumble_ffi.so`, the layout the package
 uses. 16 KB page size: `.cargo/config.toml` (new, at the repository root) adds
 `-C link-arg=-Wl,-z,max-page-size=16384` to `rustflags` of the three Android
@@ -593,7 +593,8 @@ Scripts, one source for local builds, CI and release:
   `ANDROID_NDK_HOME` (or `ANDROID_NDK_ROOT`) and installs the three Rust targets.
 - `scripts/android/check.sh <dir> <mumble.h>` [L4.14], with `llvm-readelf` from
   the NDK; for each `<dir>/<abi>/libmumble_ffi.so` it fails unless:
-  - the three ABI folders are present, and nothing else;
+  - the three ABI folders are present, and nothing else (except their `.meta`
+    files, when run on the Unity package);
   - the ELF header is a shared object (`DYN`) for the folder's machine
     (`AArch64`, `ARM`, `X86-64`);
   - the set of defined, exported dynamic functions named `mumble_*` equals the
@@ -648,7 +649,8 @@ The desktop `.meta` files already leave Android disabled (it has no entry and
 `Any` is disabled); the check below keeps it so. `scripts/android/check-metas.sh
 <package dir>` (run in the `android` CI job and in release `verify`) fails
 unless each Android library `.meta` enables Android only, with the `CPU` of its
-folder, and no desktop library `.meta` enables Android. The exact Unity
+folder, no desktop library `.meta` enables Android, and every `.meta` in the
+package has a well-formed GUID that no other `.meta` shares. The exact Unity
 serialization (key names and values above) is confirmed by U6, the inspector
 check on a real project; if Unity rewrites the file on import, the committed file
 is updated to Unity's form.

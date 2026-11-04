@@ -2,7 +2,8 @@
 # Checks the Unity import settings of the Android libraries (specs/design.md §9.4.1, L4.13).
 # Usage: scripts/android/check-metas.sh <package dir>   (bindings/unity or an extracted package)
 # Fails unless each Plugins/Android/libs/<abi>/libmumble_ffi.so.meta enables Android only, with
-# the CPU of its folder, and no other plugin .meta enables Android (or every platform).
+# the CPU of its folder, no other plugin .meta enables Android (or every platform), and every .meta
+# in the package has a valid GUID that no other .meta shares.
 set -u
 
 if [ "$#" -ne 1 ]; then
@@ -87,6 +88,22 @@ done > "$tmp"
 if [ -s "$tmp" ]; then
   while read -r line; do fail "desktop plugin enables Android or every platform: $line"; done < "$tmp"
 fi
+
+# Fixed GUIDs: Unity identifies an asset by its GUID, so every .meta in the package needs a valid one,
+# and no two may share it (two libraries with one GUID would share import settings).
+find "$pkg" -name '*.meta' | sort | while read -r meta; do
+  guid=$(sed -n 's/^guid: *//p' "$meta" | head -n 1)
+  case $guid in
+    "" | *[!0-9a-f]*) echo "BAD $meta" ;;
+    *) if [ "${#guid}" -eq 32 ]; then echo "$guid $meta"; else echo "BAD $meta"; fi ;;
+  esac
+done > "$tmp"
+while read -r guid meta; do
+  [ "$guid" != BAD ] || fail "$meta has no valid guid (32 lowercase hex digits)"
+done < "$tmp"
+for dup in $(grep -v '^BAD ' "$tmp" | cut -d' ' -f1 | sort | uniq -d); do
+  fail "duplicate GUID $dup in: $(grep "^$dup " "$tmp" | cut -d' ' -f2- | tr '\n' ' ')"
+done
 
 if [ "$failures" -ne 0 ]; then
   echo "check-metas.sh: $failures problem(s) found" >&2

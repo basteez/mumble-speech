@@ -188,6 +188,13 @@ good_tree "$work/extra-file"
 echo "stray" > "$work/extra-file/README.txt"
 fail "unexpected file next to the ABI folders" "unexpected entry 'README.txt'" "$check" "$work/extra-file" "$header"
 
+# In the Unity package the ABI folders have .meta files next to them: allowed; any other .meta is not.
+good_tree "$work/folder-metas"
+touch "$work/folder-metas/arm64-v8a.meta" "$work/folder-metas/armeabi-v7a.meta" "$work/folder-metas/x86_64.meta"
+pass "ABI folder .meta files are allowed" "all Android libraries pass" "$check" "$work/folder-metas" "$header"
+touch "$work/folder-metas/x86.meta"
+fail ".meta of an unexpected entry" "unexpected entry 'x86.meta'" "$check" "$work/folder-metas" "$header"
+
 # A library the fake cannot read is reported, not skipped.
 good_tree "$work/unreadable"
 rm -f "$work/unreadable/x86_64/libmumble_ffi.so.fx-h"
@@ -263,11 +270,14 @@ fail "Android library without a .meta" "has no .meta" "$metas" "$work/pkg"
 pkg; sed -i.bak 's/^  userData: $/  - first:\n      Android: Android\n    second:\n      enabled: 1\n      settings:\n        CPU: ARM64\n  userData: /' "$work/pkg/Plugins/Linux/x86_64/libmumble_ffi.so.meta"
 fail "desktop meta enables Android" "desktop plugin enables Android" "$metas" "$work/pkg"
 
-# Known gap, expected to FAIL until check-metas.sh checks GUIDs: Unity identifies assets by GUID, so two
-# Android libraries with one GUID would share import settings. N2 asks for distinct, fixed GUIDs.
+# GUIDs: Unity identifies assets by GUID, so two Android libraries with one GUID would share import
+# settings. N2 asks for distinct, fixed GUIDs.
 pkg; guid_arm64=$(sed -n 's/^guid: //p' "$work/pkg/$meta_arm64")
 sed -i.bak "s/^guid: .*/guid: $guid_arm64/" "$work/pkg/$meta_x86"
 fail "two Android .meta files share a GUID" "duplicate GUID" "$metas" "$work/pkg"
+
+pkg; sed -i.bak 's/^guid: .*/guid: not-a-guid/' "$work/pkg/Plugins/Linux/x86_64/libmumble_ffi.so.meta"
+fail "a .meta without a valid GUID" "has no valid guid" "$metas" "$work/pkg"
 
 echo
 echo "$passed passed, $failed failed"

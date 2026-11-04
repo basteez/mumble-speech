@@ -5,6 +5,11 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
+usage() {
+  echo "usage: $0 [android]" >&2
+  exit 2
+}
+[ "$#" -le 1 ] || usage
 case "${1:-}" in
   "") ;;
   android)
@@ -13,10 +18,7 @@ case "${1:-}" in
     "$root/scripts/android/check-metas.sh" "$here"
     exit 0
     ;;
-  *)
-    echo "usage: $0 [android]" >&2
-    exit 2
-    ;;
+  *) usage ;;
 esac
 case "$(uname -s)" in
   Darwin)

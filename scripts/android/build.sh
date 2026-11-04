@@ -36,4 +36,4 @@ api=21
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
 
 cd "$root"
-cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -P "$api" -o "$out" build --release -p mumble-ffi
+cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform "$api" -o "$out" build --release -p mumble-ffi

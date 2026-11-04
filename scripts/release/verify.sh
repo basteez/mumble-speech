@@ -17,8 +17,9 @@ cmake -S "$root/bindings/c" -B "$work/c-build" -DCMAKE_BUILD_TYPE=Release -DMUMB
 cmake --build "$work/c-build" >/dev/null
 ctest --test-dir "$work/c-build" --output-on-failure
 cmp "$c/include/mumble.h" "$root/bindings/c/include/mumble.h"
-# Android libraries are in the Unity package only (LD24).
-if unzip -l "$archives/mumble-speech-c-$version.zip" | grep -qi android; then echo "Android files in the C archive"; exit 1; fi
+# Android libraries are in the Unity package only (LD24). grep reads the whole listing (no -q): with
+# pipefail, an early exit would make unzip fail on SIGPIPE and hide the match.
+if unzip -l "$archives/mumble-speech-c-$version.zip" | grep -i android >/dev/null; then echo "Android files in the C archive"; exit 1; fi
 
 echo "== Godot addon: the packaged addon passes the headless tests"
 # Same layout as the repository: the tests read ../../conformance/vectors.json.
@@ -33,7 +34,7 @@ for lib in libmumble_godot.so mumble_godot.dll libmumble_godot.dylib; do
 done
 "$godot" --headless --path "$project" --import >/dev/null 2>&1 || true
 "$godot" --headless --path "$project" -s res://tests/run_tests.gd
-if unzip -l "$archives/mumble-speech-godot-$version.zip" | grep -qi android; then echo "Android files in the Godot addon"; exit 1; fi
+if unzip -l "$archives/mumble-speech-godot-$version.zip" | grep -i android >/dev/null; then echo "Android files in the Godot addon"; exit 1; fi
 
 echo "== Unity package: desktop and Android plugins, a .meta for every file, Android libraries checked"
 mkdir -p "$work/unity" && tar -xzf "$archives/com.mumble-speech.unity-$version.tgz" -C "$work/unity"

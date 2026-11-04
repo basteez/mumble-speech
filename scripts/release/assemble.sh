@@ -41,7 +41,7 @@ cp "$root/bindings/godot/README.md" "${licenses[@]}" "$g/addons/mumble_speech/"
 # Unity package: the UPM folder with Plugins/ filled, as an npm-style tarball (package/ prefix).
 u=$work/unity/package
 mkdir -p "$u"
-(cd "$root/bindings/unity" && tar --exclude='./DotnetTests~' --exclude='./.gitignore' --exclude='./build.sh' --exclude='./build.sh.meta' -cf - .) | (cd "$u" && tar -xf -)
+(cd "$root/bindings/unity" && tar --exclude='./DotnetTests~' --exclude='./.gitignore' --exclude='./build.sh' --exclude='./build.sh.meta' --exclude='./build.test.sh' --exclude='./build.test.sh.meta' -cf - .) | (cd "$u" && tar -xf -)
 cp "$macos/libmumble_ffi.dylib" "$u/Plugins/macOS/"
 cp "$windows/mumble_ffi.dll" "$u/Plugins/Windows/x86_64/"
 cp "$linux/libmumble_ffi.so" "$u/Plugins/Linux/x86_64/"

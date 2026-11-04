@@ -61,7 +61,7 @@ expect_exit "android with an NDK but no cargo-ndk" 1 "cargo-ndk not found" \
 # Unknown arguments are usage errors (exit 2), with or without an NDK.
 expect_exit "unknown argument" 2 "usage" env -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT PATH="$stubbed_path" "$build" bogus
 expect_exit "unknown option" 2 "usage" env PATH="$stubbed_path" "$build" --help
-# Known failure: build.sh ignores arguments after android, so these two fail until it rejects them.
+# Arguments after android are usage errors too.
 expect_exit "extra argument after android" 2 "usage" \
   env -u ANDROID_NDK_HOME -u ANDROID_NDK_ROOT PATH="$stubbed_path" "$build" android extra
 expect_exit "extra argument after android, NDK set" 2 "usage" \

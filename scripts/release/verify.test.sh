@@ -125,8 +125,7 @@ expect_exit() {
 unity=com.mumble-speech.unity-$version.tgz
 
 # --- Cases -------------------------------------------------------------------------------------
-# Known failure: check.sh is given Plugins/Android/libs, which also holds the ABI folders' .meta files,
-# and it rejects them as unexpected entries. The intact case therefore fails until check.sh allows .meta files.
+# check.sh is given Plugins/Android/libs, which also holds the ABI folders' .meta files: they are allowed.
 copy_archives
 expect_exit "intact archives verify" 0 "all release archives verified" "$verify" "$version" "$work/case" "$stubs/godot"
 
