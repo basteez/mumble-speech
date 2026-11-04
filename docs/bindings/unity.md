@@ -11,7 +11,8 @@ checked by hand with [this guide](https://github.com/basteez/mumble-speech/blob/
 
 ## Install
 
-From [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/), with the
+Install the package that carries the native libraries. From
+[OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/), with the
 [openupm CLI](https://openupm.com/docs/getting-started-cli.html):
 
 ```sh
@@ -29,8 +30,29 @@ complete package with its native plugins, and every
 [release](https://github.com/basteez/mumble-speech/releases) also has it as a tarball
 (**Add package from tarball…**).
 
-To build from source (needs Rust): `bindings/unity/build.sh`, then **Add package from
-disk…** and pick `bindings/unity/package.json`.
+## From source
+
+`bindings/unity` in a source checkout (git clone or *Download ZIP*) contains **no native
+libraries**: its `Plugins/` folders are empty, and the first call throws a
+`DllNotFoundException` naming the missing file and the folder it belongs in. That folder
+is for contributors, who build the library first.
+
+macOS, Linux, and Windows with Git Bash or MSYS2 (needs Rust):
+
+```sh
+bindings/unity/build.sh
+```
+
+Windows without a POSIX shell (PowerShell, from the repository root):
+
+```powershell
+cargo build -p mumble-ffi --release
+Copy-Item target\release\mumble_ffi.dll bindings\unity\Plugins\Windows\x86_64\
+```
+
+Then **Package Manager → + → Add package from disk…** and pick
+`bindings/unity/package.json`. Build **before** adding the folder to a project:
+otherwise Unity may drop the plugins' `.meta` files, and with them the platform settings.
 
 ## Use
 

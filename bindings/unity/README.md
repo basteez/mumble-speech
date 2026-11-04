@@ -5,12 +5,41 @@ Video-game "mumble speech" generated at runtime: `Beep` (Undertale), `Grunt`
 the web, C and Godot bindings for the same text, voice and sample rate. Unity 2022.3 LTS or later, desktop (Windows,
 macOS, Linux).
 
-> Early development: no prebuilt release yet. Build the native library first:
-> `bindings/unity/build.sh` (needs Rust).
-
 ## Install
 
-Package Manager → **Add package from disk…** → select `bindings/unity/package.json`.
+Install the package that carries the native libraries, with any of these:
+
+- Package Manager → **Add package from git URL…**
+  `https://github.com/basteez/mumble-speech.git#upm` (append `/vX.Y.Z` to pin a version);
+- [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/):
+  `openupm add com.mumble-speech.unity`;
+- the `com.mumble-speech.unity-<version>.tgz` of a
+  [GitHub release](https://github.com/basteez/mumble-speech/releases): Package Manager →
+  **Add package from tarball…**.
+
+### From source
+
+`bindings/unity` in a source checkout (git clone or *Download ZIP*) contains **no native
+libraries**: its `Plugins/` folders are empty, and the first call fails with a
+`DllNotFoundException` that names the missing file. It is meant for contributors, who
+build the library first:
+
+macOS, Linux, and Windows with Git Bash or MSYS2 (needs Rust):
+
+```sh
+bindings/unity/build.sh
+```
+
+Windows without a POSIX shell (PowerShell, from the repository root):
+
+```powershell
+cargo build -p mumble-ffi --release
+Copy-Item target\release\mumble_ffi.dll bindings\unity\Plugins\Windows\x86_64\
+```
+
+Then Package Manager → **Add package from disk…** → `bindings/unity/package.json`.
+Build **before** adding the folder to a project: otherwise Unity may drop the plugins'
+`.meta` files, and with them the platform settings.
 
 ## Use
 
@@ -48,6 +77,6 @@ Events from `Mumble.Render` carry `Style` and `Variant` (which grunt 0–3, whic
 
 ## Tests
 
-See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U4) for trying the package
+See [TESTING.md](TESTING.md): a step-by-step checklist (U1–U5) for trying the package
 in the Unity editor, including the EditMode tests that run all conformance vectors
 through the native library.

@@ -16,7 +16,6 @@ or public API adds an entry to *Unreleased*.
   constants: `MumbleSpeaker.SAMPLE_RATE` (Godot) and `Mumble.SpeakerSampleRate` (Unity).
   Nothing changes on 48 kHz devices. The documentation states that bit-identity holds
   for the same text, voice and sample rate.
-
 - Release notes link the release on every registry (npm, crates.io, docs.rs, the Unity
   and Godot branches).
 - Tags with a suffix such as `v0.2.0-rc.1` are published as prereleases: npm dist-tag
@@ -25,6 +24,16 @@ or public API adds an entry to *Unreleased*.
 - Publishing to npm and crates.io uses trusted publishing (OIDC): no tokens are stored.
 - The Godot addon is on the [Godot Asset Library](https://godotengine.org/asset-library/asset/5553)
   and the Unity package on [OpenUPM](https://openupm.com/packages/com.mumble-speech.unity/).
+
+### Fixed
+
+- Unity: when the native library is missing, for example after adding `bindings/unity`
+  from a source checkout, which has no binaries ([#24](https://github.com/basteez/mumble-speech/issues/24)),
+  the first call now throws the same exception type with a message that names the
+  expected file and `Plugins/` folder and how to install the package with its
+  libraries (git URL `#upm`, OpenUPM, release tarball) or build it from source. The
+  Unity README and documentation page lead with those install options and explain the
+  build from source on Windows without a POSIX shell.
 
 ## [0.1.0] - 2026-10-24
 

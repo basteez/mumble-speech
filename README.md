@@ -54,6 +54,11 @@ bindings/godot/build.sh && godot --headless --path bindings/godot -s res://tests
 bindings/unity/build.sh        # native library into the Unity package's Plugins/
 ```
 
+To use the Unity package, install it by git URL (`#upm`), OpenUPM or the release tarball,
+not from this checkout: `bindings/unity` here has no native libraries until you build them
+([from source](https://mumble-speech.github.io/bindings/unity#from-source), also for
+Windows without a POSIX shell).
+
 Changes start from the specs: see [`specs/README.md`](specs/README.md) for the process.
 
 ## Inspiration

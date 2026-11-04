@@ -587,6 +587,52 @@ later, C# 9). Namespace `MumbleSpeech`.
   builds and copies them. Their `.meta` files (platform settings) are
   committed, as are `.meta` files for every package asset (required for
   immutable packages).
+- Install paths [L4.12] (LD20): users install the package that carries the
+  binaries: git URL `https://github.com/basteez/mumble-speech.git#upm` (or
+  `#upm/vX.Y.Z`), OpenUPM, or the release tarball (§13, §13.1). `bindings/unity`
+  in a source checkout (git clone or GitHub's *Download ZIP*) has empty
+  `Plugins/` folders: it is for contributors, who build the library **before**
+  adding the folder to a project (Unity may otherwise drop the plugins'
+  orphan `.meta` files, and with them the platform settings). The binding
+  README, the site's Unity page (section *From source*, anchor `#from-source`)
+  and the root README say so. Build from source:
+  - macOS, Linux, Windows with Git Bash or MSYS2: `bindings/unity/build.sh`;
+  - Windows without a POSIX shell (PowerShell, from the repository root):
+    `cargo build -p mumble-ffi --release`, then
+    `Copy-Item target\release\mumble_ffi.dll bindings\unity\Plugins\Windows\x86_64\`.
+  `build.sh` gets a fallback branch: on any other `uname -s` it prints the
+  platform and the manual steps to standard error and exits with status 1
+  (today it does nothing and exits 0).
+- Native library not loadable [L4.11] (LD19): `Native.EnsureLoaded()` runs
+  first in `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and
+  the `Speaker` constructor. It calls `mumble_abi_version()`; if that throws
+  `DllNotFoundException`, `EntryPointNotFoundException` or
+  `BadImageFormatException`, it throws a new exception of the **same type**
+  with the original as `InnerException` and the message of
+  `Native.LoadFailureMessage(os, architecture)`. Success is remembered in a
+  static flag and never checked again; failure is not remembered, so every
+  call reports it. Other functions are reached only after one of these entry
+  points, so they need no check. The message is a pure function of the
+  platform (`RuntimeInformation.IsOSPlatform`,
+  `RuntimeInformation.ProcessArchitecture`), testable on any OS; for Windows:
+
+  ```
+  mumble-speech: cannot load the native library mumble_ffi.dll (Windows x86_64).
+  It belongs in Plugins/Windows/x86_64/ inside the package. A source checkout of
+  bindings/unity does not contain it. Install the package with its native
+  libraries: Package Manager > Add package from git URL >
+  https://github.com/basteez/mumble-speech.git#upm (or OpenUPM:
+  openupm add com.mumble-speech.unity, or the tarball of a GitHub release).
+  To build it from source: https://mumble-speech.github.io/bindings/unity#from-source
+  ```
+
+  macOS names `libmumble_ffi.dylib` in `Plugins/macOS/` (universal); Linux
+  names `libmumble_ffi.so` in `Plugins/Linux/x86_64/`. On Windows or Linux with
+  a process architecture other than x64, the message adds that the package
+  provides x86_64 libraries only. On any other OS it lists the three folders
+  and says that only Windows, macOS and Linux desktop are supported. The text
+  does not depend on the package version (`#upm` follows the latest stable
+  release).
 - `Samples~/Basic`: a script that types a line with a `MumbleSpeaker` [L4.9].
 - `Tests/EditMode` (NUnit): all conformance vectors through `MumbleSpeech.Core`
   (`Vectors.cs` generated, checks in `VectorChecks.cs`, shared with CI), plus
@@ -597,9 +643,16 @@ later, C# 9). Namespace `MumbleSpeech`.
   marshalling and UTF-16 indices. It also checks that
   `Mumble.SpeakerSampleRate` is 48,000 and that `Render("Hello", default,
   SpeakerSampleRate)` has 16,800 samples (L4.10). The `UnityEngine` parts
-  (components, TMP, sample) are verified manually (U1–U4), since Unity in CI
+  (components, TMP, sample) are verified manually (U1–U5), since Unity in CI
   needs a license; that `MumbleSpeaker` does not read
   `AudioSettings.outputSampleRate` is checked in code review.
+  The same program also checks `LoadFailureMessage` for every platform and
+  architecture (it compiles the `Runtime/Core` sources, so it reaches
+  `internal` members), and the job runs it a second time with
+  `--expect-load-failure` and no library on the search path: then it asserts
+  that `Mumble.Render`, `Mumble.EncodeWav`, `Mumble.NativeAbiVersion` and
+  `new Speaker` each throw `DllNotFoundException` with the Linux message and
+  an inner exception [L4.11].
 
 ## 10. Build and CI [L4.3, L5.2]
 
@@ -611,7 +664,7 @@ GitHub Actions, matrix:
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter, speaker at a fixed 48 kHz under mix rates 44.1, 48, 22.05 and 96 kHz) |
-| unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13] |
+| unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13]; second run without the library: load-failure messages [L4.11]; speaker rate constant [L4.10] |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
 
 Performance budgets (L2.5, playground R5.4) are defined for a mid-range laptop.
@@ -749,6 +802,7 @@ serves the Asset Library.
 | `gdext` compatibility with Godot versions | Pin the minimum version (4.3) and test it in CI |
 | WASM size | No `serde`, `opt-level = "z"`, `wasm-opt`, budget verified in CI |
 | Unity not verifiable in CI | EditMode tests in the package + manual checklist |
+| Unity users add `bindings/unity` from a source checkout, which has no native libraries (issue #24) | Docs lead to the git URL / OpenUPM; the interop layer names the missing file and the fix (L4.11, L4.12, LD19–LD20) |
 
 ## 15. Decision log
 
@@ -769,6 +823,8 @@ serves the Asset Library.
 | LD16 | Registries: npm and crates.io from CI (token only for the first publish, then OIDC); Unity and Godot through generated git branches (`upm`, `godot-addon`) with the binaries, tracked by OpenUPM and the Asset Library | Commit binaries to `main`; store long-lived tokens; automate the Asset Library with the account password | OpenUPM and the Asset Library build from git commits, and the native libraries are not in `main`; generated branches keep `main` clean. npm and crates.io require the package to exist before trusted publishing can be configured |
 | LD17 | The Godot and Unity `MumbleSpeaker` synthesize at a fixed 48 kHz (a constant, not a setting) and the engine resamples on playback (issue #21) | Keep the device rate and document it; an exported property (default 48,000) on the speaker | The README promise is read per line, not per device: a game must sound the same on a 44.1 kHz Mac and a 48 kHz PC. 48 kHz is the core's default (L1.5) and the most common output rate, so most devices play it without resampling; both engines already resample clips and streams of any rate, and their timing is in seconds. A property would only move the variance into project files and add API, tests and docs for no known use: whoever needs another rate calls the low-level render with an explicit rate. Cost: about 9% more samples on 44.1 kHz devices, negligible next to L2.5 |
 | LD18 | No OS matrix for the `godot` and `unity-interop` jobs (they stay on Linux) | Run them on macOS and Windows too | With LD17 the speakers' output is the core's 48 kHz render, already bit-exact on three OSes through the `core` and `ffi` jobs, which load the same code the bindings load (the core crate for Godot, the C ABI library for Unity). The device-rate case of issue #21 is reproduced on Linux by changing the Godot mix rate. What differs per OS is the engine's resampler, which the library does not own. Revisit if a binding gains OS-specific code |
+| LD19 | Unity: when the native library cannot be loaded, rethrow the runtime's own exception type (`DllNotFoundException`, `EntryPointNotFoundException`, `BadImageFormatException`) with an actionable message and the original as inner exception, checked once at the interop entry points | A new `MumbleErrorCode` in `MumbleException`; a new exception type; a placeholder README in each `Plugins/` folder | `MumbleErrorCode` mirrors the C ABI return codes, and a load failure is not one; keeping the type means code that already catches `DllNotFoundException` keeps working, so no public API changes. Placeholder files would need `.meta` files and ship in every released package, and nobody reads them when the console shows only the exception (issue #24) |
+| LD20 | Unity source checkouts: document the install paths and the build from source, with plain `cargo` + `Copy-Item` for Windows without a POSIX shell; `build.sh` fails on unsupported platforms | A PowerShell `build.ps1`; committing the binaries | Two commands do not justify a second script to keep in sync with `build.sh` (and to exclude from the package with its `.meta`, as `build.sh` is in `assemble.sh`); binaries stay out of `main` (§9.4, LD16) |
 
 Decisions inherited from the first version (IDs unchanged):
 

@@ -110,11 +110,19 @@ namespace MumbleSpeech
         /// <summary>Version of the native C ABI this package expects.</summary>
         public const uint ExpectedAbiVersion = 2;
 
-        public static uint NativeAbiVersion => Native.mumble_abi_version();
+        public static uint NativeAbiVersion
+        {
+            get
+            {
+                Native.EnsureLoaded();
+                return Native.mumble_abi_version();
+            }
+        }
 
         /// <summary>Audio and events of a whole line.</summary>
         public static MumbleRender Render(string text, MumbleVoiceSettings voice, int sampleRate = DefaultSampleRate)
         {
+            Native.EnsureLoaded();
             byte[] utf8 = Encoding.UTF8.GetBytes(text ?? string.Empty);
             Native.Voice native = voice.ToNative();
             Check(Native.mumble_render(utf8, (UIntPtr)utf8.Length, ref native, (uint)sampleRate, out IntPtr handle));
@@ -147,6 +155,7 @@ namespace MumbleSpeech
         /// <summary>A 16-bit PCM mono WAV file.</summary>
         public static byte[] EncodeWav(float[] samples, int sampleRate)
         {
+            Native.EnsureLoaded();
             samples = samples ?? Array.Empty<float>();
             Check(Native.mumble_encode_wav(samples, (UIntPtr)samples.Length, (uint)sampleRate, out IntPtr bytes, out UIntPtr length));
             try
@@ -180,6 +189,7 @@ namespace MumbleSpeech
 
         public Speaker(MumbleVoiceSettings voice, int sampleRate = Mumble.DefaultSampleRate)
         {
+            Native.EnsureLoaded();
             Native.Voice native = voice.ToNative();
             Mumble.Check(Native.mumble_speaker_new(ref native, (uint)sampleRate, out _handle));
             SampleRate = sampleRate;
