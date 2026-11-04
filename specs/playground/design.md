@@ -45,11 +45,13 @@ src/
     event-at.ts     # event sounding at a time [R6.3]
     filename.ts     # export file name [R7.3]
     share-url.ts    # settings <-> query string, URL sync [R9]
+    copy-link.ts    # Copy link button: link, clipboard, fallback, feedback [R9.13–R9.20]
   main.ts           # composition and state
   style.css
 tests/ui.test.ts    # cache, eventAt, file name
 tests/share-url.test.ts  # parse, serialize [R9]
 tests/url-sync.test.ts   # debounced URL sync [R9]
+tests/copy-link.test.ts  # Copy link with fake clipboard and timers [R9.13–R9.20]
 ```
 
 The first version had its own TypeScript core (`src/core`, `src/styles`,
@@ -99,11 +101,13 @@ the wrong letter.
 │    H   e   l   l   o                          │
 │    ●   ●   ●   ●   ●                          │
 │                                               │
-│ [ ▶ Play ]   [ ⤓ Export WAV ]                 │
+│ [ ▶ Play ]   [ ⤓ Export WAV ]   [ Copy link ] │
+│ (Link [https://…/playground/?text=…      ])   │  ← only if copying failed
 └───────────────────────────────────────────────┘
 ```
 
-On narrow screens the style cards go into a column [R6.4].
+On narrow screens the style cards go into a column [R6.4], and the action row
+wraps (it is already `flex-wrap`), so *Copy link* moves to a second line at 320 px.
 
 ### 7.2 Application state
 
@@ -121,7 +125,9 @@ Every change of `text`, `style` or `voice` → stop [R4.5, R5.3] → new
 `timeline` → invalidation of the audio cache → redraw of the visualizer →
 debounced URL update [R9.2] (§7.6). Recomputing the timeline is synchronous and
 costs O(n) over 500 characters, so no debounce there. Synthesis happens only on
-*Play* or *Export*.
+*Play* or *Export*. The same change also resets the *Copy link* feedback
+[R9.16, R9.17]; that feedback is view state owned by `copy-link.ts`, not part of
+`AppState`, and *Copy link* never touches `AppState` [R9.20].
 
 The initial values of the controls come from the URL [R9.4], not from the
 markup: `main.ts` parses `location.search` before creating the controls and
@@ -156,6 +162,12 @@ radios and the sliders (and their `<output>`s).
 - Sliders `<input type="range">` with associated `<output>`.
 - Play/Stop button with `aria-pressed` and changing text.
 - R1.3 message in an `aria-live="polite"` region.
+- *Copy link* is a native `<button>` whose label is its accessible name; its
+  outcome goes to a separate visually hidden `role="status"` region, because
+  `controls.update` rewrites the R1.3 region on every state change and would
+  erase the announcement [R9.16, R9.19].
+- The fallback link field has a visible `<label>` and is `readonly`, not
+  `disabled`, so it stays focusable and selectable [R9.17].
 
 ### 7.5 Theme [R8.7]
 
@@ -243,6 +255,108 @@ Pages). `replaceState` makes no request, so nothing leaves the browser while
 typing [R9.12]; the page still makes no network calls after loading [R8.1].
 Accepted for the playground (D10).
 
+### 7.7 Copy link [R9.13–R9.20]
+
+**Markup** (`index.html`). A third button in `.actions`, after *Export WAV*:
+`<button id="copy-link" type="button">Copy link</button>`, with the default
+(secondary) button style, like *Export WAV*. No glyph: the arrows of the other
+buttons are in Pixelify Sans, a link glyph is not, and a fallback-font glyph would
+look out of place. A `min-width` in `ch` sized for *Link copied* keeps the button
+the same size when the label changes [R9.19]. Below the row:
+
+```html
+<p id="copy-status" class="visually-hidden" role="status" aria-live="polite"></p>
+<div id="copy-fallback" class="copy-fallback" hidden>
+  <label for="copy-url">Link</label>
+  <input id="copy-url" type="text" readonly />
+</div>
+```
+
+`.visually-hidden` is the usual clip pattern (the element stays in the
+accessibility tree). The field uses the textarea's theme (`--card`, `--border`,
+`--text`, `:focus-visible` outline) and `width: 100%` so a long link scrolls inside
+it instead of widening the page [R6.4, R8.7].
+
+**Module** `src/ui/copy-link.ts`, DOM-free except for `legacyCopy`, testable in
+Node with injected fakes:
+
+```ts
+/** Absolute link for `settings`: origin + path + canonical query (keeping the
+ *  non-owned parameters of `location.search`) + fragment (R9.14, D15). */
+function shareLink(settings: Settings, location: Pick<Location, 'origin' | 'pathname' | 'search' | 'hash'>): string;
+
+type CopyFeedback =
+  | { kind: 'idle' }                    // label "Copy link", status empty, field hidden
+  | { kind: 'copied' }                  // label "Link copied", status "Link copied"
+  | { kind: 'manual'; link: string };   // field shown and selected, status = failure message
+
+function createCopyLink(deps: {
+  link(): string;                       // flushes the URL sync, then returns shareLink(...) (R9.14, R9.15)
+  clipboard: Pick<Clipboard, 'writeText'> | undefined;   // navigator.clipboard
+  legacyCopy(text: string): boolean;    // true = copied; may throw
+  render(feedback: CopyFeedback): void; // controls.showCopyFeedback
+  revertMs?: number;                    // 2000
+}): {
+  press(): Promise<void>;               // never rejects (R9.18)
+  reset(): void;                        // settings changed: idle now, cancel the timer
+};
+
+/** Off-screen readonly textarea + select + execCommand('copy'); removes the
+ *  textarea and returns the focus to `returnFocus` (R9.17, R9.19). */
+function legacyCopy(text: string, doc: Document, returnFocus: HTMLElement): boolean;
+```
+
+**`press()`**, in order:
+
+1. `seq = ++counter`; `text = deps.link()` (the link callback runs
+   `urlSync.schedule(current); urlSync.flush()`, whose `replaceState` failure is
+   already swallowed by `createUrlSync`, R9.11, R9.15).
+2. If `clipboard` is defined, call `clipboard.writeText(text)` **synchronously in
+   the click handler**, before any `await`, so the browser sees the user gesture.
+   A synchronous throw counts as a rejection. Await the promise.
+3. If there is no clipboard or the write failed, call `legacyCopy(text)` (a throw
+   counts as `false`). When `clipboard` is undefined this also runs synchronously
+   inside the click; after a rejection it runs a few milliseconds later, still
+   inside the browsers' transient user activation window.
+4. If `seq !== counter`, a later press owns the feedback: stop here (R9.16).
+5. Success → `render({ kind: 'copied' })` and restart the single revert timer
+   (`revertMs`), which renders `idle`. Failure of both → cancel the timer and
+   `render({ kind: 'manual', link: text })`.
+
+The whole body is in `try/catch`, so `press()` resolves in every case and nothing
+is logged [R9.18]. To make a repeated "Link copied" be announced again,
+`showCopyFeedback` clears the status region and sets the text on the next
+animation frame (screen readers ignore a live region whose text does not change).
+For `manual` it unhides the field, sets its value, focuses it and calls `select()`.
+
+**Wiring** (`main.ts`):
+
+```ts
+const copyLink = createCopyLink({
+  link: () => {
+    const settings = { text: controls.text, style: controls.style, ...controls.voice };
+    urlSync.schedule(settings);
+    urlSync.flush();                                  // R9.15
+    return shareLink(settings, location);             // R9.14
+  },
+  clipboard: navigator.clipboard,                     // undefined outside secure contexts
+  legacyCopy: (text) => legacyCopy(text, document, copyButton),
+  render: controls.showCopyFeedback,
+});
+controls.onCopyLink(() => void copyLink.press());
+```
+
+and `copyLink.reset()` in the `controls.onChange` handler. The handler does not
+call `stop()` or `onInputChange()` [R9.20]. `controls.ts` gains `onCopyLink` and
+`showCopyFeedback`; `update()` leaves the button alone, so it is never disabled
+[R9.13].
+
+**Link contents.** `shareLink` uses `serializeSettings(settings, location.search)`,
+so the copied query string is the same canonical string the URL sync writes; it
+keeps the non-owned parameters and the fragment, like R9.3 does for the address
+bar (D15). Example: on `/playground/?utm=x#top`, the defaults copy as
+`https://mumble-speech.github.io/playground/?text=Hello&style=beep&pitch=0&speed=15&variation=0&utm=x#top`.
+
 ## 8. Test strategy
 
 | Level | What | Requirements |
@@ -250,8 +364,9 @@ Accepted for the playground (D10).
 | Library (core, WASM, vectors) | sound, timeline, styles, WAV, determinism, performance: see the library's test strategy | R1.4, R1.5, R3.x, R4.2, R4.3, R5.5, R7.1, R7.4 |
 | Unit (Vitest, node) | render cache, `eventAt`, export file name | R6.3, R7.2, R7.3 |
 | Unit (Vitest, node) | `parseSettings`, `serializeSettings`, `createUrlSync` with fake history and timers | R9.1–R9.11 |
+| Unit (Vitest, node) | `shareLink`, `createCopyLink` with fake clipboard, fallback, render and timers | R9.14–R9.18, R9.20 |
 | Smoke (headless Chrome, not in the repo) | play, highlight of every grapheme (accents, emoji), stop on change, export, 320 px layout, no requests | R5, R6, R7, R8.1, M2, M6, M9 |
-| Manual | checklist in `tasks.md` (audio, sync, browsers, a11y) | the rest |
+| Manual | checklist in `tasks.md` (audio, sync, browsers, a11y, clipboard) | the rest |
 
 R7.2 is guaranteed by the architecture (same samples) and verified with a test
 that checks that the export uses the cached samples.
@@ -274,3 +389,5 @@ that checks that the export uses the cached samples.
 | D12 | Full-word parameter names (`text`, `style`, `pitch`, `speed`, `variation`); all five always written, defaults included | The issue's `p`/`s`/`v`/`t`; omitting defaults | Single letters are ambiguous (`s` = style or speed?) and save ~25 characters on a URL dominated by the text. Writing the defaults keeps a shared link sounding the same even if a future revision changes a default |
 | D13 | No seed in the URL | A `seed` parameter | The playground has no seed control and always uses the library default 0, so the seed does not vary between links. A hidden URL-only setting would make two identical-looking pages sound different. A future seed control adds a `seed` parameter (default 0, so old links keep their sound) |
 | D14 | Out-of-range or off-step numbers are clamped and rounded; malformed ones fall back to the default | Reject the whole URL; ignore only out-of-range values | A hand-edited or truncated link still opens with the closest sound. Clamping and step rounding are exactly what the range input does to an out-of-range value, so the URL and the slider agree |
+| D15 | The copied link is the address bar's canonical URL: origin, path, canonical settings, non-owned parameters and fragment, computed from the controls | Strip the non-owned parameters and the fragment; copy `location.href` | One mental model: *Copy link* = copying the address bar once it is current, consistent with R9.3. Dropping parameters could break a host or embed that relies on them, and the playground cannot tell which ones matter. `location.href` can be up to 250 ms stale while a debounced update is pending (D11), so the link is built from the controls and the pending update is flushed |
+| D16 | Fallback chain: Clipboard API → hidden textarea + `execCommand('copy')` → visible selected field | Clipboard API only, with an error message; go straight to the visible field | `navigator.clipboard` is missing in insecure contexts (a `vite preview` opened over the LAN by IP, an `http://` mirror) and can be denied by permissions policy or an embedding iframe. `execCommand('copy')` is deprecated but still supported by every R8.2 browser and works in those cases. The visible field covers what is left, so the user is never without the link |

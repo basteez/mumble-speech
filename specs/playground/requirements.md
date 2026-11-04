@@ -124,7 +124,7 @@ verification (checklist in `tasks.md`).
 
 *As a user I want the page address to describe the sound I set up, so that I can
 send it to a friend and they hear exactly the same thing.* (Issue #20; design §7.6,
-D10–D14.)
+§7.7, D10–D16.)
 
 "Settings" below means the inputs that determine the sound in the playground:
 text, style, pitch, speed and variation. The seed is not a setting: the playground
@@ -179,6 +179,55 @@ always uses the library default (0) and has no seed control (D13).
   itself, or make a network request (R8.1). Loading a URL with settings SHALL NOT
   start playback (R8.4). [man]
 
+*As a user I want to copy the link in one click, so that I do not have to find and
+select the address bar (on mobile it is often hidden).* (Maintainer review of
+PR #27; design §7.7, D15–D16.)
+
+- **R9.13** The page SHALL show a *Copy link* button in the action row, after *Play*
+  and *Export WAV* (design §7.1). The button SHALL stay enabled in every state,
+  including when R1.3 disables *Play* and *Export WAV* and during playback, because
+  every settings state has a link. [man]
+- **R9.14** WHEN the user presses *Copy link*, the system SHALL copy to the clipboard
+  the absolute link of the current settings: the page's origin and path, the
+  canonical query string of the current control values (R9.10, including the
+  parameters the playground does not own, R9.3) and the current fragment, so the
+  copied link is the address the bar shows once it is up to date (D15). The link
+  SHALL be computed from the controls, not read from the address bar, so it is
+  current even while a URL update is still pending (R9.2). [auto]
+- **R9.15** WHEN the user presses *Copy link*, the system SHALL also write the URL of
+  the current settings immediately (cancelling any pending debounced update),
+  replacing the current history entry, so the address bar matches the copied link.
+  This applies also when the page was loaded without settings parameters (R9.4
+  covers only the load). IF that write fails (R9.11), the copy SHALL still happen.
+  [auto]
+- **R9.16** WHEN the copy succeeds, the button label SHALL change to *Link copied*
+  and the text "Link copied" SHALL be announced to screen readers through a polite
+  live region dedicated to this button (the R1.3 message region is rewritten on
+  every state update). 2 s after the last successful press the label SHALL return
+  to *Copy link* and the live region SHALL be cleared. Pressing again while the
+  feedback is shown SHALL copy again, announce again and restart the 2 s. WHEN a
+  setting changes, the feedback SHALL return to the idle state at once. Only the
+  outcome of the most recent press SHALL be shown. [auto] [man]
+- **R9.17** IF the Clipboard API is unavailable (for example in an insecure context,
+  where `navigator.clipboard` is undefined) or `writeText` throws or rejects (for
+  example permission denied), THEN the system SHALL copy the same link with the
+  legacy fallback: a temporary off-screen read-only textarea, selected, and
+  `document.execCommand('copy')` (D16); on success the feedback is the R9.16 one.
+  IF the fallback also fails, THEN the system SHALL show the link in a visible,
+  read-only, labelled text field below the action row, with the whole link selected
+  and the focus moved to it, and SHALL announce "Could not copy automatically. The
+  link is selected below." in the R9.16 live region. The field SHALL be hidden at
+  the next settings change or the next successful copy. [auto] [man]
+- **R9.18** Pressing *Copy link* SHALL NOT throw, leave an unhandled promise
+  rejection or log an error, whatever the clipboard outcome. [auto]
+- **R9.19** The *Copy link* button SHALL be a native `<button>`, activatable with
+  Enter and Space, with an accessible name equal to its visible label, the visible
+  focus of R8.3 and the styling of *Export WAV* (R8.7). Changing the label SHALL NOT
+  change the button's size or move the other buttons. WHEN the fallback restores
+  the page after copying, the focus SHALL return to the button. [man]
+- **R9.20** Pressing *Copy link* SHALL NOT start or stop playback, change any
+  setting, redraw the visualizer or make a network request (R8.1). [auto] [man]
+
 ## 5. Out of scope (v1)
 
 - Real text-to-speech or syllable recognition.
@@ -186,7 +235,8 @@ always uses the library default (0) and has no seed control (D13).
 - Multiple voices/characters per style, savable presets.
 - Settings persistence across visits (for example in local storage); shareable
   links are in scope since R9.
-- A *Copy link* button or share sheet: the address bar is the share affordance (R9).
+- A share sheet (Web Share API) or buttons for specific social networks: the
+  address bar and the *Copy link* button (R9.13) are the share affordances.
 - A seed control, and the seed in the URL (D13).
 - Automatic intonation (for example rising pitch on `?`).
 - Playback while typing.

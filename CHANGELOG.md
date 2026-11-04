@@ -12,6 +12,8 @@ or public API adds an entry to *Unreleased*.
 - **Shareable playground links**: the text, style, pitch, speed and variation are kept in the
   page address (`?text=Hello&style=grunt&pitch=-3&speed=15&variation=0.25`), so copying the
   URL shares the exact sound. Opening a link restores the controls without playing anything.
+  A *Copy link* button copies the link in one click, with a fallback when the browser blocks
+  clipboard access.
 
 ### Changed
 
