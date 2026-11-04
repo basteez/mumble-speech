@@ -1,4 +1,4 @@
-# Testing the Unity package (checklist U1–U3)
+# Testing the Unity package (checklist U1–U3 and U5)
 
 A guide for whoever tries the package in Unity. It takes about 20 minutes. Please
 report the results with the template at the end, even if everything works.
@@ -68,6 +68,17 @@ components, the sample and the TextMeshPro typewriter.
 7. Optional: **Assets → Create → Mumble Speech → Voice**, change style and pitch, assign
    it to the `MumbleSpeaker`'s **Voice** field, Play again: the voice changes.
 
+## U5 — Source checkout without native libraries
+
+1. Clone the repository (or download the ZIP) and create a new 3D project.
+2. **Package Manager → + → Add package from disk…** and pick `bindings/unity/package.json`
+   from the checkout. Do **not** run `build.sh`.
+3. Make a `MumbleSpeaker` with a voice, as in U1, and press **Play** (or call `Say`).
+4. Expected: the Console shows a `DllNotFoundException` that names the library file for
+   your OS, its `Plugins/` folder, and the install options (git URL `#upm`, OpenUPM,
+   release tarball, build from source with a link).
+5. Remove the package and install it by git URL as in U1: the sample plays.
+
 ## Report template
 
 The easiest way: open a
@@ -81,5 +92,6 @@ U1 install + sample:      pass / fail — notes:
 U1 plugin settings:       pass / fail — notes:
 U2 EditMode tests:        pass / fail — notes:
 U3 TMP typewriter:        pass / fail — notes:
+U5 source checkout error: pass / fail — notes:
 Console errors or warnings (copy them):
 ```

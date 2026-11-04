@@ -129,6 +129,9 @@ jobs:
         env:
           LD_LIBRARY_PATH: ${{ github.workspace }}/target/release
         run: dotnet run -c Release --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj"
+      - name: Missing native library gives an actionable error (L4.11)
+        # No LD_LIBRARY_PATH: the library is not found, as in a source checkout.
+        run: dotnet run -c Release --no-build --project "bindings/unity/DotnetTests~/MumbleSpeech.Interop.Tests.csproj" -- --expect-load-failure
 
   site:
     # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.
