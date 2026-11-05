@@ -1,4 +1,4 @@
-// Conformance checks shared by the Unity EditMode tests and the .NET CI job (LD13).
+// Conformance checks shared by the Unity tests (EditMode and PlayMode) and the .NET CI job (LD13).
 // Public API of MumbleSpeech.Core only; no NUnit, no UnityEngine.
 using System;
 using System.Collections.Generic;

@@ -1,4 +1,4 @@
-# Testing the Unity package (checklist U1–U3)
+# Testing the Unity package (checklist U1–U8)
 
 A guide for whoever tries the package in Unity. It takes about 20 minutes. Please
 report the results with the template at the end, even if everything works.
@@ -9,7 +9,8 @@ components, the sample and the TextMeshPro typewriter.
 
 ## Before you start
 
-- Unity **2022.3 LTS** or **Unity 6**, on Windows, macOS or Linux.
+- Unity **2022.3 LTS** or **Unity 6**, on Windows, macOS or Linux (and, for U6–U8, an
+  Android device).
 - Nothing else: the package installs from git with its native libraries.
 
 ## U1 — Install the package and run the sample
@@ -68,7 +69,69 @@ components, the sample and the TextMeshPro typewriter.
 7. Optional: **Assets → Create → Mumble Speech → Voice**, change style and pitch, assign
    it to the `MumbleSpeaker`'s **Voice** field, Play again: the voice changes.
 
+## U4 — The speaker renders at 48 kHz on any output rate
+
+1. Use the scene from U1 (`AudioSource` + `MumbleSpeaker`), with a script that calls
+   `GetComponent<MumbleSpeaker>().Say("Hello")` on a key press and logs
+   `GetComponent<AudioSource>().clip.frequency` and `.samples` right after.
+2. **Edit → Project Settings → Audio → System Sample Rate**: set 44100, restart Play
+   mode, press the key. Repeat with 48000 (and 22050 or 96000 if your device allows).
+   Also try `SpeakCharacter` with the typewriter from U3.
+3. Expected, at every setting: the clip has `frequency` 48000 and 16800 samples;
+   `onCharacter` fires 5 times, then `onFinished`; pitch and tempo sound the same.
+
+## U5 — Source checkout without native libraries
+
+1. Clone the repository (or download the ZIP) and create a new 3D project.
+2. **Package Manager → + → Add package from disk…** and pick `bindings/unity/package.json`
+   from the checkout. Do **not** run `build.sh`.
+3. Make a `MumbleSpeaker` with a voice, as in U1, and press **Play** (or call `Say`).
+4. Expected: the Console shows a `DllNotFoundException` that names the library file for
+   your OS, its `Plugins/` folder, and the install options (git URL `#upm`, OpenUPM,
+   release tarball, build from source with a link).
+5. Remove the package and install it by git URL as in U1: the sample plays.
+
+## Android (U6–U8)
+
+For whoever has an Android device. Needs Unity with **Android Build Support** (and its
+OpenJDK and SDK/NDK modules), and a device with USB debugging.
+
+### U6 — Build the sample for Android and run it
+
+1. In the project from U1, **File → Build Profiles** (Unity 6) or **Build Settings**
+   (2022.3): switch to **Android**.
+2. **Player Settings → Other Settings**: Scripting Backend **IL2CPP**, Target
+   Architectures **ARM64** and **ARMv7** ticked.
+3. In the Project window select each
+   `Packages/Mumble Speech/Plugins/Android/libs/<abi>/libmumble_ffi.so`. Inspector:
+   only **Android** is ticked, with the CPU of the folder (ARM64, ARMv7, X86_64). The
+   desktop libraries have Android unticked.
+4. Add the `Basic` sample scene to the build, **Build And Run** on an ARM64 device.
+5. Expected: the sample speaks and types the lines; `adb logcat -s Unity` shows no
+   `DllNotFoundException` or `EntryPointNotFoundException`. Unzip the APK: it has
+   `lib/arm64-v8a/` and `lib/armeabi-v7a/` with `libmumble_ffi.so` and no desktop
+   library.
+
+### U7 — Run the conformance vectors on the device
+
+1. With `testables` set as in U2 and the device connected: **Window → General → Test
+   Runner → PlayMode → Run All in Player** (target: Android).
+2. Expected: `MumbleSpeech.Tests.Runtime` → `PlayerVectorTests` →
+   `ConformanceVectorsAndErrorCases` passes: every vector is bit-identical on the device.
+
+### U8 — Other architectures and 16 KB alignment (optional)
+
+1. Run the U6 build on a 32-bit ARM device (or with only ARMv7 ticked) and on an x86_64
+   emulator or ChromeOS device.
+2. Open the APK in Android Studio (**Build → Analyze APK**).
+3. Expected: the sample speaks on each; APK Analyzer shows no 16 KB alignment warning
+   for `libmumble_ffi.so`.
+
 ## Report template
+
+The easiest way: open a
+[Unity verification report](https://github.com/basteez/mumble-speech/issues/new?template=unity_verification.yml)
+issue, which asks for exactly these fields. Or copy this:
 
 ```
 Unity version:
@@ -77,5 +140,10 @@ U1 install + sample:      pass / fail — notes:
 U1 plugin settings:       pass / fail — notes:
 U2 EditMode tests:        pass / fail — notes:
 U3 TMP typewriter:        pass / fail — notes:
+U4 48 kHz at any rate:    pass / fail — notes:
+U5 source checkout error: pass / fail — notes:
+U6 Android sample:        pass / fail / not tested — device, notes:
+U7 Android vectors:       pass / fail / not tested — notes:
+U8 other ABIs, 16 KB:     pass / fail / not tested — notes:
 Console errors or warnings (copy them):
 ```
