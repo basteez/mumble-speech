@@ -11,22 +11,25 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const script = join(here, 'notes.mjs');
-const version = '0.2.0'; // no CHANGELOG section yet: the notes show Unreleased as a preview
-const archives = {
-  web: `mumble-speech-web-${version}.tgz`,
-  godot: `mumble-speech-godot-${version}.zip`,
-  unity: `com.mumble-speech.unity-${version}.tgz`,
-  c: `mumble-speech-c-${version}.zip`,
-};
+// A version that never gets a CHANGELOG section, so the notes show Unreleased as a preview
+// whatever has been released (the real changelog is read).
+const version = '99.0.0';
+const archivesOf = (v) => ({
+  web: `mumble-speech-web-${v}.tgz`,
+  godot: `mumble-speech-godot-${v}.zip`,
+  unity: `com.mumble-speech.unity-${v}.tgz`,
+  c: `mumble-speech-c-${v}.zip`,
+});
+const archives = archivesOf(version);
 
 // Runs notes.mjs on a folder holding the four archives (contents are fixed bytes per file).
-function compose(extraArgs = [], names = Object.values(archives)) {
+function compose(extraArgs = [], names = Object.values(archives), v = version) {
   const dir = mkdtempSync(join(tmpdir(), 'notes-test-'));
   const archivesDir = join(dir, 'archives');
   mkdirSync(archivesDir);
   for (const name of names) writeFileSync(join(archivesDir, name), `contents of ${name}\n`);
   const notesFile = join(dir, 'notes.md');
-  const result = spawnSync(process.execPath, [script, version, archivesDir, notesFile, ...extraArgs], { encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [script, v, archivesDir, notesFile, ...extraArgs], { encoding: 'utf8' });
   const notes = result.status === 0 ? readFileSync(notesFile, 'utf8') : '';
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
   return { result, notes, archivesDir, cleanup };
@@ -110,18 +113,28 @@ test('--require-changelog fails when the version has no CHANGELOG section', () =
   const { result, cleanup } = compose(['--require-changelog']);
   try {
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /CHANGELOG\.md has no section for 0\.2\.0/);
+    assert.match(result.stderr, /CHANGELOG\.md has no section for 99\.0\.0/);
   } finally {
     cleanup();
   }
 });
 
-test('the Unreleased preview mentions Android in the changes', () => {
-  // The Unity entry in CHANGELOG.md's Unreleased section is what the preview shows (L8.4).
+test('a version without a CHANGELOG section previews Unreleased', () => {
   const { result, notes, cleanup } = compose();
   try {
     assert.equal(result.status, 0, result.stderr);
-    assert.match(notes, /Preview: CHANGELOG\.md has no 0\.2\.0 section yet, showing \*Unreleased\*/);
+    assert.match(notes, /Preview: CHANGELOG\.md has no 99\.0\.0 section yet, showing \*Unreleased\*/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('0.2.0 uses its own CHANGELOG section, which mentions Android (L8.4)', () => {
+  const v = '0.2.0';
+  const { result, notes, cleanup } = compose(['--require-changelog'], Object.values(archivesOf(v)), v);
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(notes, /Preview:/);
     assert.match(notes, /Unity on Android/);
   } finally {
     cleanup();

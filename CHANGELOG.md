@@ -7,6 +7,8 @@ or public API adds an entry to *Unreleased*.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-05
+
 ### Added
 
 - **Shareable playground links**: the text, style, pitch, speed and variation are kept in the
@@ -103,5 +105,6 @@ bindings for the web, Godot, Unity and C.
 - The OpenUPM and Godot Asset Library entries are submitted after this release and
   appear once approved; until then use the git URL (Unity) or the release zip (Godot).
 
-[Unreleased]: https://github.com/basteez/mumble-speech/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/basteez/mumble-speech/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/basteez/mumble-speech/releases/tag/v0.2.0
 [0.1.0]: https://github.com/basteez/mumble-speech/releases/tag/v0.1.0
