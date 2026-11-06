@@ -49,6 +49,8 @@ func run() -> int:
 	await test_say()
 	test_speaker_streams()
 	await test_say_order()
+	await test_say_restart_same_frame()
+	await test_say_silent_text()
 	return failures
 
 
@@ -296,4 +298,54 @@ func test_say_order() -> void:
 	speaker.say("")
 	ok = await wait_until(func(): return events_seen.has("finished"), 5000)
 	check(ok and events_seen == ["finished"], "say(\"\"): finished and no character_spoken, got %s" % [events_seen])
+	speaker.queue_free()
+
+
+# L4.16: a second `say` in the same frame restarts the line: only its characters are emitted, and `finished`
+# once, for the second line.
+func test_say_restart_same_frame() -> void:
+	var speaker := MumbleSpeaker.new()
+	speaker.voice = MumbleVoice.new()
+	root.add_child(speaker)
+	var first := "Hello there, friend."
+	var second := "Yo!"
+	var render: Dictionary = Mumble.render(second, speaker.voice, 48000)
+	var want := []
+	for event in render.events:
+		want.append(event.char_index)
+	var state := {"finished": 0, "spoken": []}
+	speaker.character_spoken.connect(func(i: int): state.spoken.append(i))
+	speaker.finished.connect(func(): state.finished += 1)
+	speaker.say(first)
+	speaker.say(second)
+	var ok := await wait_until(func(): return state.finished > 0, int((render.duration + 3.0) * 1000.0))
+	await root.get_tree().create_timer(0.3).timeout
+	check(ok, "restart in the same frame: the second line finishes")
+	check(state.finished == 1, "restart in the same frame: finished is emitted once, got %d" % state.finished)
+	check(state.spoken == want, "restart in the same frame: only the second line is spoken, got %s, expected %s" % [state.spoken, want])
+	speaker.queue_free()
+
+
+# L4.16: text with no sounding character (spaces, punctuation) finishes once, and is spoken as the render says:
+# nothing for the spaces and for the punctuation the render leaves silent.
+func test_say_silent_text() -> void:
+	var speaker := MumbleSpeaker.new()
+	speaker.voice = MumbleVoice.new()
+	root.add_child(speaker)
+	var state := {"finished": 0, "spoken": []}
+	speaker.character_spoken.connect(func(i: int): state.spoken.append(i))
+	speaker.finished.connect(func(): state.finished += 1)
+	for text in ["   ", "?!.", " , "]:
+		var render: Dictionary = Mumble.render(text, speaker.voice, 48000)
+		var want := []
+		for event in render.events:
+			want.append(event.char_index)
+		var before: int = state.finished
+		state.spoken.clear()
+		speaker.say(text)
+		var ok := await wait_until(func(): return state.finished > before, int((render.duration + 3.0) * 1000.0))
+		await root.get_tree().create_timer(0.3).timeout
+		check(ok and state.finished == before + 1, "say(\"%s\"): finished is emitted once, got %d" % [text, state.finished - before])
+		check(state.spoken == want, "say(\"%s\"): character_spoken %s, expected %s" % [text, state.spoken, want])
+		check(not speaker.is_speaking(), "say(\"%s\"): not speaking once finished" % text)
 	speaker.queue_free()

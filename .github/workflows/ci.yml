@@ -376,11 +376,15 @@ jobs:
         run: scripts/release/verify.test.sh
       - name: Release notes, Android in the Unity row only
         run: node --test scripts/release/notes.test.mjs
-      - name: Godot web build script, arguments and toolchain errors
+      - name: Godot web build scripts, arguments, toolchain errors and the build paths with a stub cargo
         run: scripts/godot-web/build.test.sh
       - name: Godot web library checks, broken modules fail
         run: scripts/godot-web/check-wasm.test.sh
-      - name: Godot web browser runner, helpers
+      - name: Godot web library checks, every instruction class, the budget and the .gdextension
+        run: node --test scripts/godot-web/check-wasm.test.mjs
+      - name: Godot web export script, version strings, template cache and missing library
+        run: scripts/godot-web/export.test.sh
+      - name: Godot web browser runner, command line, verdicts and static server
         run: node --test scripts/godot-web/run-tests.test.mjs
 
   site:

@@ -173,6 +173,18 @@ rezip "$work/case/mumble-speech-godot-$version.zip" sed -i.bak '/^web\./d' addon
 expect_exit "Godot addon whose .gdextension has no web entries" 1 "web.debug.wasm32 is missing" "$verify" "$version" "$work/case" "$stubs/godot"
 
 copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/not-wasm.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a .wasm that is not a WebAssembly module" 1 "bad magic" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/truncated.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a truncated WebAssembly library" 1 "malformed WebAssembly binary" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "echo 'web.release.threads.wasm32 = \"res://addons/mumble_speech/bin/mumble_godot.wasm\"' >> addons/mumble_speech/mumble_speech.gdextension"
+expect_exit "Godot addon whose .gdextension lists a threaded web entry" 1 "no threaded web build" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
 rezip "$work/case/mumble-speech-c-$version.zip" sh -c "cp $work/wasm-fixtures/good.wasm mumble-speech-c-$version/mumble_godot.wasm"
 expect_exit "WebAssembly library in the C archive" 1 "WebAssembly files in the C archive" "$verify" "$version" "$work/case" "$stubs/godot"
 

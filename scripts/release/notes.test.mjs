@@ -140,3 +140,22 @@ test('0.2.0 uses its own CHANGELOG section, which mentions Android (L8.4)', () =
     cleanup();
   }
 });
+
+test('the Godot web build is named in the Godot rows only, not in the C, Unity, npm or Web rows (L4.15, L8.1)', () => {
+  const { result, notes, cleanup } = compose();
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    const web = 'Web (Godot 4.3+, no threads)';
+    const lines = notes.split('\n').filter((line) => line.includes(web));
+    assert.equal(lines.length, 2, `rows with the web build:\n${lines.join('\n')}`);
+    assert.ok(lines.some((line) => line.startsWith('| Godot |')), 'the Godot compatibility row names the web build');
+    assert.ok(lines.some((line) => line.includes(archives.godot)), 'the Godot addon download row names the web build');
+    for (const name of [archives.c, archives.unity, archives.web]) {
+      assert.deepEqual(rowsFor(notes, name).filter((line) => line.includes('Web (Godot')), [], `web build in the row of ${name}`);
+    }
+    const webCompat = notes.split('\n').find((line) => line.startsWith('| Web |'));
+    assert.ok(webCompat && !webCompat.includes('Godot'), `Web compatibility row: ${webCompat}`);
+  } finally {
+    cleanup();
+  }
+});
