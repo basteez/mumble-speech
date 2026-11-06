@@ -2,3 +2,5 @@
 addons/mumble_speech/bin/
 *.import
 override.cfg
+build/
+tests/web/vectors.json

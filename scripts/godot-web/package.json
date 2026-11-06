@@ -1,0 +1,12 @@
+{
+  "name": "@mumble-speech/godot-web-tests",
+  "private": true,
+  "type": "module",
+  "description": "Browser runner of the Godot web export tests (specs/design.md §9.3.1). Outside the npm workspaces and the Godot project on purpose.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "1.65.0"
+  }
+}
