@@ -20,7 +20,13 @@ if ! command -v "$emcc" >/dev/null 2>&1; then
   echo "error: emcc not found; install Emscripten $EMSDK_VERSION (emsdk install $EMSDK_VERSION && emsdk activate $EMSDK_VERSION) and source emsdk_env.sh" >&2
   exit 1
 fi
-reported=$("$emcc" --version 2>&1 | head -n 1)
+# Read the whole output before taking the first line: piping into `head -n 1` closes the pipe early,
+# and emcc (Python) then exits 120 on the failed flush, which pipefail turns into a silent failure.
+if ! reported=$("$emcc" --version 2>&1); then
+  echo "error: '$emcc --version' failed: $reported" >&2
+  exit 1
+fi
+reported=${reported%%$'\n'*}
 case " $reported " in
   *" $EMSDK_VERSION "*) ;;
   *)
