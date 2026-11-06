@@ -645,12 +645,18 @@ Node, no dependencies) [L4.17]; it fails unless:
 - no memory import or memory definition has the *shared* flag, and no
   instruction from the atomics proposal appears in the code section (a
   threaded build has both);
-- `WebAssembly.Module.exports` includes `gdext_rust_init` (the
-  `entry_symbol` read from the `.gdextension`, not hard-coded);
-- the raw size is within the budget (LD34).
+- the export section lists `gdext_rust_init` (the `entry_symbol` read from the
+  `.gdextension`, default `gdext_rust_init`, not hard-coded). The check reads the
+  binary's sections itself (no instantiation; the same result as
+  `WebAssembly.Module.exports`), and walks every instruction of the code section
+  to find atomics, since scanning for the prefix byte would match immediates;
+- the raw size is within the budget (LD34): `--budget <bytes>`, else
+  `WASM_BUDGET_BYTES` in `versions.env`.
 
-It prints raw and gzip size for the run summary. `check-wasm.test.sh` builds
-small negative fixtures in Node (a module without `dylink.0`, one importing
+It prints raw and gzip size for the run summary. Its command line is
+`check-wasm.mjs [<wasm>] [--gdextension <file>] [--budget <bytes>]`; the checks are
+exported functions (`checkWasm`, `checkGdextension`, `parseWasm`). `check-wasm.test.sh`
+builds small negative fixtures in Node (`wasm-fixtures.mjs`) (a module without `dylink.0`, one importing
 shared memory, one without the entry symbol, one over budget) and expects each
 to fail. A second check reads `mumble_speech.gdextension` and fails if the two
 web keys are missing, point elsewhere, or a `threads` key exists.
@@ -699,7 +705,7 @@ memory in the browser's developer tools; risk in §14).
 **Example and export presets**: `bindings/godot/export_presets.cfg` is
 committed, written with Godot 4.3 (newer versions read it), with two presets:
 
-- `Web`: the example scene, *Extensions Support* on
+- `Web`: the example scene (`exclude_filter="tests/*"`), *Extensions Support* on
   (`variant/extensions_support=true`), *Thread Support* off
   (`variant/thread_support=false`), export path `build/web/index.html`; used by
   GW1 and as the reference configuration the docs show.
@@ -776,7 +782,8 @@ an exact `playwright` version, not part of the npm workspaces):
   have an output device and the `AudioContext` can run; the `running` check
   fails the job if it did not.
 
-**CI** (`godot-web` job; LD31): one build job (`godot-web-build`: emsdk at
+**CI** (`godot-web` job, a matrix named `godot-web (<version>)` like the `godot` job;
+LD31): one build job (`godot-web-build`: emsdk at
 `EMSDK_VERSION` through `mymindstorm/setup-emsdk` with its cache, the pinned
 nightly with `rust-src`, `scripts/godot-web/build.sh`, `check-wasm.mjs` and its
 self-test, artifact `mumble_godot.wasm`, sizes in the run summary), then a test
@@ -784,12 +791,16 @@ matrix over Godot `4.3-stable` and `4.7.2-stable` (the desktop matrix): export
 templates downloaded once per version and cached with `actions/cache`, the
 `.tpz` reduced to the two `web_dlink_nothreads_*.zip` before caching;
 `export.sh`; then `run-tests.mjs` in Chromium with `--audio running` and with
-`--audio suspended`. Firefox and WebKit run in a separate job with the same
-steps (Godot 4.7.2 only), not a required check (LQ14). Safari itself (and
+`--audio suspended`; then the `Web` preset (the example) is exported and run with
+`--mode example`, which fails unless the example scene prints `MUMBLE_EXAMPLE started`
+(one `print` in `example/dialogue.gd`) and the test runner did not start: this is the
+check of the main-scene override (W3). Firefox and WebKit run in a separate job, `godot-web-browsers (<browser>)`, with the
+same steps (Godot 4.7.2 only, headed under `xvfb-run`; WebKit with `suspended` only),
+not a required check (LQ14). Safari itself (and
 Firefox on a real audio device) is verified by hand: GW1–GW3.
 
-**Release**: a `web` job builds the library with the same script and checks
-it, artifact `native-web/mumble_godot.wasm`; `assemble` adds it to the Godot
+**Release**: a `godot-web` job (the name `web` is the npm package's job) builds the
+library with the same script and checks it, artifact `native-web/mumble_godot.wasm`; `assemble` adds it to the Godot
 zip only (`addons/mumble_speech/bin/mumble_godot.wasm`; LD33); `verify` checks
 the zip contains it, runs `check-wasm.mjs` on the packaged file and the
 `.gdextension` check, and runs the exported tests from the packaged addon on
@@ -1137,7 +1148,7 @@ built and verified, no GitHub Release):
    and `mumble-godot`; on macOS both architectures joined with `lipo`.
    `android` (Ubuntu): `mumble-ffi` for the three Android ABIs, checked
    (§9.4.1) [L4.13, L4.14].
-   `web` (Ubuntu): `mumble-godot` for `wasm32-unknown-emscripten`, checked
+   `godot-web` (Ubuntu): `mumble-godot` for `wasm32-unknown-emscripten`, checked
    (§9.3.1) [L4.15, L4.17].
 3. `web`: `@mumble-speech/web` build and `npm pack`.
 4. `assemble`: from the artifacts of 2–3, with `LICENSE-MIT`, `LICENSE-APACHE`
@@ -1255,13 +1266,13 @@ serves the Asset Library.
 | LD25 | Android conformance: library checks in CI, core vectors on `armv7` under QEMU, vectors on a device by hand (PlayMode test assembly, *Run in player*) | Android emulator in CI (`android-emulator-runner`) | The CI emulator is x86_64 (ARM images are too slow without hardware acceleration), the architecture already covered by Linux and Windows, and it is slow and flaky. The only new instruction set is 32-bit ARM, which QEMU covers cheaply; AArch64 is covered on macOS arm64 |
 | LD26 | Android libraries in `Plugins/Android/libs/<abi>/` with committed `.meta` files setting Android and the `CPU` explicitly | Rely on Unity inferring the CPU from the folder name; an `.aar` | The folder name is the common convention, but explicit settings do not depend on inference rules across Unity versions; an `.aar` would add a Gradle build for a plain `.so` |
 | LD27 | Godot web: ship only the non-threaded build (`experimental-wasm-nothreads`), listed as `web.*.wasm32` | Threaded build only; both builds (`.threads.wasm` + `.wasm`) | Non-threaded is Godot's default web export since 4.3, needs no COOP/COEP headers (itch.io and other hosts often cannot set them) and is what the issue asks for. The library uses no threads. A threaded build would need a second build with `-pthread`/`+atomics` through `RUSTFLAGS` (which replaces the config flags), a second CI and release path and cross-origin isolation to test; it can be added on request (LQ12) |
-| LD28 | Godot web toolchain: a dated Rust nightly with `-Zbuild-std` and Emscripten 3.1.74, pinned in `scripts/godot-web/versions.env`; one `.wasm` for every supported Godot version, verified against the 4.3 and 4.7.2 `dlink` templates in CI | Stable Rust (not possible: `-Zbuild-std` and the `-Z` flags are unstable); the Emscripten of each Godot version with one library per version; a floating nightly | gdext's documented path. One addon for every version matches the desktop promise (`compatibility_minimum`). Emscripten side-module compatibility across versions is not guaranteed, so it is tested on the oldest and newest Godot in the matrix rather than assumed; if 4.3 fails, LQ13 applies. A dated nightly keeps builds reproducible; desktop builds stay on stable |
-| LD29 | Godot web API level: the `wasm` target uses gdext's prebuilt `api-4-3` bindings if W1 shows they build and load for `wasm32-unknown-emscripten`; otherwise `api-custom-json` with the `extension_api.json` dumped by the Godot 4.3 editor in CI (`--dump-extension-api`, not committed). Either way, the API level is 4.3. The outcome of W1 is written here before merging | `api-custom` with a Godot binary at build time (heavier, same result); committing a dumped JSON (megabytes in git); a newer API level for the web | The godot-rust book says web exports need `api-custom` "for now (no prebuilt Wasm32 target)", while gdext 0.5's feature list does not tie the wasm features to an API feature. Building against 4.3 keeps the web library loadable from 4.3 on, as on desktop. `api-*` features cannot be combined, so the API feature moves into target-specific dependencies (§9.3.1) |
+| LD28 | Godot web toolchain: a dated Rust nightly with `-Zbuild-std` and Emscripten 3.1.74, pinned in `scripts/godot-web/versions.env`; one `.wasm` for every supported Godot version, verified against the 4.3 and 4.7.2 `dlink` templates in CI | Stable Rust (not possible: `-Zbuild-std` and the `-Z` flags are unstable); the Emscripten of each Godot version with one library per version; a floating nightly | gdext's documented path. One addon for every version matches the desktop promise (`compatibility_minimum`). Emscripten side-module compatibility across versions is not guaranteed, so it is tested on the oldest and newest Godot in the matrix rather than assumed; if 4.3 fails, LQ13 applies. A dated nightly keeps builds reproducible; desktop builds stay on stable. **W1 status (2026-11-06):** pinned `nightly-2026-10-20` (rustc 1.101.0-nightly) and Emscripten 3.1.74 in `versions.env`; whether the 4.3 and 4.7.2 `dlink` templates load the library is to be confirmed by the `godot-web` runs on the pull request |
+| LD29 | Godot web API level: the `wasm` target uses gdext's prebuilt `api-4-3` bindings if W1 shows they build and load for `wasm32-unknown-emscripten`; otherwise `api-custom-json` with the `extension_api.json` dumped by the Godot 4.3 editor in CI (`--dump-extension-api`, not committed). Either way, the API level is 4.3. The outcome of W1 is written here before merging | `api-custom` with a Godot binary at build time (heavier, same result); committing a dumped JSON (megabytes in git); a newer API level for the web | The godot-rust book says web exports need `api-custom` "for now (no prebuilt Wasm32 target)", while gdext 0.5's feature list does not tie the wasm features to an API feature. Building against 4.3 keeps the web library loadable from 4.3 on, as on desktop. `api-*` features cannot be combined, so the API feature moves into target-specific dependencies (§9.3.1). **W1 status (implementation, 2026-11-06):** the prebuilt `api-4-3` is what the build uses (gdext's `godot-bindings` picks the prebuilt API from the `api-*` feature whatever the target); that it builds and loads for `wasm32-unknown-emscripten` is to be confirmed by CI on the pull request (`godot-web-build`), and if it does not, this entry switches to `api-custom-json` before merging |
 | LD30 | Godot web, *Sample* playback mode: `MumbleSpeaker`'s clock for `character_spoken` and `finished` is the wall clock since `say` started the player; desktop and web *Stream* mode keep the audio clock | Keep the audio clock everywhere; switch the internal player to *Stream* mode; a timer per event | In Sample mode the sound is a Web Audio node started by `play()`; the engine mixer's position does not describe it and stops while the mixer does not run, and before the first user gesture the `AudioContext` is suspended, so a line could never `finish` and a game waiting on it would hang. The wall clock guarantees ordered signals and `finished` (L4.16) at the cost of the browser's output latency (tens of ms, below one slot at the maximum speed of 30 characters/s) and of silent signals before the first gesture, both documented. Forcing *Stream* mode would override the project's choice and add latency without threads |
 | LD31 | Godot web tests: export the test runner with the Godot editor (headless) on each Godot version of the matrix, run it with Playwright in Chromium as a required check (audio running and suspended), Firefox and WebKit as a non-required job, and Safari and real audio devices by hand (GW1–GW3) | Chromium only; all three engines required; manual only | Chromium is the engine with dependable software WebGL and Web Audio in headless CI. Firefox and WebKit on Linux runners are less proven (WebGL through llvmpipe, audio through a null sink) and Playwright's WebKit is not Safari, so they inform without blocking until stable (LQ14). The vectors and the timing bounds are automated where they run; Safari remains a manual, explicit check |
 | LD32 | One test suite (`tests/suite.gd`) with two runners: the desktop `SceneTree` script and a web runner scene; the vectors are copied into the export, the result is read by the browser runner from the console and a `window` global | A separate web test project; web-only tests | The same checks on both platforms are the point of "same samples as desktop"; a scene is needed because a web export runs its main scene, not a `-s` script; the vectors live outside `res://`, which an export cannot reach |
 | LD33 | The web library ships only in the Godot addon | Also a C ABI WebAssembly build in the C archive | Issue #32 asks for Godot. Outside Godot the web path is `@mumble-speech/web` (L4.1), already tested in browsers; an Emscripten C ABI module would be a third WebAssembly flavor with its own consumers and tests |
-| LD34 | Size budget for `mumble_godot.wasm`: W1 measures the release build and sets the budget to the measured raw size plus 25%, written here with the measurement (raw and gzip) before merging; `check-wasm.mjs` enforces it | No budget; a budget picked before measuring | gdext generates large bindings and the size is unknown until built (`lazy-function-tables` reduces it). A budget set from a measurement catches regressions (a new dependency, a lost LTO setting) without guessing; the sizes also go in the docs (L4.18) |
+| LD34 | Size budget for `mumble_godot.wasm`: W1 measures the release build and sets the budget to the measured raw size plus 25%, written here with the measurement (raw and gzip) before merging; `check-wasm.mjs` enforces it | No budget; a budget picked before measuring | gdext generates large bindings and the size is unknown until built (`lazy-function-tables` reduces it). A budget set from a measurement catches regressions (a new dependency, a lost LTO setting) without guessing; the sizes also go in the docs (L4.18). **W1 status (2026-11-06):** `versions.env` holds a provisional budget of 12,000,000 bytes (`WASM_BUDGET_BYTES`); the measured raw and gzip sizes and the final budget (measured + 25 %) are to be taken from the CI run of the pull request and written here before merging |
 
 Decisions inherited from the first version (IDs unchanged):
 
