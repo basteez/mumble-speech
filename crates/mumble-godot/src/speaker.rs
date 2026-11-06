@@ -1,6 +1,6 @@
 use crate::audio::{char_index, stream};
 use crate::voice::{core_voice, error_name, MumbleVoice};
-use godot::classes::{AudioServer, AudioStreamPlayer, AudioStreamWav, INode};
+use godot::classes::{AudioServer, AudioStreamPlayer, AudioStreamWav, INode, Os, ProjectSettings, Time};
 use godot::prelude::*;
 use mumble_speech as core;
 
@@ -22,6 +22,11 @@ pub struct MumbleSpeaker {
     next_event: usize,
     duration: f64,
     speaking: bool,
+    /// Set by `say`: the line's position is the wall clock since `started_usec` instead of the
+    /// audio clock (web export in Sample playback mode, LD30).
+    wall_clock: bool,
+    /// `Time.get_ticks_usec()` when `say` started the player.
+    started_usec: u64,
     base: Base<Node>,
 }
 
@@ -38,6 +43,8 @@ impl INode for MumbleSpeaker {
             next_event: 0,
             duration: 0.0,
             speaking: false,
+            wall_clock: false,
+            started_usec: 0,
             base,
         }
     }
@@ -97,6 +104,8 @@ impl MumbleSpeaker {
         self.next_event = 0;
         self.duration = render.timeline.duration;
         self.play(stream(&render.samples, sample_rate));
+        self.wall_clock = self.uses_wall_clock();
+        self.started_usec = Time::singleton().get_ticks_usec();
         self.speaking = true;
     }
 
@@ -176,8 +185,36 @@ impl MumbleSpeaker {
         player.play();
     }
 
-    /// Seconds of the current line heard so far (audio clock, latency-compensated).
+    /// Whether the line's position is the wall clock (LD30, L4.16): on the web the engine mixer's
+    /// clock does not describe a stream played in Sample mode (the browser plays it), and it
+    /// stops while the `AudioContext` is suspended, so the signals follow the time since `say`.
+    /// Desktop and web Stream mode keep the audio clock.
+    fn uses_wall_clock(&self) -> bool {
+        if !Os::singleton().has_feature(&GString::from("web")) {
+            return false;
+        }
+        let Some(player) = self.player.as_ref() else {
+            return false;
+        };
+        // AudioServer.PlaybackType: 0 default, 1 stream, 2 sample.
+        match player.get_playback_type().ord() {
+            2 => true,
+            0 => {
+                // The project setting: 0 Stream, 1 Sample (read now, so its `.web` override applies).
+                let setting = ProjectSettings::singleton().get_setting(&GString::from("audio/general/default_playback_type"));
+                setting.try_to::<i64>().is_ok_and(|v| v == 1)
+            }
+            _ => false,
+        }
+    }
+
+    /// Seconds of the current line heard so far: the wall clock when `wall_clock` is set,
+    /// otherwise the audio clock, latency-compensated.
     fn position(&self) -> f64 {
+        if self.wall_clock {
+            let now = Time::singleton().get_ticks_usec();
+            return now.saturating_sub(self.started_usec) as f64 / 1_000_000.0;
+        }
         let Some(player) = self.player.as_ref() else {
             return 0.0;
         };
