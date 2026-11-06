@@ -93,6 +93,10 @@ with the same API and the same samples as on desktop. Export settings
   waits for `finished` never hangs). The sound can lag the signal by the browser's
   output latency, typically 10 to 40 ms. In *Stream* playback mode the audio clock is
   used, as on desktop.
+- **Empty lines.** A line that renders no samples (empty text, or text with nothing to say)
+  is not played, because Web Audio rejects a zero-length buffer; `finished` is still
+  emitted once. `render_stream` can return an empty stream (0 frames): do not play it on
+  the web.
 - **`speak_character` and the typewriter** need no change: the typewriter waits with the
   frame time, not the audio clock.
 
@@ -100,9 +104,9 @@ Sizes of this addon on the web:
 
 | | Size |
 |---|---|
-| `mumble_godot.wasm`, raw | TBD (measured by CI, W1) |
-| `mumble_godot.wasm`, gzip | TBD (measured by CI, W1) |
-| Increase of the `dlink` export template over the standard one | TBD (measured by CI, W1) |
+| `mumble_godot.wasm`, raw | 520,810 bytes (about 509 KiB) |
+| `mumble_godot.wasm`, gzip | 175,773 bytes (about 172 KiB, `gzip -9`) |
+| Increase of the `dlink` export template over the standard one | TBD (not measured yet) |
 
 To build the web library from source you need the pinned nightly Rust and
 Emscripten (`scripts/godot-web/versions.env`, currently Emscripten 3.1.74):

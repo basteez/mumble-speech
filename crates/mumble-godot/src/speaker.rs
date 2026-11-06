@@ -103,8 +103,18 @@ impl MumbleSpeaker {
         self.events = render.timeline.events.iter().map(|e| (e.start, char_index(&text, e.utf8_start))).collect();
         self.next_event = 0;
         self.duration = render.timeline.duration;
-        self.play(stream(&render.samples, sample_rate));
-        self.wall_clock = self.uses_wall_clock();
+        if render.samples.is_empty() {
+            // Nothing to play: Web Audio rejects a zero-length buffer (L4.16). The line still
+            // replaces the previous one, and with no sound playing the audio clock describes
+            // nothing, so the signals follow the wall clock and `finished` still arrives.
+            if let Some(player) = self.player.as_mut() {
+                player.stop();
+            }
+            self.wall_clock = true;
+        } else {
+            self.play(stream(&render.samples, sample_rate));
+            self.wall_clock = self.uses_wall_clock();
+        }
         self.started_usec = Time::singleton().get_ticks_usec();
         self.speaking = true;
     }
@@ -150,7 +160,9 @@ impl MumbleSpeaker {
         self.speaking
     }
 
-    /// The line as a 16-bit stream at `SAMPLE_RATE`, to play or save yourself.
+    /// The line as a 16-bit stream at `SAMPLE_RATE`, to play or save yourself. The stream can be
+    /// empty (0 frames: empty text, or text with nothing to say); do not play an empty stream on
+    /// the web, where Web Audio rejects a zero-length buffer (`say` does not play one).
     #[func]
     pub fn render_stream(&self, text: GString) -> Option<Gd<AudioStreamWav>> {
         let sample_rate = Self::RATE;
