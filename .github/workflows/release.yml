@@ -12,6 +12,7 @@ on:
       - .github/workflows/release.yml
       - scripts/release/**
       - scripts/android/**
+      - scripts/godot-web/**
       - .cargo/**
       - CHANGELOG.md
 
@@ -132,6 +133,38 @@ jobs:
           path: out/
           if-no-files-found: error
 
+  godot-web:
+    # The Godot web library, for the Godot addon only (specs/design.md §9.3.1, §13, L4.15, L4.17, LD33), built
+    # with the toolchain pinned in scripts/godot-web/versions.env and checked before packaging.
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read the pinned versions
+        id: pins
+        run: grep -E '^[A-Z_]+=' scripts/godot-web/versions.env >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: godot-web
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ steps.pins.outputs.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Build and check the web library
+        run: |
+          mkdir -p out
+          scripts/godot-web/build.sh out
+          node scripts/godot-web/check-wasm.mjs out/mumble_godot.wasm --gdextension bindings/godot/addons/mumble_speech/mumble_speech.gdextension
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-web
+          path: out/mumble_godot.wasm
+          if-no-files-found: error
+
   web:
     needs: version
     runs-on: ubuntu-latest
@@ -162,7 +195,7 @@ jobs:
           if-no-files-found: error
 
   assemble:
-    needs: [version, native, android, web]
+    needs: [version, native, android, godot-web, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -191,6 +224,19 @@ jobs:
           node-version: 24
       - name: llvm-readelf for the Android library checks
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends llvm
+      - name: Cache of the Godot 4.3 web export templates
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/mumble-godot-web-templates
+          key: godot-web-templates-4.3-stable
+      - name: Chromium and an audio device for the exported Godot tests (L4.15)
+        run: |
+          (cd scripts/godot-web && npm ci && npx playwright install --with-deps chromium)
+          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1 || true
+          sleep 2
+          pactl load-module module-null-sink sink_name=ci_null
+          pactl set-default-sink ci_null
       - name: Download Godot 4.3 (minimum supported)
         run: |
           curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/Godot_v4.3-stable_linux.x86_64.zip"
@@ -372,7 +418,7 @@ jobs:
           # mumble-speech $VERSION for Godot
 
           Generated from [basteez/mumble-speech](https://github.com/$GITHUB_REPOSITORY) — do not edit.
-          Copy \`addons/mumble_speech\` into your project (Godot 4.3+, Windows x64, macOS universal, Linux x64).
+          Copy \`addons/mumble_speech\` into your project (Godot 4.3+, Windows x64, macOS universal, Linux x64, web without threads).
           Documentation: https://mumble-speech.github.io/bindings/godot
           EOF
           scripts/release/publish-branch.sh godot-addon "godot/v$VERSION" "$content" \
