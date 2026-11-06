@@ -649,7 +649,15 @@ Node, no dependencies) [L4.17]; it fails unless:
   `.gdextension`, default `gdext_rust_init`, not hard-coded). The check reads the
   binary's sections itself (no instantiation; the same result as
   `WebAssembly.Module.exports`), and walks every instruction of the code section
-  to find atomics, since scanning for the prefix byte would match immediates;
+  to find atomics, since scanning for the prefix byte would match immediates.
+  The decoder fails closed: an opcode it does not know is an error, never a
+  pass, because an unknown immediate layout would desynchronise the walk and
+  could hide an atomics instruction. This includes the `0xFD` (SIMD) prefix:
+  the decoder carries the complete sub-opcode table of the Wasm 3.0 vector
+  instructions (`0x00`–`0xFF` with the reserved codes left out, and relaxed SIMD
+  `0x100`–`0x113`), each with its immediates (none, memarg, memarg and lane, lane,
+  16-byte constant, 16-lane shuffle), and rejects any other sub-opcode naming it
+  and its offset;
 - the raw size is within the budget (LD34): `--budget <bytes>`, else
   `WASM_BUDGET_BYTES` in `versions.env`.
 
@@ -686,7 +694,9 @@ before any input would never `finish`. Rule:
   `get_setting` ignores feature overrides), is *Sample*), the position is the wall-clock time since
   that instant;
 - otherwise (desktop, or web in *Stream* mode) the position is the audio clock,
-  unchanged.
+  unchanged. The choice is the pure function `wall_clock_for(is_web, player_type,
+  default_type)` (no Godot calls; `uses_wall_clock` reads the engine and calls
+  it), unit-tested on the host: an unknown value falls back to the audio clock.
 
 The event loop in `process` is unchanged (it catches up on every event whose
 start has passed, so a frame stall or a hidden tab delays signals but never

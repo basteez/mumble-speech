@@ -14,6 +14,7 @@ import {
   checkWasm,
   DEFAULT_ENTRY_SYMBOL,
   parseWasm,
+  simdImmediates,
   readBudget,
   readEntrySymbol,
   readLibraries,
@@ -81,10 +82,10 @@ test('bad magic is rejected, including inputs shorter than the header', () => {
 test('only WebAssembly version 1 is accepted', () => {
   const bytes = buildModule();
   bytes[4] = 2;
-  assert.match(parseWasm(bytes).error, /unsupported WebAssembly version 2/);
+  assert.match(parseWasm(bytes).error, /unsupported WebAssembly version 0x00000002\b/);
   const reserved = buildModule();
   reserved[7] = 1; // version word 0x01000001: not version 1
-  assert.match(parseWasm(reserved).error, /unsupported/);
+  assert.match(parseWasm(reserved).error, /unsupported WebAssembly version 0x01000001\b/); // the whole word, not byte 4
 });
 
 test('truncation is reported as malformed, never thrown (L4.17: a broken file fails)', () => {
@@ -358,6 +359,68 @@ test('0xFD prefix (SIMD): memarg, lane and 16-byte immediates, including immedia
     ['i8x16.popcnt', [0xfd, 0x62]],
     ['relaxed SIMD (sub-opcode 0x100, LEB128)', [0xfd, 0x80, 0x02]],
   ]);
+});
+
+// The table of the 0xFD sub-opcodes is checked against the spec's instruction index: 256 assigned
+// codes (0x00-0xFF without 20 reserved ones, plus relaxed SIMD 0x100-0x113).
+const SIMD_RESERVED = [0x9a, 0xa2, 0xa5, 0xa6, 0xaf, 0xb0, 0xb2, 0xb3, 0xb4, 0xbb, 0xc2, 0xc5, 0xc6, 0xcf, 0xd0,
+  0xd2, 0xd3, 0xd4, 0xe2, 0xee];
+const leb = (n) => {
+  const out = [];
+  do {
+    out.push((n & 0x7f) | (n > 0x7f ? 0x80 : 0));
+    n >>= 7;
+  } while (n > 0);
+  return out;
+};
+const IMMEDIATE_BYTES = {
+  none: [], memarg: [0x03, 0xfe, 0x01], 'memarg+lane': [0x03, 0xfe, 0x01, 0xfe], lane: [0xfe],
+  v128: new Array(16).fill(0xfe), shuffle: new Array(16).fill(0xfe),
+};
+
+test('every assigned 0xFD sub-opcode passes with its own immediates, every other one fails (L4.17)', () => {
+  let assigned = 0;
+  for (let sub = 0; sub <= 0x113; sub++) {
+    const kind = simdImmediates(sub);
+    const label = `0xfd sub-opcode 0x${sub.toString(16)}`;
+    if (SIMD_RESERVED.includes(sub)) {
+      assert.equal(kind, undefined, `${label} is reserved`);
+      continue;
+    }
+    assert.ok(kind, `${label} is assigned`);
+    assigned++;
+    // The immediates carry 0xFE bytes: a decoder that mis-sizes them would report atomics.
+    expectClass([[`${label} (${kind})`, [0xfd, ...leb(sub), ...IMMEDIATE_BYTES[kind]]]]);
+  }
+  assert.equal(assigned, 256);
+});
+
+test('the immediate layouts of the 0xFD sub-opcodes follow the spec', () => {
+  const expected = {
+    memarg: [0x00, 0x01, 0x06, 0x07, 0x0a, 0x0b, 0x5c, 0x5d],
+    'memarg+lane': [0x54, 0x57, 0x58, 0x5b],
+    lane: [0x15, 0x1b, 0x22],
+    v128: [0x0c],
+    shuffle: [0x0d],
+    none: [0x0e, 0x14, 0x23, 0x53, 0x5e, 0x62, 0x99, 0x9b, 0xff, 0x100, 0x113],
+  };
+  for (const [kind, subs] of Object.entries(expected)) {
+    for (const sub of subs) assert.equal(simdImmediates(sub), kind, `0x${sub.toString(16)}`);
+  }
+});
+
+test('an unassigned 0xFD sub-opcode fails, naming the sub-opcode and the offset (fail closed, L4.17)', () => {
+  for (const sub of [0x9a, 0xa2, 0xee, 0x114, 0x115, 0x200, 0x3fff]) {
+    const { errors } = checkWasm(moduleWith([0x01, 0xfd, ...leb(sub), ...FENCE]));
+    assert.equal(errors.length, 1, `0x${sub.toString(16)}`);
+    assert.match(errors[0], new RegExp(`malformed WebAssembly binary: unknown instruction 0xfd sub-opcode 0x${sub.toString(16)} at offset \\d+`));
+  }
+});
+
+test('atomics after a SIMD instruction whose immediates contain 0xFE is still found', () => {
+  const { errors } = checkWasm(moduleWith([0xfd, 0x0d, ...new Array(16).fill(0xfe), ...FENCE]));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /atomics/);
 });
 
 test('an unknown opcode fails the check; it is not passed over (L4.17)', () => {

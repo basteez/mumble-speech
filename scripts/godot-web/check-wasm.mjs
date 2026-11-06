@@ -79,6 +79,35 @@ function valtype(r) {
   if (t === 0x63 || t === 0x64) r.sSkip();
 }
 
+// The 0xFD (vector) sub-opcodes of the WebAssembly 3.0 binary format (spec "Instruction Index",
+// SIMD 0x00-0xFF with its reserved gaps, relaxed SIMD 0x100-0x113) and their immediates. Anything
+// not listed is unassigned: the decoder fails on it, because an unknown immediate layout would
+// desynchronise the walk and could hide an atomics instruction (L4.17).
+const SIMD_MEMARG = [[0x00, 0x0b], [0x5c, 0x5d]]; // v128.load*, v128.store, load32_zero, load64_zero
+const SIMD_MEMARG_LANE = [[0x54, 0x5b]]; // v128.load*_lane, v128.store*_lane
+const SIMD_LANE = [[0x15, 0x22]]; // extract_lane, replace_lane
+const SIMD_V128 = [[0x0c, 0x0c]]; // v128.const: 16 bytes
+const SIMD_SHUFFLE = [[0x0d, 0x0d]]; // i8x16.shuffle: 16 lane indices
+// Assigned, no immediates. The reserved codes between the ranges are 0x9a, 0xa2, 0xa5, 0xa6, 0xaf,
+// 0xb0, 0xb2-0xb4, 0xbb, 0xc2, 0xc5, 0xc6, 0xcf, 0xd0, 0xd2-0xd4, 0xe2, 0xee.
+const SIMD_NONE = [
+  [0x0e, 0x14], [0x23, 0x53], [0x5e, 0x99], [0x9b, 0xa1], [0xa3, 0xa4], [0xa7, 0xae], [0xb1, 0xb1],
+  [0xb5, 0xba], [0xbc, 0xc1], [0xc3, 0xc4], [0xc7, 0xce], [0xd1, 0xd1], [0xd5, 0xe1], [0xe3, 0xed],
+  [0xef, 0x113], // 0x100-0x113: relaxed SIMD
+];
+const inRanges = (ranges, n) => ranges.some(([lo, hi]) => n >= lo && n <= hi);
+
+/** Immediate layout of a 0xFD sub-opcode, or undefined when the sub-opcode is not assigned. */
+export function simdImmediates(sub) {
+  if (inRanges(SIMD_MEMARG, sub)) return 'memarg';
+  if (inRanges(SIMD_MEMARG_LANE, sub)) return 'memarg+lane';
+  if (inRanges(SIMD_LANE, sub)) return 'lane';
+  if (inRanges(SIMD_V128, sub)) return 'v128';
+  if (inRanges(SIMD_SHUFFLE, sub)) return 'shuffle';
+  if (inRanges(SIMD_NONE, sub)) return 'none';
+  return undefined;
+}
+
 /**
  * Walks the instructions of one function body (after its locals) and returns the offset of the
  * first atomics instruction (prefix 0xFE), or -1 if there is none. Every opcode of the MVP and of
@@ -150,12 +179,14 @@ function findAtomics(r, bodyEnd) {
         if (sub === 10 || sub === 12 || sub === 14) { r.u(); r.u(); break; }
         throw new DecodeError(`unknown instruction 0xfc ${sub} at offset ${at}`);
       }
-      case 0xfd: { // SIMD
+      case 0xfd: { // SIMD and relaxed SIMD: the sub-opcode decides the immediates
         const sub = r.u();
-        if (sub <= 0x0b || sub === 0x5c || sub === 0x5d) memarg(r);
-        else if (sub === 0x0c || sub === 0x0d) r.skip(16);
-        else if ((sub >= 0x15 && sub <= 0x22)) r.skip(1);
-        else if (sub >= 0x54 && sub <= 0x5b) { memarg(r); r.skip(1); }
+        const kind = simdImmediates(sub);
+        if (kind === undefined) throw new DecodeError(`unknown instruction 0xfd sub-opcode 0x${sub.toString(16)} at offset ${at}`);
+        if (kind === 'memarg' || kind === 'memarg+lane') memarg(r);
+        if (kind === 'lane' || kind === 'memarg+lane') r.skip(1);
+        else if (kind === 'v128') r.skip(16);
+        else if (kind === 'shuffle') r.skip(16);
         break;
       }
       default:
@@ -181,7 +212,8 @@ export function parseWasm(bytes) {
       return { error: 'not a WebAssembly binary (bad magic)' };
     }
     if (bytes[4] !== 1 || bytes[5] !== 0 || bytes[6] !== 0 || bytes[7] !== 0) {
-      return { error: `unsupported WebAssembly version ${bytes[4]}` };
+      const word = (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) >>> 0;
+      return { error: `unsupported WebAssembly version 0x${word.toString(16).padStart(8, '0')} (little-endian word, expected 0x00000001)` };
     }
     const top = new Reader(bytes, 8);
     while (top.pos < bytes.length) {

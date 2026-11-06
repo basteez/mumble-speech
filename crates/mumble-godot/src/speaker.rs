@@ -190,25 +190,20 @@ impl MumbleSpeaker {
     /// stops while the `AudioContext` is suspended, so the signals follow the time since `say`.
     /// Desktop and web Stream mode keep the audio clock.
     fn uses_wall_clock(&self) -> bool {
-        if !Os::singleton().has_feature(&GString::from("web")) {
-            return false;
-        }
+        let is_web = Os::singleton().has_feature(&GString::from("web"));
         let Some(player) = self.player.as_ref() else {
             return false;
         };
-        // AudioServer.PlaybackType: 0 default, 1 stream, 2 sample.
-        match player.get_playback_type().ord() {
-            2 => true,
-            0 => {
-                // The project setting: 0 Stream, 1 Sample. `get_setting_with_override`, as the
-                // AudioServer reads it: plain `get_setting` ignores the `.web` override, which is
-                // what makes Sample the web default.
-                let setting = ProjectSettings::singleton()
-                    .get_setting_with_override(&StringName::from("audio/general/default_playback_type"));
-                setting.try_to::<i64>().is_ok_and(|v| v == 1)
-            }
-            _ => false,
-        }
+        let player_type = i64::from(player.get_playback_type().ord());
+        // The project setting: 0 Stream, 1 Sample. `get_setting_with_override`, as the
+        // AudioServer reads it: plain `get_setting` ignores the `.web` override, which is
+        // what makes Sample the web default. A value that is not an integer reads as -1,
+        // which `wall_clock_for` treats as the audio clock.
+        let default_type = ProjectSettings::singleton()
+            .get_setting_with_override(&StringName::from("audio/general/default_playback_type"))
+            .try_to::<i64>()
+            .unwrap_or(-1);
+        wall_clock_for(is_web, player_type, default_type)
     }
 
     /// Seconds of the current line heard so far: the wall clock when `wall_clock` is set,
@@ -223,5 +218,69 @@ impl MumbleSpeaker {
         };
         let server = AudioServer::singleton();
         player.get_playback_position() as f64 + server.get_time_since_last_mix() - server.get_output_latency()
+    }
+}
+
+/// The clock choice of `uses_wall_clock` as a pure function (LD30, L4.16), so it can be tested
+/// without Godot. `player_type` is `AudioServer.PlaybackType` of the player (0 default, 1 stream,
+/// 2 sample); `default_type` is the project setting `audio/general/default_playback_type`
+/// (0 Stream, 1 Sample). Only the web in Sample mode uses the wall clock; any other or unknown
+/// value keeps the audio clock.
+fn wall_clock_for(is_web: bool, player_type: i64, default_type: i64) -> bool {
+    if !is_web {
+        return false;
+    }
+    match player_type {
+        2 => true,
+        0 => default_type == 1,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEFAULT: i64 = 0;
+    const STREAM: i64 = 1;
+    const SAMPLE: i64 = 2;
+
+    #[test]
+    fn desktop_never_uses_the_wall_clock() {
+        for player in [DEFAULT, STREAM, SAMPLE, -1, 3, i64::MAX, i64::MIN] {
+            for default in [0, 1, 2, -1, i64::MAX] {
+                assert!(!wall_clock_for(false, player, default), "player {player}, default {default}");
+            }
+        }
+    }
+
+    #[test]
+    fn web_sample_uses_the_wall_clock() {
+        for default in [0, 1] {
+            assert!(wall_clock_for(true, SAMPLE, default));
+        }
+    }
+
+    #[test]
+    fn web_stream_keeps_the_audio_clock() {
+        for default in [0, 1] {
+            assert!(!wall_clock_for(true, STREAM, default));
+        }
+    }
+
+    #[test]
+    fn web_default_follows_the_project_setting() {
+        assert!(!wall_clock_for(true, DEFAULT, 0), "project default Stream");
+        assert!(wall_clock_for(true, DEFAULT, 1), "project default Sample");
+    }
+
+    #[test]
+    fn unknown_values_fall_back_to_the_audio_clock() {
+        for player in [-1, 3, 4, 100, i64::MAX, i64::MIN] {
+            assert!(!wall_clock_for(true, player, 1), "player {player}");
+        }
+        for default in [-1, 2, 3, i64::MAX, i64::MIN] {
+            assert!(!wall_clock_for(true, DEFAULT, default), "default {default}");
+        }
     }
 }
