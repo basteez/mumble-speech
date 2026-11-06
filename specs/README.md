@@ -39,3 +39,4 @@ with its own specs in [`playground/`](playground/README.md).
 - [x] Revision of 2026-11-04 (issue #21, engine speakers at a fixed 48 kHz: L1.4 clarified, L4.10, L7.5; design §3, §3.1, §9.3, §9.4, §10, LD17–LD18; task M1, checklist U4): approved (2026-11-04, PR #28)
 - [x] Revision of 2026-11-04 (issue #24, Unity source checkouts without native plugins: L4.11–L4.12; design §9.4, §10, §14, LD19–LD20; task G4, checklist U5): approved (2026-11-04, PR #26)
 - [x] Revision of 2026-11-04, Unity on Android (issue #25): L4.13–L4.14 new, L4.7, L5.2, L8.1 and *Out of scope* amended; design §9.4.1, §10, §13, §14, LD21–LD26; tasks N1–N7, checklist U6–U8: approved (2026-11-04, PR #29)
+- [ ] Revision of 2026-11-06, Godot on the web (issue #32): L4.15–L4.18 new, L4.6, L5.2, L8.1 and *Out of scope* amended, open questions LQ12–LQ15; design §9.3.1, §3, §9.3, §10, §13, §13.1, §14, LD27–LD34; tasks W1–W7, checklist GW1–GW5: pending approval in the PR

@@ -103,7 +103,7 @@ existing tests and commits continue to refer to them.
 - **L4.3** (C ABI) The library SHALL provide an automatically generated `mumble.h` header and prebuilt libraries for macOS (universal arm64 + x86_64), Windows x64 and Linux x64. [auto]
 - **L4.4** (C ABI) No function SHALL propagate a panic across the C boundary: errors SHALL be return codes. The ownership of every pointer SHALL be documented in the header. [auto] [rev]
 - **L4.5** (C ABI) The header SHALL expose `mumble_abi_version()`. An incompatible change SHALL increment the version. [rev]
-- **L4.6** (Godot) An addon for Godot ≥ 4.3 SHALL offer a `MumbleVoice` resource configurable from the inspector, a `MumbleSpeaker` node that plays sentences or single characters, and a `MumbleTypewriter` node that reveals a `Label` or `RichTextLabel` character by character synchronized with the audio. Platforms: desktop (Windows, macOS, Linux). [auto] [man]
+- **L4.6** (Godot) An addon for Godot ≥ 4.3 SHALL offer a `MumbleVoice` resource configurable from the inspector, a `MumbleSpeaker` node that plays sentences or single characters, and a `MumbleTypewriter` node that reveals a `Label` or `RichTextLabel` character by character synchronized with the audio. Platforms: desktop (Windows, macOS, Linux) and web (L4.15). [auto] [man]
 - **L4.7** (Unity) A UPM package for Unity ≥ 2022.3 LTS SHALL offer a `MumbleVoice` `ScriptableObject`, a `MumbleSpeaker` component (`Say`, `SpeakCharacter`, per-character and end-of-sentence events) and a typewriter helper for `TMP_Text`, optional if TextMeshPro is present. Platforms: desktop and Android (L4.13). [man]
 - **L4.8** Every binding SHALL use the same concepts (Voice, render, timeline, Speaker, advance) with names adapted to the platform's conventions. [rev]
 - **L4.9** Every binding SHALL include a minimal runnable example. [man]
@@ -112,11 +112,15 @@ existing tests and commits continue to refer to them.
 - **L4.12** (Unity) The Unity README and documentation page SHALL present installation by git URL, OpenUPM or release tarball as the way to install the package, and SHALL state that `bindings/unity` in a source checkout contains no native libraries and must be built before it is added to a project, with build instructions for macOS, Linux and Windows (including Windows without a POSIX shell). The build script SHALL exit with an error, not silently, on a platform it does not support. [rev]
 - **L4.13** (Unity, Android) WHEN a Unity project is built for Android, the package SHALL provide the C ABI library for the `arm64-v8a`, `armeabi-v7a` and `x86_64` architectures, running on Android 5.0 (API level 21) or later, with import settings such that the player includes exactly one library per selected architecture and the editor and desktop players never load an Android library (LD21–LD23, LD26). [auto] [man]
 - **L4.14** (Unity, Android) Each Android library SHALL export exactly the functions declared in `mumble.h`, be an ELF shared object for its own architecture, have every loadable segment aligned to 16 KB (Google Play requirement for Android 15+), and depend only on Android system libraries (`libc`, `libm`, `libdl`, `liblog`). IF any of these does not hold, CI SHALL fail. [auto]
+- **L4.15** (Godot, Web) WHEN a Godot 4.3 or later project using the addon is exported to the web with *Extensions Support* on and *Thread Support* off, and served without cross-origin isolation headers (no COOP/COEP), the addon SHALL load in the latest Chrome, Firefox and desktop Safari, and `Mumble`, `MumbleVoice`, `MumbleSpeaker` and `MumbleTypewriter` SHALL offer the same API as on desktop and give the same samples: `Mumble.render` passes every conformance vector, and `say`, `speak_character` and `render_stream` play or return the same 48 kHz data as on desktop (L4.10). The same addon files SHALL serve every supported Godot version, as on desktop (LD28, LD29). [auto] [man]
+- **L4.16** (Godot, Web) WHILE a web export plays in the default *Sample* playback mode, `say` SHALL emit `character_spoken` once per event, in order, each no earlier than the event's start and at most 100 ms plus one frame after it, measured from the call; and `finished` exactly once, after the last `character_spoken`, at most 250 ms plus one frame after the line's duration. This SHALL also hold while the browser has not yet allowed audio (no user gesture yet: the line is silent but the signals still arrive), and in *Stream* mode, with a bound of 500 ms plus one frame for `finished`. `MumbleTypewriter.type_text` SHALL reveal the label and emit `finished` as on desktop (LD30). [auto] [man]
+- **L4.17** (Godot, Web) The web library SHALL be a WebAssembly Emscripten side module built without threads: it SHALL NOT import or define shared memory, SHALL export the GDExtension entry symbol `gdext_rust_init`, SHALL be listed in `mumble_speech.gdextension` for `web.debug.wasm32` and `web.release.wasm32` (and not for `threads`), and SHALL NOT exceed the size budget recorded in LD34. IF any of these does not hold, CI SHALL fail. [auto]
+- **L4.18** (Godot, Web) The Godot README and documentation page SHALL state how to export to the web: Godot 4.3 or later, *Extensions Support* on (which selects the larger `dlink` export templates, included in the official template package), *Thread Support* off (and what happens if it is on), no special server headers, a user gesture before audio is heard (browser autoplay rules), the default *Sample* playback mode and its timing (L4.16), and the size impact: the measured size of `mumble_godot.wasm`, raw and gzip, and the increase of the `dlink` template over the standard one. [rev]
 
 ### L5 — Conformance and quality
 
 - **L5.1** The repository SHALL contain at least 30 conformance vectors (styles, voices, seeds, sample rates, edge-case texts). The PCM hash is 64-bit FNV-1a over the little-endian `f32` bytes, easy to implement in any language. [auto]
-- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). [auto] [man]
+- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). The Godot ones SHALL also pass in a web export of the addon, run in Chromium in CI (required) and in Firefox and Safari by hand (LD31). [auto] [man]
 - **L5.3** All packages SHALL share the same semver version. [rev]
 
 ### L6 — Playground and external use
@@ -134,7 +138,7 @@ existing tests and commits continue to refer to them.
 
 ### L8 — Release
 
-- **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms), the Unity package tarball (with its native plugins, desktop and Android) and the npm tarball of `@mumble-speech/web`. [auto]
+- **L8.1** Pushing a tag `vX.Y.Z` SHALL create a GitHub Release with: the C archive (header and libraries for Linux x64, Windows x64, macOS universal), the Godot addon zip (same three platforms, plus the web library, L4.15), the Unity package tarball (with its native plugins, desktop and Android) and the npm tarball of `@mumble-speech/web`. [auto]
 - **L8.2** The release job SHALL fail if the tag does not match the version of every package (L5.3). [auto]
 - **L8.3** The release notes SHALL contain: links to the documentation, the playground and the changelog; links to the release in every package registry where it is published (npm, crates.io, docs.rs, the Unity and Godot branches, and OpenUPM and the Godot Asset Library once their entries exist); the changelog section of the version; a table of the archives with platforms, size and SHA-256 (plus a `SHA256SUMS.txt` asset); install instructions for each binding from the release archives, linking its documentation page; compatibility (minimum Godot, Unity and Node versions, platforms, C ABI version, conformance vector format); what was verified before publishing, with a link to the CI run; the list of merged pull requests and the comparison with the previous release. Values such as versions and checksums SHALL be read from the repository and the archives, not written by hand. [auto]
 - **L8.5** A tag with a prerelease suffix (`vX.Y.Z-rc.N`) SHALL publish a prerelease: the GitHub Release marked as prerelease, npm with the dist-tag `next` (so `latest` is unchanged), the crate as a prerelease version, and the `upm/` and `godot/` tags without moving the `upm` and `godot-addon` branches. A prerelease does not need its own changelog section (the notes show *Unreleased*). [auto]
@@ -153,7 +157,9 @@ existing tests and commits continue to refer to them.
 - Prebuilt libraries for iOS and consoles (the C ABI makes them possible later). iOS needs a static library loaded through `__Internal`, a different integration from the shared libraries used elsewhere.
 - Android outside the Unity package: Android libraries in the C archive, and Godot Android export (L4.13 covers Unity only, LD24).
 - Conformance vectors on Android in CI (an emulator on the CI runners is x86_64 only and slow; LD25): Android is verified by the CI library checks (L4.14) and a manual device run (U7).
-- Godot web export with GDExtension and Unity WebGL.
+- Unity WebGL.
+- Godot web exports with *Thread Support* on (a second, threaded `.threads.wasm` build that needs cross-origin isolation headers; LD27), and Godot web on 4.2 or earlier.
+- The C ABI as WebAssembly (the web path outside Godot is `@mumble-speech/web`; LD33).
 - Dedicated Unreal plugin (usable via the C ABI, without a wrapper).
 - Custom or data-defined styles.
 - Streaming synthesis in the audio thread.
@@ -175,14 +181,18 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 | LQ6 | Should events keep the `dot` (color + size), or expose a neutral sound identifier? | Only the sound identifier (style + variant); colors become a playground choice (user decision, 2026-10-24, LD14). |
 | LQ7 | Where are the docs and the playground published, given that GitHub Pages on `basteez` would use the custom domain `bstz.it` for every project site? | A GitHub organization used only for the site: `mumble-speech`, user site `mumble-speech.github.io`, deployed from this repository's CI. The code stays on `basteez/mumble-speech` (user decision, 2026-10-24, LD15). |
 | LQ8 | Documentation tool? | VitePress, in the same npm workspace as the playground (user decision, 2026-10-24). |
+| LQ9 | Should the Android libraries also go into the C archive? | No, Unity only (LD24), approved with the Unity Android revision (2026-11-04). |
+| LQ10 | Is the `armv7` conformance run under QEMU worth its CI time? | Yes (LD25), approved with the Unity Android revision (2026-11-04). |
+| LQ11 | Which version ships Unity on Android? | `0.2.0`, approved with the Unity Android revision (2026-11-04); released 2026-11-05. |
 
 ## 7. Open questions
 
-Raised by the Unity Android revision (issue #25), each with a proposed default;
+Raised by the Godot web revision (issue #32), each with a proposed default;
 they close with the approval of the revision.
 
 | # | Question | Proposed default |
 |---|---|---|
-| LQ9 | Should the Android libraries also go into the C archive (`lib/android-<abi>/`)? It costs little once they are built. | No, Unity only (LD24); a later request can add them with their own README and checks. |
-| LQ10 | Is the `armv7` conformance run under QEMU worth its CI time (about a few minutes per PR)? | Yes: it is the only check of 32-bit ARM arithmetic before a device run (LD25). |
-| LQ11 | Which version ships it? | `0.2.0`: a new platform is a minor change under semver. |
+| LQ12 | Ship a threaded build (`.threads.wasm`) next to the non-threaded one? | No (LD27): non-threaded exports are Godot's default since 4.3 and need no server headers; a threaded build doubles the web build and CI and can be added on request. |
+| LQ13 | IF CI shows that the Godot 4.3 `dlink` template cannot load the side module built with the pinned Emscripten (W1), raise the web minimum to the oldest Godot version that passes, or build one library per Godot version? | Raise the web minimum (desktop stays 4.3) and amend L4.15, L4.18 and the release notes' compatibility line before merging; one library per version would break "one addon for every version" (LD28). |
+| LQ14 | Should the Firefox and WebKit CI runs become required checks? | Not at first (LD31): headless WebGL and audio on Linux runners are less proven for them. Promote each after ten consecutive green runs on `main`. |
+| LQ15 | Which version ships it? | `0.3.0`: a new platform is a minor change under semver. |

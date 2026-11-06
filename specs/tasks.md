@@ -119,6 +119,40 @@ requirement IDs.
 - [ ] **N7** Manual verification on an Android device (checklist U6–U8), by the maintainer or a volunteer through the issue form. — L4.13, L5.2
   - Done when: U6 and U7 pass on at least one ARM64 device; U8 passes or is recorded as not available. Until then the changelog lists Android under *Known issues* as not yet verified on a device, as was done for desktop Unity.
 
+## Phase W — Godot on the web (issue #32)
+
+Design §9.3.1, LD27–LD34. W1 settles the facts the rest depends on (API level,
+Emscripten compatibility with the 4.3 template, size); its outcomes go into the
+decision log before the pull request is merged.
+
+- [ ] **W1** Web build: target-specific `godot` dependencies in `crates/mumble-godot/Cargo.toml`, the `[target.wasm32-unknown-emscripten]` section in `.cargo/config.toml`, `scripts/godot-web/versions.env`, `scripts/godot-web/build.sh`, `bindings/godot/build.sh web`, the two `web.*.wasm32` entries in `mumble_speech.gdextension`, `scripts/godot-web/check-wasm.mjs` with `check-wasm.test.sh` and the `.gdextension` check. — L4.15, L4.17, LD27, LD28, LD29, LD34
+  - Done when:
+    - happy path: with the pinned nightly and Emscripten, `bindings/godot/build.sh web` writes `addons/mumble_speech/bin/mumble_godot.wasm` and `check-wasm.mjs` passes on it (magic and version, `dylink.0`, no shared memory, no atomics, `gdext_rust_init` exported, within budget), printing raw and gzip size;
+    - desktop unchanged: `bindings/godot/build.sh` with no argument and `cargo build --workspace` on stable build as before, and `cargo tree -p mumble-godot -e features` on the host shows `api-4-3` and no `experimental-wasm*`;
+    - errors: `build.sh` stops with a message naming the expected version when `emcc` is missing or reports another version; `bindings/godot/build.sh` rejects an unknown argument (exit 2);
+    - negatives: `check-wasm.test.sh` makes `check-wasm.mjs` fail on a module without `dylink.0`, one importing shared memory, one without the entry symbol and one over budget; the `.gdextension` check fails on a copy without a web key, with a wrong path, and with a `web.release.threads.wasm32` key;
+    - decisions recorded: LD29 states which API mechanism worked (prebuilt `api-4-3` or `api-custom-json`), LD34 the measured sizes and the budget, and LD28 whether the 4.3 and 4.7.2 `dlink` templates load the library (the W4 run); IF 4.3 fails, LQ13 is resolved and L4.15, L4.18 amended in the same pull request.
+- [ ] **W2** Speaker clock on the web: `MumbleSpeaker` records the start instant in `say` and uses the wall clock as position when running on the web with an effective *Sample* playback type; audio clock otherwise. — L4.16, LD30
+  - Done when:
+    - desktop: the four mix-rate runs of `run_tests.gd` pass unchanged, and review confirms the desktop path still reads the audio clock (no new public API is added to expose the choice);
+    - web (through W3/W4): the L4.16 bounds hold for `say("Hé 👋!")` with audio running and suspended, `finished` is emitted exactly once and after the last `character_spoken`, `say("")` emits only `finished`, and a second `say` during a line restarts the clock (events of the first line are not emitted after the second starts);
+    - *Stream* mode on the web (internal player switched in the test) uses the audio clock and meets its bound;
+    - `stop()` during a line emits no further signal; a 500-character `type_text` line in Sample mode finishes, and the number of samples registered with the browser after it (read through `JavaScriptBridge` from Godot's audio module, or, if that is not reachable, by GW2) does not grow with the line length.
+- [ ] **W3** Shared suite and web runner: `tests/suite.gd` extracted from `run_tests.gd` (desktop output and command line unchanged), `tests/web/runner.tscn` + `runner.gd` with the web-only checks, `export_presets.cfg` (`Web`, `Web (tests)`), the `main_scene.mumble_web_tests` and `rendering_method.web` settings in `project.godot`, `.gitignore` for `build/` and `tests/web/vectors.json`. — L4.15, L4.16, L5.2, LD32
+  - Done when: the desktop runs pass with the same number of checks as before the split (printed count compared); the `Web (tests)` export starts the runner and the `Web` export starts the example scene (checked by W4 on both Godot versions; if the feature-tag override of the main scene is not honored on 4.3, the fallback of §9.3.1 is used and recorded in the decision log); the runner prints `MUMBLE_WEB_TESTS FAIL` when one vector's expected hash is altered in a local copy of `vectors.json`, and when the vectors file is missing from the export.
+- [ ] **W4** CI: `godot-web-build` and `godot-web` jobs (Godot 4.3 and 4.7.2; Chromium with audio running and suspended), `scripts/godot-web/export.sh`, `run-tests.mjs`, its `package.json` and lockfile (exact Playwright version), template cache, PulseAudio null sink; Firefox and WebKit job (not required); `godot-web` added to the required checks. — L4.15–L4.17, L5.2, LD31
+  - Done when:
+    - the jobs are green on the PR, and the summary lists the wasm sizes, the Godot version, the browser, the number of vectors checked and the measured timings of the `say` check;
+    - the page is served without COOP/COEP and the run asserts `crossOriginIsolated === false`;
+    - negative runs on scratch commits, then reverted: a vector hash altered (fails), the `.wasm` left out of the addon (fails on the export check), the speaker clock forced to the audio clock on the web (the `suspended` run fails on `finished`), the `AudioContext` expected `running` with autoplay blocked (fails on the state check);
+    - the Firefox and WebKit job runs and its result (pass, or the failure and its cause) is recorded in the PR description for LQ14.
+- [ ] **W5** Release: `web` job in `release.yml`, `assemble.sh` adds `mumble_godot.wasm` to the Godot zip only, `verify.sh` checks it (`check-wasm.mjs`, `.gdextension` check, exported tests on Godot 4.3 in Chromium), `notes.mjs` lists the web among the Godot platforms and in the compatibility table, the `godot-addon` README line and Asset Library summary mention the web. — L4.15, L4.17, L8.1, L8.3, L9.4, LD33
+  - Done when: a release dry run (pull request trigger) builds the four archives; the Godot zip contains `addons/mumble_speech/bin/mumble_godot.wasm` and the C archive and Unity tarball contain no `.wasm`; `verify.sh` fails on a Godot zip with the `.wasm` removed and on one with a threaded build substituted (a module with shared memory); the notes preview shows *Web (Godot 4.3+, no threads)* for Godot only; `verify.test.sh` covers the new negatives.
+- [ ] **W6** Documentation: `bindings/godot/README.md` (drop the stale "no prebuilt release yet" note) and `docs/bindings/godot.md` with a *Web export* section (L4.18: settings, threads off and what happens otherwise, no headers, user gesture, Sample mode timing, measured sizes, `build.sh web` from source); root README platform list; `bindings/godot/TESTING.md` with GW1–GW5; a *Godot web verification report* issue form; CHANGELOG *Unreleased* entry. — L4.18, L7.1, L8.4
+  - Done when: the `site` job passes (no broken links); the issue form validates (GitHub renders it on the PR branch); review confirms each L4.18 point is covered, with sizes taken from W1 and the threaded-export behavior from GW4.
+- [ ] **W7** Manual verification in browsers (checklist GW1–GW5), by the maintainer or a volunteer through the issue form. — L4.15, L4.16, L5.2 [man]
+  - Done when: GW1–GW3 pass in the latest Chrome, Firefox and desktop Safari on Godot 4.3 and on the latest 4.x; GW4 is recorded in the docs; GW5 passes or is recorded as not available. Until then the changelog lists Godot web under *Known issues* as verified in Chromium in CI only.
+
 ## Manual checklist
 
 | ID | Steps | Expected | Requirements |
@@ -134,6 +168,11 @@ requirement IDs.
 | U6 | Install the package in Unity 2022.3 or 6 with Android Build Support; select each `Plugins/Android/libs/<abi>/libmumble_ffi.so` in the inspector; build the `Basic` sample for Android (IL2CPP, ARM64 and ARMv7 ticked) and run it on an ARM64 device | Inspector: only Android ticked, with the folder's CPU; the desktop libraries have Android unticked. On the device: the sample speaks and types the lines, no `DllNotFoundException` or `EntryPointNotFoundException` in `adb logcat`. The APK contains `lib/arm64-v8a/` and `lib/armeabi-v7a/libmumble_ffi.so` and no desktop library | L4.13, L4.9 |
 | U7 | With `testables` set (U2) and the device connected: Test Runner → PlayMode → *Run All in Player* (Android) | `MumbleSpeech.Tests.Runtime` passes: every conformance vector is bit-identical on the device | L5.2, L1.4 |
 | U8 | Optional: run the U6 build on a 32-bit ARM device (or with ARMv7 only) and on an x86_64 emulator or ChromeOS device; open the APK in Android Studio's APK Analyzer | The sample speaks on each; APK Analyzer reports no 16 KB alignment warning for `libmumble_ffi.so` | L4.13, L4.14 |
+| GW1 | In `bindings/godot` (after `build.sh web`) or a project with the released addon, export the `Web` preset (Extensions Support on, Thread Support off) with Godot 4.3 and with the latest 4.x; serve `build/web/` with a plain static server (`python3 -m http.server`, no extra headers); open it in the latest Chrome, Firefox and desktop Safari, click once | The example types its line letter by letter with sound in sync, as on desktop; no error in the browser console; `crossOriginIsolated` is `false` in the console | L4.15, L4.9 |
+| GW2 | Open the `Web (tests)` export from GW3 in each browser with the speakers on (it says a line and types a 500-character one), with the browser's memory tool open | Each character sounds as its letter appears; the `say` line ends as `finished` is logged (within about a frame plus the browser's output latency); memory returns to its level after the long line | L4.16 |
+| GW3 | Export the `Web (tests)` preset; serve and open it in Firefox and Safari, click once | The page console ends with `MUMBLE_WEB_TESTS PASS`: every conformance vector is bit-identical in the browser and the timing checks pass | L5.2, L1.4, L4.16 |
+| GW4 | Export the `Web` preset with Thread Support on; serve it with and without COOP/COEP headers | Record what happens (export error, load error, or silent failure) and check the docs describe it | L4.18 |
+| GW5 | Optional: open the GW1 export on iOS Safari, and upload it to itch.io as an HTML game (embedded in the page, *SharedArrayBuffer support* off) | The line speaks after a tap, as in GW1 | L4.15 |
 
 ## Verifiability on this machine
 
@@ -141,6 +180,8 @@ requirement IDs.
   `wasm32-unknown-unknown`, `wasm-bindgen-cli`, `cbindgen`.
 - Not available: Godot, Unity, .NET. Godot is verified in CI (headless) and
   with G1–G3 by you; Unity only with U1–U3 by you.
+- Not available: Emscripten, a Rust nightly, Playwright browsers. The Godot web
+  build and its browser tests are verified in CI (W4) and with GW1–GW5 by you.
 - Windows and Linux are verified only in CI.
 
 ## Traceability
@@ -155,11 +196,12 @@ requirement IDs.
 | L4.6 | F1–F3 |
 | L4.7 | G1–G3 |
 | L4.13–L4.14 | N1–N7 |
+| L4.15–L4.18 | W1–W7 |
 | L4.8–L4.9 | F2, G2, H2 |
 | L4.10 | M1 |
 | L4.11–L4.12 | G4 |
-| L5 | C1, C2, D2, E2, F2, G2, H1, N3, N4, N7 |
-| L7 | J1–J3, M1 (L7.5) |
-| L8 | H1, H3, H4, N5 |
-| L9 | K1–K3, H3 |
+| L5 | C1, C2, D2, E2, F2, G2, H1, N3, N4, N7, W3, W4, W7 |
+| L7 | J1–J3, M1 (L7.5), W6 |
+| L8 | H1, H3, H4, N5, W5 |
+| L9 | K1–K3, H3, W5 (L9.4) |
 | L6 | A1b, A2, D3, P1–P3 |
