@@ -219,7 +219,8 @@ impl MumbleSpeaker {
     }
 
     /// Seconds of the current line heard so far: the wall clock when `wall_clock` is set,
-    /// otherwise the audio clock, latency-compensated.
+    /// otherwise the audio clock, latency-compensated; infinite once the player has stopped at
+    /// the end of its stream.
     fn position(&self) -> f64 {
         if self.wall_clock {
             let now = Time::singleton().get_ticks_usec();
@@ -228,6 +229,14 @@ impl MumbleSpeaker {
         let Some(player) = self.player.as_ref() else {
             return 0.0;
         };
+        if self.speaking && !player.is_playing() {
+            // The stream has played to its end and the player stopped, which resets its playback
+            // position: the line was heard to the end. The latency-compensated clock may never
+            // reach the duration (large output latency on the web, LD30), so `process` still
+            // gets every remaining character and `finished`. `is_playing` is true from the
+            // `play` in `say` on, and `stop` clears `speaking` first.
+            return f64::INFINITY;
+        }
         let server = AudioServer::singleton();
         player.get_playback_position() as f64 + server.get_time_since_last_mix() - server.get_output_latency()
     }
