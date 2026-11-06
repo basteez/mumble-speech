@@ -1,7 +1,7 @@
 # Godot
 
-A GDExtension addon for **Godot 4.3 and later** on Windows, macOS and Linux. Audio is
-generated at runtime; nothing is drawn by the addon.
+A GDExtension addon for **Godot 4.3 and later** on Windows, macOS, Linux and the
+[web](#web-export). Audio is generated at runtime; nothing is drawn by the addon.
 
 ## Install
 
@@ -14,7 +14,8 @@ into your project, so that `addons/mumble_speech/` sits at its root. The same ad
 on the [`godot-addon`](https://github.com/basteez/mumble-speech/tree/godot-addon)
 branch, which is what the Asset Library entry points to.
 
-To build from source (needs Rust): `bindings/godot/build.sh`.
+To build from source (needs Rust): `bindings/godot/build.sh`. For the web library, see
+[Web export](#web-export).
 
 ## Use
 
@@ -54,7 +55,67 @@ identical up to Godot's resampler, which the library does not control).
 `Mumble.render` with an explicit `sample_rate`.
 
 `character_spoken` and `finished` follow the audio clock (playback position, time since
-the last mix, output latency), so they match what the player hears.
+the last mix, output latency), so they match what the player hears. On the web, in the
+default *Sample* playback mode, they follow the time since the line started instead
+([Web export](#web-export)).
+
+## Web export
+
+The addon includes a WebAssembly library (`addons/mumble_speech/bin/mumble_godot.wasm`),
+so `Mumble`, `MumbleVoice`, `MumbleSpeaker` and `MumbleTypewriter` work in a web export
+with the same API and the same samples as on desktop. Export settings
+(**Project → Export… → Add… → Web**):
+
+- **Godot 4.3 or later.** Earlier versions only export the web with threads, which the
+  addon does not support.
+- **Extensions Support: on.** The web export then uses the `dlink` export templates,
+  which are part of the official export template package (nothing extra to download).
+- **Thread Support: off** (the default in 4.3 and later). The addon ships a build
+  without threads only. With Thread Support on, Godot looks for a threaded library the
+  addon does not have, so the addon does not load and its classes are missing at run
+  time; turn Thread Support off.
+- **No special server headers.** Without threads, the export does not need the
+  cross-origin isolation headers (`Cross-Origin-Opener-Policy`,
+  `Cross-Origin-Embedder-Policy`), so it also works on hosts that cannot set them, such
+  as itch.io's HTML5 embed. CI serves the export without them and checks that the page
+  is not cross-origin isolated.
+- **A user gesture before audio is heard.** Browsers keep audio suspended until the
+  player clicks, taps or presses a key on the page. A line said earlier is silent, but
+  see the timing below: its signals still arrive.
+- **Playback mode.** The default for web exports is *Sample* playback
+  (Project Settings → Audio → General → Default Playback Type), which the addon supports.
+  In this mode the browser plays the sound, not the engine's mixer, so on the web
+  `character_spoken` and `finished` are emitted according to the time elapsed since
+  `say` was called, not to the audio clock: each `character_spoken` arrives no earlier
+  than the character's start and at most 100 ms plus one frame after it, and `finished`
+  at most 250 ms plus one frame after the line's duration, also before the browser has
+  allowed audio (the line is then silent and the signals still arrive, so a game that
+  waits for `finished` never hangs). The sound can lag the signal by the browser's
+  output latency, typically 10 to 40 ms. In *Stream* playback mode the audio clock is
+  used, as on desktop.
+- **`speak_character` and the typewriter** need no change: the typewriter waits with the
+  frame time, not the audio clock.
+
+Sizes of this addon on the web:
+
+| | Size |
+|---|---|
+| `mumble_godot.wasm`, raw | TBD (measured by CI, W1) |
+| `mumble_godot.wasm`, gzip | TBD (measured by CI, W1) |
+| Increase of the `dlink` export template over the standard one | TBD (measured by CI, W1) |
+
+To build the web library from source you need the pinned nightly Rust and
+Emscripten (`scripts/godot-web/versions.env`, currently Emscripten 3.1.74):
+
+```sh
+bindings/godot/build.sh web    # writes addons/mumble_speech/bin/mumble_godot.wasm and checks it
+```
+
+CI exports the test runner of `bindings/godot` with Godot 4.3 and 4.7.2 and runs it in
+Chromium, with audio running and with audio blocked: every conformance vector must be
+bit-identical in the browser and the timing above must hold. Firefox and desktop Safari
+are checked by hand (`bindings/godot/TESTING.md`); please
+[report what you find](https://github.com/basteez/mumble-speech/issues/new?template=godot_web_verification.yml).
 
 ## Example project
 
