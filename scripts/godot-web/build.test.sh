@@ -82,7 +82,7 @@ EMCC=$work/emcc-old expect_exit "another emcc version is rejected, naming both" 
 EMCC=$work/emcc-pinned expect_exit "the pinned emcc reaches the cargo build (stub fails it)" 1 "" "$build" "$work/out"
 EMCC=$work/emcc-notice expect_exit "a sanity notice before the version line is skipped (reaches the cargo build)" 1 "" "$build" "$work/out"
 EMCC=$work/emcc-broken expect_exit "a failing emcc --version is reported, not silent" 1 "emcc-broken --version' failed: boom" "$build" "$work/out"
-if grep -q "cargo +$RUST_NIGHTLY build -Zbuild-std -p mumble-godot --release --target wasm32-unknown-emscripten" "$work/calls.txt" \
+if grep -q "cargo +$RUST_NIGHTLY build -Zbuild-std=std,panic_abort -p mumble-godot --release --target wasm32-unknown-emscripten" "$work/calls.txt" \
   && grep -q "rustup toolchain install $RUST_NIGHTLY .*--component rust-src --target wasm32-unknown-emscripten" "$work/calls.txt"; then
   echo "ok   the build uses the pinned nightly, build-std and the Emscripten target"; passed=$((passed + 1))
 else

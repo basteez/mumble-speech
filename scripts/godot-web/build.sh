@@ -44,7 +44,7 @@ case " $reported " in
 esac
 
 rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src --target wasm32-unknown-emscripten
-(cd "$root" && cargo "+$RUST_NIGHTLY" build -Zbuild-std -p mumble-godot --release --target wasm32-unknown-emscripten)
+(cd "$root" && cargo "+$RUST_NIGHTLY" build -Zbuild-std=std,panic_abort -p mumble-godot --release --target wasm32-unknown-emscripten)
 
 mkdir -p "$1"
 cp "$root/target/wasm32-unknown-emscripten/release/mumble_godot.wasm" "$1/"

@@ -22,5 +22,8 @@ rustflags = [
     "-C", "llvm-args=-enable-emscripten-cxx-exceptions=0",
     "-Z", "default-visibility=hidden",
     "-Z", "link-native-libraries=no",
-    "-Z", "emscripten-wasm-eh=false",
+    # Panics abort (they cannot be caught on the web anyway). rustc 1.98 removed -Z emscripten-wasm-eh=false
+    # and always uses Wasm exception handling for unwinding, which the Godot template does not link
+    # (__cpp_exception); with panic=abort nothing unwinds. build.sh rebuilds std with panic_abort.
+    "-C", "panic=abort",
 ]
