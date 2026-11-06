@@ -681,8 +681,9 @@ before any input would never `finish`. Rule:
 - WHEN the export runs on the web (`OS.has_feature("web")`) and the internal
   player's effective playback type is *Sample* (its `playback_type` is
   `SAMPLE`, or `DEFAULT` and the project setting
-  `audio/general/default_playback_type`, read at runtime so its `.web`
-  override applies, is *Sample*), the position is the wall-clock time since
+  `audio/general/default_playback_type`, read at runtime with
+  `get_setting_with_override` so its `.web` override applies (plain
+  `get_setting` ignores feature overrides), is *Sample*), the position is the wall-clock time since
   that instant;
 - otherwise (desktop, or web in *Stream* mode) the position is the audio clock,
   unchanged.

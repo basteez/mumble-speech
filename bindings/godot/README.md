@@ -23,7 +23,7 @@ Copy `addons/mumble_speech/` into your project.
 Godot 4.3 or later. In **Project → Export… → Web** turn **Extensions Support** on (it
 selects the `dlink` export templates, included in the official template package) and
 **Thread Support** off (the addon ships a build without threads only; with Thread Support
-on, the addon does not load). No special server headers (COOP/COEP) are needed. Browsers
+on is not supported). No special server headers (COOP/COEP) are needed. Browsers
 keep audio suspended until the first click, tap or key press on the page. In the default
 *Sample* playback mode, `character_spoken` and `finished` follow the time since `say`, so
 they arrive even before audio is allowed (the line is then silent); see

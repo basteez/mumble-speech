@@ -200,8 +200,11 @@ impl MumbleSpeaker {
         match player.get_playback_type().ord() {
             2 => true,
             0 => {
-                // The project setting: 0 Stream, 1 Sample (read now, so its `.web` override applies).
-                let setting = ProjectSettings::singleton().get_setting(&GString::from("audio/general/default_playback_type"));
+                // The project setting: 0 Stream, 1 Sample. `get_setting_with_override`, as the
+                // AudioServer reads it: plain `get_setting` ignores the `.web` override, which is
+                // what makes Sample the web default.
+                let setting = ProjectSettings::singleton()
+                    .get_setting_with_override(&StringName::from("audio/general/default_playback_type"));
                 setting.try_to::<i64>().is_ok_and(|v| v == 1)
             }
             _ => false,

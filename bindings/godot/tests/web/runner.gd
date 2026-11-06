@@ -87,7 +87,7 @@ func run_web_checks() -> void:
 
 	# Sample mode is what the export plays in by default (LD30); without it the timing checks below
 	# would test the wrong path.
-	check(int(ProjectSettings.get_setting("audio/general/default_playback_type")) == 1,
+	check(int(ProjectSettings.get_setting_with_override("audio/general/default_playback_type")) == 1,
 		"audio/general/default_playback_type is Sample (1) in the web export")
 	await measure_line(speaker, LINE, FINISHED_LATE, "say (Sample mode)", true)
 	var player := speaker.get_child(0) as AudioStreamPlayer

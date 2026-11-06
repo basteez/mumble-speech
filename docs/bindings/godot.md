@@ -71,9 +71,9 @@ with the same API and the same samples as on desktop. Export settings
 - **Extensions Support: on.** The web export then uses the `dlink` export templates,
   which are part of the official export template package (nothing extra to download).
 - **Thread Support: off** (the default in 4.3 and later). The addon ships a build
-  without threads only. With Thread Support on, Godot looks for a threaded library the
-  addon does not have, so the addon does not load and its classes are missing at run
-  time; turn Thread Support off.
+  without threads only. A threaded export still picks that library (Godot matches the
+  `web.*.wasm32` entries whatever the threads setting), but threaded exports are not
+  supported and the result is not verified yet (it is likely not to load). Turn Thread Support off.
 - **No special server headers.** Without threads, the export does not need the
   cross-origin isolation headers (`Cross-Origin-Opener-Policy`,
   `Cross-Origin-Embedder-Policy`), so it also works on hosts that cannot set them, such
