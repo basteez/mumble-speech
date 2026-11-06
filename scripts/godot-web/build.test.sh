@@ -42,6 +42,9 @@ EOF
 # Fake emccs reporting a version.
 printf '#!/bin/sh\necho "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 3.1.70 (abcdef)"\n' > "$work/emcc-old"
 printf '#!/bin/sh\necho "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) %s (abcdef)"\n' "$EMSDK_VERSION" > "$work/emcc-pinned"
+# A fresh install prints a sanity-check notice before the version line, and more lines after it (LD28).
+printf '#!/bin/sh\necho "shared:INFO: (Emscripten: Running sanity checks)" >&2\necho "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) %s (abcdef)"\necho "Copyright (C) 2014 the Emscripten authors"\nfor i in 1 2 3 4 5 6 7 8 9; do echo "line $i"; done\n' "$EMSDK_VERSION" > "$work/emcc-notice"
+printf '#!/bin/sh\necho "boom" >&2\nexit 3\n' > "$work/emcc-broken"
 chmod +x "$work/bin"/* "$work"/emcc-*
 export WORK=$work FAKE_WASM=$work/fx/good.wasm FAKE_SO=$work/fake.so
 
@@ -77,6 +80,8 @@ EMCC=$work/emcc-old expect_exit "another emcc version is rejected, naming both" 
 
 : > "$work/calls.txt"
 EMCC=$work/emcc-pinned expect_exit "the pinned emcc reaches the cargo build (stub fails it)" 1 "" "$build" "$work/out"
+EMCC=$work/emcc-notice expect_exit "a sanity notice before the version line is skipped (reaches the cargo build)" 1 "" "$build" "$work/out"
+EMCC=$work/emcc-broken expect_exit "a failing emcc --version is reported, not silent" 1 "emcc-broken --version' failed: boom" "$build" "$work/out"
 if grep -q "cargo +$RUST_NIGHTLY build -Zbuild-std -p mumble-godot --release --target wasm32-unknown-emscripten" "$work/calls.txt" \
   && grep -q "rustup toolchain install $RUST_NIGHTLY .*--component rust-src --target wasm32-unknown-emscripten" "$work/calls.txt"; then
   echo "ok   the build uses the pinned nightly, build-std and the Emscripten target"; passed=$((passed + 1))

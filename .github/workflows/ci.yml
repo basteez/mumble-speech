@@ -184,6 +184,7 @@ jobs:
   godot-web:
     # The Godot web export runs in a browser, served without COOP/COEP (specs/design.md §9.3.1, L4.15, L4.16,
     # L5.2, LD31): the conformance vectors and the speaker timing, with audio running and suspended.
+    # Not a required check at first (LQ14): promoted after ten consecutive green runs on main.
     needs: godot-web-build
     name: godot-web (${{ matrix.godot }})
     strategy:

@@ -120,7 +120,7 @@ existing tests and commits continue to refer to them.
 ### L5 — Conformance and quality
 
 - **L5.1** The repository SHALL contain at least 30 conformance vectors (styles, voices, seeds, sample rates, edge-case texts). The PCM hash is 64-bit FNV-1a over the little-endian `f32` bytes, easy to implement in any language. [auto]
-- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). The Godot ones SHALL also pass in a web export of the addon, run in Chromium in CI (required) and in Firefox and Safari by hand (LD31). [auto] [man]
+- **L5.2** The test suites of core, Web, C ABI and Godot SHALL pass all vectors in CI. The Unity one SHALL pass them in a manual run (in CI it would require a Unity license), in the editor and in an Android player on a device (L4.13). The core vectors SHALL also pass on 32-bit ARM in CI, emulated (LD25). The Godot ones SHALL also pass in a web export of the addon, run in Chromium in CI (not a required check at first, LQ14) and in Firefox and Safari by hand (LD31). [auto] [man]
 - **L5.3** All packages SHALL share the same semver version. [rev]
 
 ### L6 — Playground and external use
@@ -194,5 +194,5 @@ they close with the approval of the revision.
 |---|---|---|
 | LQ12 | Ship a threaded build (`.threads.wasm`) next to the non-threaded one? | No (LD27): non-threaded exports are Godot's default since 4.3 and need no server headers; a threaded build doubles the web build and CI and can be added on request. |
 | LQ13 | IF CI shows that the Godot 4.3 `dlink` template cannot load the side module built with the pinned Emscripten (W1), raise the web minimum to the oldest Godot version that passes, or build one library per Godot version? | Raise the web minimum (desktop stays 4.3) and amend L4.15, L4.18 and the release notes' compatibility line before merging; one library per version would break "one addon for every version" (LD28). |
-| LQ14 | Should the Firefox and WebKit CI runs become required checks? | Not at first (LD31): headless WebGL and audio on Linux runners are less proven for them. Promote each after ten consecutive green runs on `main`. |
+| LQ14 | Should the Godot web CI runs become required checks? | Not at first, Chromium included (LD31; decided 2026-11-06): a flaky emulated-browser job would block every PR. Promote `godot-web (<version>)` (Chromium) after ten consecutive green runs on `main`; Firefox and WebKit after the same, once Chromium is required. |
 | LQ15 | Which version ships it? | `0.3.0`: a new platform is a minor change under semver. |
