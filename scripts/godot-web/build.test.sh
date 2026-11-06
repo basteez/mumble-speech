@@ -143,7 +143,7 @@ export FAKE_WASM=$work/fx/good.wasm
 
 tree=$work/tree-budget
 make_tree "$tree"
-sed 's/^WASM_BUDGET_BYTES=.*/WASM_BUDGET_BYTES=100/' "$tree/scripts/godot-web/versions.env" > "$tree/scripts/godot-web/versions.env.new"
+sed 's/^WASM_BUDGET_BYTES=.*/WASM_BUDGET_BYTES=10/' "$tree/scripts/godot-web/versions.env" > "$tree/scripts/godot-web/versions.env.new"
 mv "$tree/scripts/godot-web/versions.env.new" "$tree/scripts/godot-web/versions.env"
 export STUB_ROOT=$tree
 CARGO_STUB=ok expect_exit "bindings web build: a library over the budget fails the build (LD34)" 1 "exceeds the budget" \

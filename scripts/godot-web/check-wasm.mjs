@@ -8,7 +8,7 @@
 //   Without --budget, WASM_BUDGET_BYTES from versions.env (next to this script) is the budget.
 //   Without --gdextension, the entry symbol is gdext_rust_init.
 //   Exit status: 0 when every check passes, 1 when one fails, 2 on a usage error.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -73,6 +73,12 @@ function memarg(r) {
   r.u();
 }
 
+// A value type: one byte, or two for a reference type (0x63 or 0x64 and a heap type).
+function valtype(r) {
+  const t = r.byte();
+  if (t === 0x63 || t === 0x64) r.sSkip();
+}
+
 /**
  * Walks the instructions of one function body (after its locals) and returns the offset of the
  * first atomics instruction (prefix 0xFE), or -1 if there is none. Every opcode of the MVP and of
@@ -108,7 +114,7 @@ function findAtomics(r, bodyEnd) {
         break;
       case 0x1c: { // select with types
         const count = r.u();
-        r.skip(count);
+        for (let i = 0; i < count; i++) valtype(r);
         break;
       }
       case 0x1f: { // try_table: block type, catch clauses
@@ -197,7 +203,7 @@ export function parseWasm(bytes) {
           if (kind === 0) r.u();
           else if (kind === 1) { r.byte(); readLimits(r); }
           else if (kind === 2) out.imports.push({ module, name, shared: readLimits(r).shared });
-          else if (kind === 3) { r.byte(); r.byte(); }
+          else if (kind === 3) { valtype(r); r.byte(); }
           else if (kind === 4) { r.byte(); r.u(); }
           else throw new DecodeError(`unknown import kind ${kind}`);
         }
@@ -218,7 +224,7 @@ export function parseWasm(bytes) {
           const bodyEnd = r.pos + bodySize;
           if (bodyEnd > end) throw new DecodeError('function body runs past the code section');
           const locals = r.u();
-          for (let j = 0; j < locals; j++) { r.u(); r.byte(); }
+          for (let j = 0; j < locals; j++) { r.u(); valtype(r); }
           out.atomicsAt = findAtomics(r, bodyEnd);
         }
       }
@@ -340,6 +346,8 @@ function main(argv) {
     if (budget === undefined) {
       const env = join(dirname(fileURLToPath(import.meta.url)), 'versions.env');
       budget = readBudget(readFileSync(env, 'utf8'));
+      // A missing or malformed budget must fail: otherwise the size check would silently switch off (L4.17).
+      if (budget === undefined) failures.push(`${env}: no WASM_BUDGET_BYTES (a whole number of bytes): the size budget cannot be checked (LD34)`);
     }
     const bytes = read(args[0]);
     if (bytes !== undefined) {
@@ -354,6 +362,7 @@ function main(argv) {
   return failures.length === 0 ? 0 : 1;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// realpath: a symlinked entry point (a mktemp folder on macOS) must still run, or the check would pass silently.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2));
 }

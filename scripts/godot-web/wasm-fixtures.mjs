@@ -2,7 +2,7 @@
 // check-wasm.test.mjs): a side module that passes every check, and variants that break exactly one of them.
 // Usage as a module: buildModule({ ... }) -> Uint8Array (options below)
 //        as a script: node wasm-fixtures.mjs <out dir>   writes the fixtures used by check-wasm.test.sh
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -75,7 +75,8 @@ export function buildModule({
   return Uint8Array.from(bytes);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// realpath: a symlinked entry point (a mktemp folder on macOS) must still run, or the check would pass silently.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const out = process.argv[2];
   if (!out) {
     console.error('usage: wasm-fixtures.mjs <out dir>');

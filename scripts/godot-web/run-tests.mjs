@@ -10,7 +10,7 @@
 //   Both fail unless crossOriginIsolated is false, the page logs no fatal error, and every AudioContext
 //   is in the state of --audio when the run ends (a silent pass is not possible).
 // The pure helpers are exported (tested by run-tests.test.mjs); the command line is a thin wrapper.
-import { createReadStream, existsSync, statSync, appendFileSync } from 'node:fs';
+import { createReadStream, existsSync, realpathSync, statSync, appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -78,7 +78,16 @@ export function serve(dir) {
   const base = resolve(dir);
   const requests = [];
   const server = createServer((req, res) => {
-    const pathname = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    let pathname;
+    try {
+      pathname = decodeURIComponent((req.url ?? '/').split('?')[0]);
+    } catch {
+      // A malformed escape (%E0, a lone %) is not a path: answer it, do not let the handler throw.
+      requests.push({ path: req.url ?? '/', status: 400 });
+      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.end('bad request');
+      return;
+    }
     let file = normalize(join(base, pathname === '/' ? 'index.html' : pathname));
     const inside = file === base || file.startsWith(base + sep);
     if (!inside || !existsSync(file) || !statSync(file).isFile()) {
@@ -281,6 +290,7 @@ async function main(argv) {
   return run(parsed.options);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// realpath: a symlinked entry point (a mktemp folder on macOS) must still run, or the check would pass silently.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2));
 }
