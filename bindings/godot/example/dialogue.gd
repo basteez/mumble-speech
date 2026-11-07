@@ -14,6 +14,8 @@ var _line := 0
 
 
 func _ready() -> void:
+	# Read by scripts/godot-web/run-tests.mjs (--mode example) to know the example scene started.
+	print("MUMBLE_EXAMPLE started")
 	_show_line()
 
 

@@ -12,6 +12,14 @@ crate-type = ["cdylib"]
 
 [dependencies]
 mumble-speech = { path = "../mumble-core" }
-# api-4-3: built against the Godot 4.3 API, so the addon loads in 4.3 and every later 4.x.
-godot = { version = "0.5.5", features = ["api-4-3"] }
 unicode-segmentation = "1.13.3"
+
+# The `godot` dependency is split by target (specs/design.md §9.3.1, LD28, LD29): desktop builds
+# use the prebuilt Godot 4.3 API, so the addon loads in 4.3 and every later 4.x; the web build
+# (wasm32-unknown-emscripten, nightly Rust, no threads) adds the experimental wasm features.
+# Keep the two `version` fields equal: Cargo cannot enforce it.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+godot = { version = "0.5.5", features = ["api-4-3"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+godot = { version = "0.5.5", features = ["api-4-3", "experimental-wasm", "experimental-wasm-nothreads", "lazy-function-tables"] }

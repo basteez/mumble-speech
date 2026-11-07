@@ -1,0 +1,362 @@
+# The checks shared by the desktop runner (run_tests.gd) and the web runner (web/runner.gd)
+# (specs/design.md §9.3, §9.3.1, L4.6, L5.2, LD32). Not a script to run by itself.
+extends RefCounted
+
+const STYLES := {"beep": 0, "grunt": 1, "alphabet": 2}
+# 0xcbf29ce484222325 as a signed 64-bit GDScript int.
+const FNV_OFFSET := -3750763034362895579
+const FNV_PRIME := 1099511628211
+
+# The node the tests add their test nodes to (it must be in the scene tree).
+var root: Node
+# Where the conformance vectors are: an absolute path on desktop, res://tests/web/vectors.json on the web.
+var vectors_path: String
+var failures := 0
+var checks := 0
+# Conformance vectors checked by test_vectors (for the web runner's report).
+var vectors_checked := 0
+
+
+func _init(root_node: Node, vectors_file: String) -> void:
+	root = root_node
+	vectors_path = vectors_file
+
+
+func check(condition: bool, message: String) -> void:
+	checks += 1
+	if not condition:
+		failures += 1
+		printerr("FAIL: ", message)
+
+
+# CI runs the tests once per output rate (override.cfg, audio/driver/mix_rate) and sets
+# MUMBLE_EXPECT_MIX_RATE; a run where the override did not apply must not pass silently.
+# On the web the environment is empty, so the check is skipped (the rate is the browser's).
+func check_mix_rate() -> void:
+	var expected := OS.get_environment("MUMBLE_EXPECT_MIX_RATE")
+	if expected == "":
+		return
+	check(int(AudioServer.get_mix_rate()) == expected.to_int(),
+		"AudioServer mix rate is %d, expected %s (MUMBLE_EXPECT_MIX_RATE)" % [AudioServer.get_mix_rate(), expected])
+
+
+# Runs every shared check and returns the number of failures.
+func run() -> int:
+	check_mix_rate()
+	test_voice_defaults()
+	test_vectors()
+	await test_typewriter()
+	await test_say()
+	test_speaker_streams()
+	await test_say_order()
+	await test_say_restart_same_frame()
+	await test_say_silent_text()
+	return failures
+
+
+# 64-bit FNV-1a over the little-endian bytes of the samples (LD7). GDScript ints wrap.
+# Godot's string-to-float parsing (and so JSON) is not correctly rounded: it can be one ulp
+# off. Times in the vectors are compared with this tolerance; the samples are exact (hash).
+func same_time(a: float, b: float) -> bool:
+	return absf(a - b) <= 1e-12
+
+
+func pcm_hash(samples: PackedFloat32Array) -> String:
+	var h := FNV_OFFSET
+	for b in samples.to_byte_array():
+		h = (h ^ b) * FNV_PRIME
+	return "0x%08x%08x" % [(h >> 32) & 0xffffffff, h & 0xffffffff]
+
+
+func test_voice_defaults() -> void:
+	var v := MumbleVoice.new()
+	check(v.style == MumbleVoice.BEEP and v.pitch == 0.0 and v.speed == 15.0 and v.variation == 0.0 and v.seed == 0,
+		"MumbleVoice defaults")
+
+
+func test_vectors() -> void:
+	var path := vectors_path
+	var data = JSON.parse_string(FileAccess.get_file_as_string(path))
+	check(data != null, "vectors.json readable at " + path)
+	if data == null:
+		return
+	var started := Time.get_ticks_msec()
+	for v in data.vectors:
+		var voice := MumbleVoice.new()
+		voice.style = STYLES[v.voice.style]
+		voice.pitch = v.voice.pitch
+		voice.speed = v.voice.speed
+		voice.variation = v.voice.variation
+		voice.seed = int(v.voice.seed)
+		var r: Dictionary = Mumble.render(v.text, voice, int(v.sampleRate))
+		if v.expected.has("error"):
+			check(r.get("error") == v.expected.error, "%s: expected error %s, got %s" % [v.id, v.expected.error, r])
+			continue
+		var samples: PackedFloat32Array = r.samples
+		check(samples.size() == int(v.expected.sampleCount), "%s: sample count %d" % [v.id, samples.size()])
+		check(pcm_hash(samples) == v.expected.pcmHash, "%s: PCM hash %s" % [v.id, pcm_hash(samples)])
+		check(same_time(r.duration, v.expected.duration), "%s: duration" % v.id)
+		var events: Array = r.events
+		check(events.size() == v.expected.events.size(), "%s: event count" % v.id)
+		var utf8: PackedByteArray = v.text.to_utf8_buffer()
+		for i in min(events.size(), v.expected.events.size()):
+			var got: Dictionary = events[i]
+			var want: Dictionary = v.expected.events[i]
+			# Code point index in the Godot String, derived independently from the UTF-8 offset.
+			var char_index := utf8.slice(0, int(want.utf8[0])).get_string_from_utf8().length()
+			check(got.char_index == char_index, "%s[%d]: char_index %d, expected %d" % [v.id, i, got.char_index, char_index])
+			check(same_time(got.start, want.start) and same_time(got.duration, want.duration),
+				"%s[%d]: timing %s/%s vs %s/%s" % [v.id, i, got.start, got.duration, want.start, want.duration])
+			check(got.style == STYLES[v.voice.style] and got.variant == int(want.variant),
+				"%s[%d]: sound %d/%d" % [v.id, i, got.style, got.variant])
+	vectors_checked = data.vectors.size()
+	print("vectors: %d checked in %d ms" % [data.vectors.size(), Time.get_ticks_msec() - started])
+
+
+func wait_until(done: Callable, timeout_ms: int) -> bool:
+	var deadline := Time.get_ticks_msec() + timeout_ms
+	while not done.call() and Time.get_ticks_msec() < deadline:
+		await root.get_tree().process_frame
+	return done.call()
+
+
+func test_typewriter() -> void:
+	var label := Label.new()
+	var speaker := MumbleSpeaker.new()
+	var typewriter := MumbleTypewriter.new()
+	for node in [label, speaker, typewriter]:
+		root.add_child(node)
+	typewriter.label = label.get_path()
+	typewriter.speaker = speaker.get_path()
+	var voice := MumbleVoice.new()
+	voice.style = MumbleVoice.ALPHABET
+	voice.speed = 30.0
+	speaker.voice = voice
+
+	var state := {"finished": false, "visible": [], "last_ms": Time.get_ticks_msec(), "longest_gap_ms": 0}
+	typewriter.finished.connect(func(): state.finished = true)
+	var text := "Hi, 👋 è!"
+	typewriter.type_text(text)
+	check(label.text == text and label.visible_characters == 0, "typewriter sets the text, nothing visible yet")
+	var ok := await wait_until(func():
+		var now := Time.get_ticks_msec()
+		state.longest_gap_ms = maxi(state.longest_gap_ms, now - state.last_ms)
+		state.last_ms = now
+		state.visible.append(label.visible_characters)
+		return state.finished, 5000)
+	check(ok, "typewriter emits finished")
+	check(label.visible_characters == -1, "typewriter shows everything at the end")
+	var shown: Array = state.visible.filter(func(n): return n >= 0)
+	check(shown.size() > 1, "typewriter recorded progress")
+	for i in range(1, shown.size()):
+		check(shown[i] >= shown[i - 1], "typewriter reveals monotonically")
+	# The label is sampled once per frame, so the last count (all code points visible) is seen only if
+	# a frame falls between the reveal of the last character and `finished`, which is one character slot
+	# (1/30 s) later. On a slow or irregular frame source (software rendering, a busy browser) one frame
+	# can span that slot, and the reveal and `finished` happen in the same frame: the last count is
+	# then not observable by sampling, and `finished` (which the typewriter emits only after revealing
+	# every character) plus a visible_characters of -1 are the evidence.
+	var slot_ms := 1000.0 / voice.speed
+	check(shown.has(text.length()) or state.longest_gap_ms > slot_ms,
+		"typewriter reaches the last character (%d code points)" % text.length())
+
+	typewriter.type_text("A long line that will be skipped.")
+	typewriter.skip()
+	check(not typewriter.is_typing() and label.visible_characters == -1, "skip shows everything")
+	for node in [label, speaker, typewriter]:
+		node.queue_free()
+	await root.get_tree().process_frame
+
+
+func test_say() -> void:
+	var speaker := MumbleSpeaker.new()
+	root.add_child(speaker)
+	var state := {"finished": false, "spoken": []}
+	speaker.finished.connect(func(): state.finished = true)
+	speaker.character_spoken.connect(func(i): state.spoken.append(i))
+	var stream := speaker.render_stream("Hello")
+	check(stream != null and stream.get_length() > 0.0, "render_stream returns a stream")
+	speaker.say("Hé 👋!")
+	check(speaker.is_speaking(), "say starts speaking")
+	var ok := await wait_until(func(): return state.finished, 5000)
+	check(ok, "say emits finished (audio clock advanced)")
+	check(state.spoken == [0, 1, 3], "character_spoken code point indices, got %s" % [state.spoken])
+	speaker.queue_free()
+
+
+# M1 (L4.10, LD17): the speakers synthesize at MumbleSpeaker.SAMPLE_RATE under every mix rate
+# (CI sets it with override.cfg, see check_mix_rate). Expected values come from the 48 kHz render.
+func wav_body(samples: PackedFloat32Array) -> PackedByteArray:
+	# The 16-bit data of the core's WAV encoding: what the stream holds after its 44-byte header.
+	return Mumble.encode_wav(samples, MumbleSpeaker.SAMPLE_RATE).slice(44)
+
+
+func styled_voice(style: int, seed_value: int) -> MumbleVoice:
+	var voice := MumbleVoice.new()
+	voice.style = style
+	voice.seed = seed_value
+	return voice
+
+
+func test_speaker_streams() -> void:
+	check(MumbleSpeaker.SAMPLE_RATE == 48000, "MumbleSpeaker.SAMPLE_RATE is 48000")
+	var speaker := MumbleSpeaker.new()
+	root.add_child(speaker)
+
+	# Hello with the default voice: 16,800 samples, the PCM of conformance vector beep-01.
+	speaker.voice = MumbleVoice.new()
+	var hello := speaker.render_stream("Hello")
+	var hello_render: Dictionary = Mumble.render("Hello", MumbleVoice.new(), 48000)
+	check(hello != null and hello.mix_rate == 48000, "Hello: stream mix_rate is 48000")
+	check(hello_render.samples.size() == 16800, "Hello: 16,800 samples at 48 kHz, got %d" % hello_render.samples.size())
+	check(hello != null and hello.data == wav_body(hello_render.samples),
+		"Hello: data is the 16-bit encoding of the 48 kHz render")
+	check(pcm_hash(hello_render.samples) == "0x773a75ba3a8ba232", "Hello: PCM hash of conformance vector beep-01")
+
+	# Grunt and alphabet, with a seed and variation: the same bytes whatever the mix rate.
+	for style in [MumbleVoice.BEEP, MumbleVoice.GRUNT, MumbleVoice.ALPHABET]:
+		var voice := styled_voice(style, 42)
+		voice.variation = 0.5
+		voice.pitch = 3.0
+		speaker.voice = voice
+		var styled_text := "Hello, world! Hé 👋"
+		var styled_stream := speaker.render_stream(styled_text)
+		var rendered: Dictionary = Mumble.render(styled_text, voice, 48000)
+		var same := (styled_stream != null and not rendered.has("error") and styled_stream.mix_rate == 48000
+			and styled_stream.data == wav_body(rendered.samples))
+		check(same, "style %d (seed 42, variation): data is the 16-bit 48 kHz render" % style)
+
+	# speak_character: 1 / speed for a letter; a space is one slot and plays nothing.
+	speaker.voice = MumbleVoice.new()
+	speaker.reset()
+	var h_advance: float = speaker.speak_character("H")
+	check(same_time(h_advance, 1.0 / 15.0), "speak_character(\"H\") returns 1 / speed, got %s" % h_advance)
+	var player: AudioStreamPlayer = null
+	if speaker.get_child_count() > 0:
+		player = speaker.get_child(0) as AudioStreamPlayer
+	check(player != null and player.stream != null, "speak_character plays through the internal player")
+	if player != null and player.stream != null:
+		var h_stream := player.stream as AudioStreamWAV
+		check(h_stream != null and h_stream.mix_rate == 48000, "the typewriter's stream has mix_rate 48000")
+		var before := player.stream
+		var space_advance: float = speaker.speak_character(" ")
+		check(same_time(space_advance, 1.0 / 15.0), "speak_character(\" \") returns one slot, got %s" % space_advance)
+		check(player.stream == before, "a space plays nothing: the player keeps its stream")
+	check(speaker.speak_character("") == 0.0, "speak_character(\"\") advances 0")
+
+	# Advances placed in order give the event starts of the 48 kHz render, spaces included.
+	speaker.reset()
+	var timed_text := "Hi there, Bob!"
+	var timed: Dictionary = Mumble.render(timed_text, MumbleVoice.new(), 48000)
+	var starts := {}
+	for e in timed.events:
+		starts[e.char_index] = e.start
+	var t := 0.0
+	var matched := 0
+	for k in timed_text.length():
+		if starts.has(k):
+			matched += 1
+			check(same_time(t, starts[k]), "speak_character timing of character %d: %s, render says %s" % [k, t, starts[k]])
+		t += speaker.speak_character(timed_text.substr(k, 1))
+	check(matched == timed.events.size(), "every sounding character of the render is spoken, got %d" % matched)
+
+	# Edge cases: empty text is an empty 48 kHz stream; a line of about 1,000 characters
+	# has as many 16-bit samples as its 48 kHz render.
+	speaker.voice = MumbleVoice.new()
+	var empty_stream := speaker.render_stream("")
+	var empty_render: Dictionary = Mumble.render("", MumbleVoice.new(), 48000)
+	check(empty_stream != null and empty_stream.mix_rate == 48000 and empty_stream.data.is_empty()
+		and empty_stream.data == wav_body(empty_render.samples), "empty text: empty 48 kHz stream")
+	var line_text := ""
+	for i in 50:
+		line_text += "Hello there, friend. "
+	var fast := MumbleVoice.new()
+	fast.speed = 30.0
+	speaker.voice = fast
+	var long_stream := speaker.render_stream(line_text)
+	var long_render: Dictionary = Mumble.render(line_text, fast, 48000)
+	check(long_stream != null and not long_render.has("error") and long_stream.data.size() / 2 == long_render.samples.size()
+		and long_stream.data == wav_body(long_render.samples), "1,050-character line: as many 48 kHz samples as its render")
+
+	# Errors: an invalid voice gives no stream, no sound and no advance. The speaker takes no rate,
+	# so the rate error is the core's explicit-rate check only.
+	check(Mumble.render("Hello", MumbleVoice.new(), 7999).get("error") == "SampleRateOutOfRange",
+		"Mumble.render still rejects 7,999 Hz")
+	var bad := MumbleVoice.new()
+	bad.pitch = 50.0
+	speaker.voice = bad
+	speaker.reset()
+	check(Mumble.render("Hello", bad, 48000).get("error") == "PitchOutOfRange", "invalid voice: render reports PitchOutOfRange")
+	check(speaker.render_stream("Hello") == null, "invalid voice: render_stream returns null")
+	check(speaker.speak_character("H") == 0.0, "invalid voice: speak_character returns 0")
+	speaker.say("Hello")
+	check(not speaker.is_speaking(), "invalid voice: say does not start speaking")
+	speaker.queue_free()
+
+
+func test_say_order() -> void:
+	var speaker := MumbleSpeaker.new()
+	root.add_child(speaker)
+	var events_seen := []
+	speaker.character_spoken.connect(func(i): events_seen.append(i))
+	speaker.finished.connect(func(): events_seen.append("finished"))
+	speaker.say("Hé 👋!")
+	var ok := await wait_until(func(): return events_seen.has("finished"), 5000)
+	check(ok and events_seen == [0, 1, 3, "finished"], "say: character_spoken in order, then finished, got %s" % [events_seen])
+	check(not speaker.is_speaking(), "say: not speaking once finished")
+	# Empty text: no sound, so no character_spoken, but the line still finishes.
+	events_seen.clear()
+	speaker.say("")
+	ok = await wait_until(func(): return events_seen.has("finished"), 5000)
+	check(ok and events_seen == ["finished"], "say(\"\"): finished and no character_spoken, got %s" % [events_seen])
+	speaker.queue_free()
+
+
+# L4.16: a second `say` in the same frame restarts the line: only its characters are emitted, and `finished`
+# once, for the second line.
+func test_say_restart_same_frame() -> void:
+	var speaker := MumbleSpeaker.new()
+	speaker.voice = MumbleVoice.new()
+	root.add_child(speaker)
+	var first := "Hello there, friend."
+	var second := "Yo!"
+	var render: Dictionary = Mumble.render(second, speaker.voice, 48000)
+	var want := []
+	for event in render.events:
+		want.append(event.char_index)
+	var state := {"finished": 0, "spoken": []}
+	speaker.character_spoken.connect(func(i: int): state.spoken.append(i))
+	speaker.finished.connect(func(): state.finished += 1)
+	speaker.say(first)
+	speaker.say(second)
+	var ok := await wait_until(func(): return state.finished > 0, int((render.duration + 3.0) * 1000.0))
+	await root.get_tree().create_timer(0.3).timeout
+	check(ok, "restart in the same frame: the second line finishes")
+	check(state.finished == 1, "restart in the same frame: finished is emitted once, got %d" % state.finished)
+	check(state.spoken == want, "restart in the same frame: only the second line is spoken, got %s, expected %s" % [state.spoken, want])
+	speaker.queue_free()
+
+
+# L4.16: text with no sounding character (spaces, punctuation) finishes once, and is spoken as the render says:
+# nothing for the spaces and for the punctuation the render leaves silent.
+func test_say_silent_text() -> void:
+	var speaker := MumbleSpeaker.new()
+	speaker.voice = MumbleVoice.new()
+	root.add_child(speaker)
+	var state := {"finished": 0, "spoken": []}
+	speaker.character_spoken.connect(func(i: int): state.spoken.append(i))
+	speaker.finished.connect(func(): state.finished += 1)
+	for text in ["   ", "?!.", " , "]:
+		var render: Dictionary = Mumble.render(text, speaker.voice, 48000)
+		var want := []
+		for event in render.events:
+			want.append(event.char_index)
+		var before: int = state.finished
+		state.spoken.clear()
+		speaker.say(text)
+		var ok := await wait_until(func(): return state.finished > before, int((render.duration + 3.0) * 1000.0))
+		await root.get_tree().create_timer(0.3).timeout
+		check(ok and state.finished == before + 1, "say(\"%s\"): finished is emitted once, got %d" % [text, state.finished - before])
+		check(state.spoken == want, "say(\"%s\"): character_spoken %s, expected %s" % [text, state.spoken, want])
+		check(not speaker.is_speaking(), "say(\"%s\"): not speaking once finished" % text)
+	speaker.queue_free()

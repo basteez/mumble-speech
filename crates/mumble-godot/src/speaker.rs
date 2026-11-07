@@ -1,6 +1,6 @@
 use crate::audio::{char_index, stream};
 use crate::voice::{core_voice, error_name, MumbleVoice};
-use godot::classes::{AudioServer, AudioStreamPlayer, AudioStreamWav, INode};
+use godot::classes::{AudioServer, AudioStreamPlayer, AudioStreamWav, INode, Os, ProjectSettings, Time};
 use godot::prelude::*;
 use mumble_speech as core;
 
@@ -22,6 +22,11 @@ pub struct MumbleSpeaker {
     next_event: usize,
     duration: f64,
     speaking: bool,
+    /// Set by `say`: the line's position is the wall clock since `started_usec` instead of the
+    /// audio clock (web export in Sample playback mode, LD30).
+    wall_clock: bool,
+    /// `Time.get_ticks_usec()` when `say` started the player.
+    started_usec: u64,
     base: Base<Node>,
 }
 
@@ -38,6 +43,8 @@ impl INode for MumbleSpeaker {
             next_event: 0,
             duration: 0.0,
             speaking: false,
+            wall_clock: false,
+            started_usec: 0,
             base,
         }
     }
@@ -96,7 +103,19 @@ impl MumbleSpeaker {
         self.events = render.timeline.events.iter().map(|e| (e.start, char_index(&text, e.utf8_start))).collect();
         self.next_event = 0;
         self.duration = render.timeline.duration;
-        self.play(stream(&render.samples, sample_rate));
+        if render.samples.is_empty() {
+            // Nothing to play: Web Audio rejects a zero-length buffer (L4.16). The line still
+            // replaces the previous one, and with no sound playing the audio clock describes
+            // nothing, so the signals follow the wall clock and `finished` still arrives.
+            if let Some(player) = self.player.as_mut() {
+                player.stop();
+            }
+            self.wall_clock = true;
+        } else {
+            self.play(stream(&render.samples, sample_rate));
+            self.wall_clock = self.uses_wall_clock();
+        }
+        self.started_usec = Time::singleton().get_ticks_usec();
         self.speaking = true;
     }
 
@@ -141,7 +160,9 @@ impl MumbleSpeaker {
         self.speaking
     }
 
-    /// The line as a 16-bit stream at `SAMPLE_RATE`, to play or save yourself.
+    /// The line as a 16-bit stream at `SAMPLE_RATE`, to play or save yourself. The stream can be
+    /// empty (0 frames: empty text, or text with nothing to say); do not play an empty stream on
+    /// the web, where Web Audio rejects a zero-length buffer (`say` does not play one).
     #[func]
     pub fn render_stream(&self, text: GString) -> Option<Gd<AudioStreamWav>> {
         let sample_rate = Self::RATE;
@@ -176,12 +197,111 @@ impl MumbleSpeaker {
         player.play();
     }
 
-    /// Seconds of the current line heard so far (audio clock, latency-compensated).
+    /// Whether the line's position is the wall clock (LD30, L4.16): on the web the engine mixer's
+    /// clock does not describe a stream played in Sample mode (the browser plays it), and it
+    /// stops while the `AudioContext` is suspended, so the signals follow the time since `say`.
+    /// Desktop and web Stream mode keep the audio clock.
+    fn uses_wall_clock(&self) -> bool {
+        let is_web = Os::singleton().has_feature(&GString::from("web"));
+        let Some(player) = self.player.as_ref() else {
+            return false;
+        };
+        let player_type = i64::from(player.get_playback_type().ord());
+        // The project setting: 0 Stream, 1 Sample. `get_setting_with_override`, as the
+        // AudioServer reads it: plain `get_setting` ignores the `.web` override, which is
+        // what makes Sample the web default. A value that is not an integer reads as -1,
+        // which `wall_clock_for` treats as the audio clock.
+        let default_type = ProjectSettings::singleton()
+            .get_setting_with_override(&StringName::from("audio/general/default_playback_type"))
+            .try_to::<i64>()
+            .unwrap_or(-1);
+        wall_clock_for(is_web, player_type, default_type)
+    }
+
+    /// Seconds of the current line heard so far: the wall clock when `wall_clock` is set,
+    /// otherwise the audio clock, latency-compensated; infinite once the player has stopped at
+    /// the end of its stream.
     fn position(&self) -> f64 {
+        if self.wall_clock {
+            let now = Time::singleton().get_ticks_usec();
+            return now.saturating_sub(self.started_usec) as f64 / 1_000_000.0;
+        }
         let Some(player) = self.player.as_ref() else {
             return 0.0;
         };
+        if self.speaking && !player.is_playing() {
+            // The stream has played to its end and the player stopped, which resets its playback
+            // position: the line was heard to the end. The latency-compensated clock may never
+            // reach the duration (large output latency on the web, LD30), so `process` still
+            // gets every remaining character and `finished`. `is_playing` is true from the
+            // `play` in `say` on, and `stop` clears `speaking` first.
+            return f64::INFINITY;
+        }
         let server = AudioServer::singleton();
         player.get_playback_position() as f64 + server.get_time_since_last_mix() - server.get_output_latency()
+    }
+}
+
+/// The clock choice of `uses_wall_clock` as a pure function (LD30, L4.16), so it can be tested
+/// without Godot. `player_type` is `AudioServer.PlaybackType` of the player (0 default, 1 stream,
+/// 2 sample); `default_type` is the project setting `audio/general/default_playback_type`
+/// (0 Stream, 1 Sample). Only the web in Sample mode uses the wall clock; any other or unknown
+/// value keeps the audio clock.
+fn wall_clock_for(is_web: bool, player_type: i64, default_type: i64) -> bool {
+    if !is_web {
+        return false;
+    }
+    match player_type {
+        2 => true,
+        0 => default_type == 1,
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEFAULT: i64 = 0;
+    const STREAM: i64 = 1;
+    const SAMPLE: i64 = 2;
+
+    #[test]
+    fn desktop_never_uses_the_wall_clock() {
+        for player in [DEFAULT, STREAM, SAMPLE, -1, 3, i64::MAX, i64::MIN] {
+            for default in [0, 1, 2, -1, i64::MAX] {
+                assert!(!wall_clock_for(false, player, default), "player {player}, default {default}");
+            }
+        }
+    }
+
+    #[test]
+    fn web_sample_uses_the_wall_clock() {
+        for default in [0, 1] {
+            assert!(wall_clock_for(true, SAMPLE, default));
+        }
+    }
+
+    #[test]
+    fn web_stream_keeps_the_audio_clock() {
+        for default in [0, 1] {
+            assert!(!wall_clock_for(true, STREAM, default));
+        }
+    }
+
+    #[test]
+    fn web_default_follows_the_project_setting() {
+        assert!(!wall_clock_for(true, DEFAULT, 0), "project default Stream");
+        assert!(wall_clock_for(true, DEFAULT, 1), "project default Sample");
+    }
+
+    #[test]
+    fn unknown_values_fall_back_to_the_audio_clock() {
+        for player in [-1, 3, 4, 100, i64::MAX, i64::MIN] {
+            assert!(!wall_clock_for(true, player, 1), "player {player}");
+        }
+        for default in [-1, 2, 3, i64::MAX, i64::MIN] {
+            assert!(!wall_clock_for(true, DEFAULT, default), "default {default}");
+        }
     }
 }

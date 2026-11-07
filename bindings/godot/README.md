@@ -2,17 +2,34 @@
 
 Video-game "mumble speech" generated at runtime: `beep` (Undertale), `grunt`
 (Banjo-Kazooie) and `alphabet` (Animal Crossing). Same output, bit for bit, as
-the web, C and Unity bindings for the same text, voice and sample rate. Godot 4.3 or later, desktop (Windows, macOS, Linux).
-
-> Early development: no prebuilt release yet, build the addon from source.
+the web, C and Unity bindings for the same text, voice and sample rate. Godot 4.3 or later, desktop (Windows, macOS, Linux) and web.
 
 ## Install
 
+Download `mumble-speech-godot-X.Y.Z.zip` from the
+[latest release](https://github.com/basteez/mumble-speech/releases/latest) (or install
+*Mumble Speech* from the Asset Library) and unzip it into your project, so that
+`addons/mumble_speech/` sits at its root. From a source checkout instead (needs Rust):
+
 ```sh
 bindings/godot/build.sh        # builds the GDExtension into addons/mumble_speech/bin
+bindings/godot/build.sh web    # the web library (pinned nightly Rust and Emscripten, see below)
 ```
 
 Copy `addons/mumble_speech/` into your project.
+
+## Web export
+
+Godot 4.3 or later. In **Project → Export… → Web** turn **Extensions Support** on (it
+selects the `dlink` export templates, included in the official template package) and
+**Thread Support** off (the addon ships a build without threads only; with Thread Support
+on is not supported). No special server headers (COOP/COEP) are needed. Browsers
+keep audio suspended until the first click, tap or key press on the page. In the default
+*Sample* playback mode, `character_spoken` and `finished` follow the time since `say`, so
+they arrive even before audio is allowed (the line is then silent); see
+[the documentation](https://mumble-speech.github.io/bindings/godot#web-export) for the
+timing, the size of `mumble_godot.wasm` and of the `dlink` template, and what to expect
+from each browser.
 
 ## Use
 
@@ -53,3 +70,10 @@ press Play) and `tests/run_tests.gd`:
 ```sh
 godot --headless --path bindings/godot -s res://tests/run_tests.gd
 ```
+
+The checks are in `tests/suite.gd`, shared with the web runner `tests/web/runner.tscn`
+(exported with the `Web (tests)` preset and run in a browser by `scripts/godot-web/`).
+`export_presets.cfg` has the `Web` preset (the example scene) and `Web (tests)`. To try the
+example in a browser: `bindings/godot/build.sh web`, export the `Web` preset, serve
+`build/web/` with any static server (`python3 -m http.server`), click the page and press
+Space. The manual checks for browsers are in [TESTING.md](TESTING.md).

@@ -15,7 +15,7 @@ crates.io; see each binding's page for how to install it.
 |---|---|---|
 | Rust | crate `mumble-speech` (`cargo add mumble-speech`) | [docs.rs](https://docs.rs/mumble-speech) |
 | Web (browser, Node ≥ 20) | `@mumble-speech/web` (WebAssembly) | [Web](/bindings/web) |
-| Godot 4.3+ | GDExtension addon `addons/mumble_speech` | [Godot](/bindings/godot) |
+| Godot 4.3+ (desktop and web) | GDExtension addon `addons/mumble_speech` | [Godot](/bindings/godot) |
 | Unity 2022.3+ | UPM package `com.mumble-speech.unity` | [Unity](/bindings/unity) |
 | C, C++, C#, Python, Unreal… | `mumble.h` + shared library | [C ABI](/bindings/c) |
 

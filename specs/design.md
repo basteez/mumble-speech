@@ -102,7 +102,9 @@ dev-dependency, used to generate and verify the folding tables (§4.1, LD11).
 - No iteration over `HashMap`; tables are arrays.
 - Sample positions with `libm`'s `round`.
 - Verification: the same conformance vectors run on native (macOS, Windows,
-  Linux) and on WASM in CI, comparing the PCM hash.
+  Linux) and on WASM in CI, comparing the PCM hash. The Godot addon's web build
+  (`wasm32-unknown-emscripten`, a different toolchain from the npm package's
+  `wasm32-unknown-unknown`) runs them in a browser (§9.3.1).
 - Scope (L1.4, L7.5): bit-identity is per text, voice (seed included) **and
   sample rate**. The core never picks a rate; the caller does. The engine
   speakers used to pick the device's output rate, so the same line differed
@@ -479,7 +481,8 @@ void mumble_bytes_free(uint8_t *p, size_t len);
 - GDExtension written in Rust with `gdext` (`godot = "0.5.5"`, feature
   `api-4-3`), which uses the core directly (not the C ABI): one fewer layer,
   native Godot types. `compatibility_minimum = 4.3`, so the same build loads in
-  every Godot from 4.3 on.
+  every Godot from 4.3 on. The web build (a second target of the same crate) is
+  in §9.3.1.
 - `bindings/godot` is itself a Godot project: `addons/mumble_speech/` (what
   users copy: `.gdextension` + `bin/`), `example/` (a dialogue scene, L4.9) and
   `tests/`. `bin/` is not committed: `bindings/godot/build.sh` builds the crate
@@ -502,7 +505,9 @@ void mumble_bytes_free(uint8_t *p, size_t len);
     `render_stream(text) → AudioStreamWAV` (16-bit, at `SAMPLE_RATE`); signals
     `character_spoken(char_index)` and `finished`. Playback goes through an
     internal `AudioStreamPlayer`; `character_spoken` follows the audio clock
-    (playback position + time since last mix − output latency, as in D7).
+    (playback position + time since last mix − output latency, as in D7); on
+    the web in *Sample* playback mode, the wall clock since the line started
+    (§9.3.1, LD30).
   - Fixed rate (L4.10, LD17): `say`, `speak_character` (its core `Speaker`)
     and `render_stream` all synthesize at `SAMPLE_RATE`, never at
     `AudioServer.get_mix_rate()`. The `AudioStreamWAV` carries
@@ -536,6 +541,326 @@ void mumble_bytes_free(uint8_t *p, size_t len);
   run. The test reads the expected rate from `MUMBLE_EXPECT_MIX_RATE` and
   fails if `AudioServer.get_mix_rate()` differs, so a run where the override
   did not apply cannot pass silently.
+
+### 9.3.1 Godot on the web [L4.15–L4.18] (LD27–LD34)
+
+Issue #32. A Godot web export runs the engine as an Emscripten *main module*;
+GDExtensions are loaded as Emscripten *side modules* (dynamic linking), which is
+why *Extensions Support* selects the `dlink` export templates. The GDScript API
+does not change. The work is a second build of `mumble-godot`, its packaging,
+one change in the speaker's clock (LD30) and an in-browser test.
+
+**Constraints** (from the godot-rust book, *Export to Web*, and Godot's
+*Exporting for the Web*, read 2026-11-06), recorded so the decisions below can be
+checked against them:
+
+- gdext's web support is **experimental**: features `experimental-wasm` and,
+  for exports without threads, `experimental-wasm-nothreads` (gdext ≥ 0.3; we
+  are on 0.5.5). Non-threaded web exports with GDExtensions exist from **Godot
+  4.3**; 4.2 and earlier have threaded web exports only (out of scope).
+- The target is `wasm32-unknown-emscripten`, built with **nightly Rust** and
+  `-Zbuild-std` (the standard library is rebuilt for the side module), with
+  `rust-src` installed.
+- The side module must be compatible with the Emscripten that built the
+  engine's `dlink` template. The book recommends Emscripten **3.1.74** for
+  Godot 4.3 and later; the 4.3 templates were built with a 3.1.6x release.
+  Compatibility across Emscripten versions is not guaranteed, so it is checked,
+  not assumed (LD28, LQ13).
+- GDExtension support in Firefox needs Godot 4.3 or later and is described by
+  the book as more limited than in Chromium browsers; Safari is not mentioned.
+  Both are covered by the in-browser test and by hand (GW1–GW3).
+- A panic cannot be caught on the web: it aborts the whole game. gdext's
+  `#[func]` panic guard does not help there.
+- rustc 1.93 and later enable Wasm exception handling by default, which breaks
+  linking with the template (`__cpp_exception`). The book's workaround,
+  `-Z emscripten-wasm-eh=false`, was removed in rustc 1.98 (rust-lang/rust#156928):
+  Emscripten now always unwinds with Wasm exception handling. The library is
+  therefore built with `-C panic=abort` and std rebuilt with `panic_abort`, so
+  nothing unwinds and no exception handling is emitted. Behavior is unchanged,
+  since a panic aborts the game on the web anyway (below).
+- The library file must be named after the crate, `mumble_godot.wasm`.
+- Godot's page says *Extensions Support* needs cross-origin isolation headers;
+  the godot-rust book says only threaded exports do. The issue's premise (and
+  L4.15) is the latter. The CI test serves the export **without** COOP/COEP and
+  checks `crossOriginIsolated === false`, so the question is answered by the
+  test, not by either page (risk in §14).
+
+**Build** (LD28, LD29):
+
+- `crates/mumble-godot/Cargo.toml`: the `godot` dependency splits by target, so
+  desktop builds are unchanged and the web build gets its own features
+  (resolver 3 does not unify features of target-specific dependencies that are
+  not being built):
+  - `[target.'cfg(not(target_family = "wasm"))'.dependencies]`: `godot` with
+    `api-4-3`, as today;
+  - `[target.'cfg(target_family = "wasm")'.dependencies]`: `godot` with
+    `experimental-wasm`, `experimental-wasm-nothreads`, `lazy-function-tables`
+    (smaller and faster to build, recommended by the book; it is incompatible
+    only with `experimental-threads`, which we do not use) and the API level
+    from LD29.
+  The two entries keep the same `godot` version (one line comment says so; a
+  review rule, since Cargo cannot enforce it).
+- `.cargo/config.toml` gains a `[target.wasm32-unknown-emscripten]` section
+  with the book's non-threaded flags: `-C link-args=-sSIDE_MODULE=2`,
+  `-C llvm-args=-enable-emscripten-cxx-exceptions=0`,
+  `-Z default-visibility=hidden` (no symbol clashes with other Rust
+  extensions), `-Z link-native-libraries=no`, `-C panic=abort` (instead of the
+  book's `-Z emscripten-wasm-eh=false`, removed in rustc 1.98).
+  No `-pthread`, no `+atomics`. The `-Z` flags only apply to this target, so
+  stable builds of other targets are unaffected.
+- `scripts/godot-web/versions.env`: the single source of the pinned versions,
+  read by the scripts, CI and release: `RUST_NIGHTLY=nightly-YYYY-MM-DD` (a
+  dated nightly, not a floating one) and `EMSDK_VERSION=3.1.74`. Bumping either
+  is a pull request that runs the full web test on every Godot version in the
+  matrix.
+- `scripts/godot-web/build.sh <out dir>`: checks that `emcc --version` reports
+  `EMSDK_VERSION` (error naming the expected version otherwise), installs the
+  nightly with `rust-src` and the target if missing, runs
+  `cargo +$RUST_NIGHTLY build -Zbuild-std=std,panic_abort -p mumble-godot --release --target
+  wasm32-unknown-emscripten` and copies
+  `target/wasm32-unknown-emscripten/release/mumble_godot.wasm` to `<out dir>`.
+  The release profile (`lto`, `codegen-units = 1`) is used as is; a size
+  profile (`opt-level = "s"`/`"z"`) is adopted only if W1 measures a gain worth
+  a second profile, recorded in LD34.
+- `bindings/godot/build.sh web` runs it into `addons/mumble_speech/bin/` and
+  then `check-wasm.mjs`; with no argument it keeps building the desktop library.
+- No code path of `mumble-godot` or the core spawns threads, and none may panic
+  on user input (the core returns errors as values; the speaker's one `expect`
+  is on a value created just above). Review keeps it so (L1.1 already keeps
+  logic in the core).
+
+**`.gdextension`**: two entries, the non-threaded build only (LD27):
+
+```ini
+web.debug.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
+web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
+```
+
+No `web.*.threads.wasm32` entry: what a threaded export then does (an export
+error, a load error in the browser, or a silent failure) is observed in GW4 and
+written in the docs (L4.18). `compatibility_minimum` stays 4.3 unless LQ13
+raises the web minimum, in which case the docs and the release notes state the
+web minimum separately (the field applies to every platform).
+
+**Library check** (`scripts/godot-web/check-wasm.mjs <wasm> [--budget <bytes>]`,
+Node, no dependencies) [L4.17]; it fails unless:
+
+- the file starts with the Wasm magic and version 1;
+- it has a `dylink.0` custom section (an Emscripten side module, not a
+  standalone module);
+- no memory import or memory definition has the *shared* flag, and no
+  instruction from the atomics proposal appears in the code section (a
+  threaded build has both);
+- the export section lists `gdext_rust_init` (the `entry_symbol` read from the
+  `.gdextension`, default `gdext_rust_init`, not hard-coded). The check reads the
+  binary's sections itself (no instantiation; the same result as
+  `WebAssembly.Module.exports`), and walks every instruction of the code section
+  to find atomics, since scanning for the prefix byte would match immediates.
+  The decoder fails closed: an opcode it does not know is an error, never a
+  pass, because an unknown immediate layout would desynchronise the walk and
+  could hide an atomics instruction. This includes the `0xFD` (SIMD) prefix:
+  the decoder carries the complete sub-opcode table of the Wasm 3.0 vector
+  instructions (`0x00`–`0xFF` with the reserved codes left out, and relaxed SIMD
+  `0x100`–`0x113`), each with its immediates (none, memarg, memarg and lane, lane,
+  16-byte constant, 16-lane shuffle), and rejects any other sub-opcode naming it
+  and its offset;
+- the raw size is within the budget (LD34): `--budget <bytes>`, else
+  `WASM_BUDGET_BYTES` in `versions.env`.
+
+It prints raw and gzip size for the run summary. Its command line is
+`check-wasm.mjs [<wasm>] [--gdextension <file>] [--budget <bytes>]`; the checks are
+exported functions (`checkWasm`, `checkGdextension`, `parseWasm`). `check-wasm.test.sh`
+builds small negative fixtures in Node (`wasm-fixtures.mjs`) (a module without `dylink.0`, one importing
+shared memory, one without the entry symbol, one over budget) and expects each
+to fail. A second check reads `mumble_speech.gdextension` and fails if the two
+web keys are missing, point elsewhere, or a `threads` key exists.
+
+**Playback and timing in Sample mode** (LD30) [L4.16]: since 4.3, web exports
+play `AudioStreamPlayer` streams in *Sample* mode by default: the engine hands
+the `AudioStreamWAV` data to the browser once, as a Web Audio buffer, and starts
+a buffer source node; the engine's own mixer does not produce that sound.
+`MumbleSpeaker` already plays a runtime-created 16-bit `AudioStreamWAV` at 48 kHz
+(not procedural audio, which Sample mode does not support), so playback needs no
+change: the browser resamples the buffer to the context's rate, as the
+`AudioServer` does on desktop (L4.10).
+
+The clock does need one. On desktop `character_spoken` follows
+`get_playback_position() + get_time_since_last_mix() − get_output_latency()`.
+In Sample mode those values describe the engine mixer, not the Web Audio node
+the user hears; they stop advancing when the mixer does not run, and the
+`AudioContext` stays suspended until the first user gesture, so a line said
+before any input would never `finish`. Rule:
+
+- the speaker records `Time.get_ticks_usec()` when `say` starts the player;
+- WHEN the export runs on the web (`OS.has_feature("web")`) and the internal
+  player's effective playback type is *Sample* (its `playback_type` is
+  `SAMPLE`, or `DEFAULT` and the project setting
+  `audio/general/default_playback_type`, read at runtime with
+  `get_setting_with_override` so its `.web` override applies (plain
+  `get_setting` ignores feature overrides), is *Sample*), the position is the wall-clock time since
+  that instant;
+- otherwise (desktop, or web in *Stream* mode) the position is the audio clock
+  (on the web in *Stream* mode the bound of `character_spoken` is that of
+  `finished`, 500 ms plus one frame: the clock advances in large mix chunks behind
+  a large output latency, measured up to 157 ms late on Godot 4.3 in Chromium and
+  253 ms in WebKit, CI on PR #33, 2026-11-07; decided 2026-11-07, pending review
+  on the PR),
+  unchanged. The choice is the pure function `wall_clock_for(is_web, player_type,
+  default_type)` (no Godot calls; `uses_wall_clock` reads the engine and calls
+  it), unit-tested on the host: an unknown value falls back to the audio clock.
+- WITH the audio clock, WHEN the speaker is speaking and its player has stopped
+  (`!is_playing()`: the stream played to its end, which also resets the player's
+  playback position), the line counts as heard to the end: the position is
+  infinite, so `process` emits every remaining `character_spoken` in order and
+  then `finished` exactly once. The clock minus the output latency may never
+  reach the duration: on the web in *Stream* mode the latency is large, and the
+  stopped player's position resets (observed in CI on PR #33, 2026-11-07: no
+  `finished`, the last characters missing). `is_playing()` is true from the `play`
+  in `say` on (the playback is registered with the `AudioServer` synchronously),
+  also while the web `AudioContext` is suspended, so the rule cannot fire at the
+  start of a line; `stop()` clears `speaking`, so nothing is emitted. It never
+  applies to the wall clock, nor to the empty-line path (the player is stopped
+  there and the wall clock is forced). On desktop it only fires after the stream
+  has ended, when the position was past the duration anyway.
+- a line that renders no samples (empty text, or text with nothing to say) is not
+  played: Web Audio rejects a zero-length buffer, and Godot hands the 0-frame
+  `AudioStreamWAV` to it in Sample mode. `say` stops the current player, if any (the
+  new line replaces the previous one), skips `play`, and keeps the rest of the state
+  update with the wall clock (no sound is playing, so the audio clock describes
+  nothing): `character_spoken` is emitted as the render's timeline says and
+  `finished` exactly once. `render_stream` may return an empty stream (0 frames),
+  which the caller must not play on the web.
+
+The event loop in `process` is unchanged (it catches up on every event whose
+start has passed, so a frame stall or a hidden tab delays signals but never
+reorders or drops them). The wall clock ignores the browser's output latency
+(typically 10–40 ms; the sound can lag the signal by that much) and, before
+the first gesture, the signals fire for a silent line: both are documented
+(L4.18). No public API changes; the internal player keeps `playback_type`
+`DEFAULT`, so the project decides the mode.
+
+`speak_character` and the typewriter need no change: the typewriter waits
+advances with the frame `delta`, not the audio clock. In Sample mode each
+character is a new `AudioStreamWAV`, registered with the browser as a new
+sample on `play`; the previous one is released when its last reference goes.
+W2 checks that registrations do not accumulate over a long line (GW2 watches
+memory in the browser's developer tools; risk in §14).
+
+**Example and export presets**: `bindings/godot/export_presets.cfg` is
+committed, written with Godot 4.3 (newer versions read it), with two presets:
+
+- `Web`: the example scene (`exclude_filter="tests/*"`), *Extensions Support* on
+  (`variant/extensions_support=true`), *Thread Support* off
+  (`variant/thread_support=false`), export path `build/web/index.html`; used by
+  GW1 and as the reference configuration the docs show.
+- `Web (tests)`: the same variant settings, `custom_features="mumble_web_tests"`
+  and `include_filter="tests/web/vectors.json"`, export path
+  `build/web-tests/index.html`.
+
+`project.godot` gains `application/run/main_scene.mumble_web_tests =
+"res://tests/web/runner.tscn"` (a feature-tag override, so only the test export
+starts the test runner) and `rendering/renderer/rendering_method.web =
+"gl_compatibility"` (the web supports only the Compatibility renderer; setting
+it avoids depending on the export's fallback). If W3 finds that the main-scene
+override is not honored by an export on 4.3, the runner is selected at startup
+by the example scene's script instead (`OS.has_feature("mumble_web_tests")`),
+recorded in the decision log. `build/` and `tests/web/vectors.json` are
+git-ignored.
+
+**Tests** (LD31, LD32):
+
+- `tests/run_tests.gd` is split: the checks move to `tests/suite.gd` (a
+  `RefCounted` that takes the root node to add test nodes to and the vectors'
+  path, and returns the failures), and `run_tests.gd` stays the desktop
+  `SceneTree` runner with the same command line and output. Desktop runs are
+  unchanged (same checks, same four mix rates).
+- `tests/web/runner.tscn` + `runner.gd`: the web runner. It loads the vectors
+  from `res://tests/web/vectors.json` (copied from `conformance/vectors.json`
+  before the export), runs the suite, then the web-only checks below, prints
+  every failure and a last line `MUMBLE_WEB_TESTS PASS <n>` or
+  `MUMBLE_WEB_TESTS FAIL <n>`, and sets `window.mumbleWebTests = { done,
+  failures, log }` through `JavaScriptBridge`.
+- Shared checks that run on the web: `MumbleVoice` defaults, every conformance
+  vector through `Mumble.render` (FNV-1a in GDScript, as on desktop: the
+  in-browser bit-identity check of L1.4 and L4.15), the speaker streams at
+  48 kHz (`render_stream` data equals the encoded 48 kHz render; mix-rate
+  overrides do not apply on the web, where the rate is the `AudioContext`'s, so
+  `check_mix_rate` is skipped), the typewriter, `say` order and empty text.
+- Web-only checks [L4.16]: the effective playback type is *Sample*; `say("Hé
+  👋!")` with timestamps (`Time.get_ticks_usec()` relative to the call) for each
+  `character_spoken` and for `finished`, against the bounds of L4.16, with
+  "one frame" taken as the longest `delta` seen during the line (CI renders
+  with a software GPU, so frames are slow); a ~300-character
+  `type_text` line finishes with every grapheme revealed in order; the same
+  `say` with the internal `AudioStreamPlayer` (the speaker's only child) set to
+  `PLAYBACK_TYPE_STREAM`, with the *Stream* bound (this reaches into an
+  internal node, acceptable in a test).
+
+**Browser runner** (`scripts/godot-web/`, outside the Godot project so the
+editor does not import `node_modules`; its own `package.json` and lockfile with
+an exact `playwright` version, not part of the npm workspaces):
+
+- `export.sh <godot binary> <out dir>`: installs the export templates of that
+  Godot version (from a cache directory) into Godot's templates folder, copies
+  the vectors, runs `godot --headless --path bindings/godot --import`, then
+  `--export-release "Web (tests)" <out dir>/index.html`, and fails unless
+  `<out dir>` contains `mumble_godot.wasm` next to `index.html`.
+- `run-tests.mjs <export dir> --browser chromium|firefox|webkit --audio
+  running|suspended`: serves the directory with a small Node static server
+  (correct `application/wasm` type, **no COOP/COEP headers**), opens it with
+  Playwright, and fails unless: the page reports `MUMBLE_WEB_TESTS PASS`
+  within 180 s; `crossOriginIsolated` is `false`; no page error or console
+  error (`Aborted`, `LinkError`, `GDExtension` load errors); and every
+  `AudioContext` created by the page (recorded by an init script that wraps the
+  constructor) is in the state given by `--audio` when the tests finish.
+  `running` launches Chromium with `--autoplay-policy=no-user-gesture-required`
+  (Firefox: `media.autoplay.default=0`; WebKit: no flag, so WebKit runs only
+  `suspended` unless W4 finds a way to allow audio); `suspended` launches with
+  autoplay blocked and never clicks, the L4.16 case of a line said before any
+  gesture. The flags and prefs are only a first line (they did not keep the
+  context suspended under Playwright: CI on PR #33, 2026-11-07, Chromium on Godot
+  4.7.2 and WebKit reported `running`), so `suspended` is produced by the init
+  script itself, the same in every browser: it emulates a page with no user
+  gesture by suspending every `AudioContext` right after its construction
+  (`context.suspend()`) and replacing its `resume()` with a no-op that resolves
+  without resuming (logged once in the page log); WebGL 2 comes from the software renderer (Chromium:
+  `--use-angle=swiftshader --enable-unsafe-swiftshader`; Firefox and WebKit:
+  Mesa llvmpipe, run headed under `xvfb-run`). The runner prints the page log
+  to the job output.
+- Audio on the runner: a PulseAudio null sink is started before the browsers
+  (`pulseaudio --start`, `pactl load-module module-null-sink`), so the browsers
+  have an output device and the `AudioContext` can run; the `running` check
+  fails the job if it did not.
+
+**CI** (`godot-web` job, a matrix named `godot-web (<version>)` like the `godot` job;
+LD31): one build job (`godot-web-build`: emsdk at
+`EMSDK_VERSION` through `mymindstorm/setup-emsdk` with its cache, the pinned
+nightly with `rust-src`, `scripts/godot-web/build.sh`, `check-wasm.mjs` and its
+self-test, artifact `mumble_godot.wasm`, sizes in the run summary), then a test
+matrix over Godot `4.3-stable` and `4.7.2-stable` (the desktop matrix): export
+templates downloaded once per version and cached with `actions/cache`, the
+`.tpz` reduced to the two `web_dlink_nothreads_*.zip` before caching;
+`export.sh`; then `run-tests.mjs` in Chromium with `--audio running` and with
+`--audio suspended`; then the `Web` preset (the example) is exported and run with
+`--mode example`, which fails unless the example scene prints `MUMBLE_EXAMPLE started`
+(one `print` in `example/dialogue.gd`) and the test runner did not start: this is the
+check of the main-scene override (W3). Firefox and WebKit run in a separate job, `godot-web-browsers (<browser>)`, with the
+same steps (Godot 4.7.2 only, headed under `xvfb-run`; WebKit with `suspended` only),
+not a required check (LQ14); neither is the Chromium matrix at first. Safari itself (and
+Firefox on a real audio device) is verified by hand: GW1–GW3.
+
+**Release**: a `godot-web` job (the name `web` is the npm package's job) builds the
+library with the same script and checks it, artifact `native-web/mumble_godot.wasm`; `assemble` adds it to the Godot
+zip only (`addons/mumble_speech/bin/mumble_godot.wasm`; LD33); `verify` checks
+the zip contains it, runs `check-wasm.mjs` on the packaged file and the
+`.gdextension` check, and runs the exported tests from the packaged addon on
+Godot 4.3 in Chromium (`export.sh` + `run-tests.mjs --audio running`); `notes`
+lists *Web (Godot 4.3+, no threads)* among the Godot addon's platforms and in
+the compatibility table. The `godot-addon` branch gets the file through the zip
+(its README line and the Asset Library values add *Web*).
+
+**Out of scope**: threaded web exports (LD27), Godot 4.2 and earlier on the web,
+the C ABI as WebAssembly (LD33), Godot Android export (LD24).
 
 ### 9.4 Unity [L4.7]
 
@@ -804,6 +1129,7 @@ GitHub Actions, matrix:
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter, speaker at a fixed 48 kHz under mix rates 44.1, 48, 22.05 and 96 kHz) |
+| godot-web | ubuntu, pinned nightly Rust + Emscripten; Godot 4.3 and 4.7.2 web templates; Playwright | GDExtension web build (`check-wasm.mjs`: side module, no shared memory, entry symbol, size budget), web export of the test runner, conformance vectors and speaker timing in Chromium with audio running and suspended, served without COOP/COEP [L4.15–L4.17, L5.2] (§9.3.1). Firefox and WebKit in a separate, non-required job (LQ14) |
 | unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13]; second run without the library: load-failure messages [L4.11]; speaker rate constant [L4.10] |
 | android | ubuntu, pinned NDK + `cargo-ndk` | Android libraries for three ABIs, `check.sh` (symbols, ELF machine, 16 KB alignment, dependencies) and `check-metas.sh`, plus their negative self-tests; core vectors on `armv7` under QEMU [L4.13, L4.14, L5.2] (§9.4.1) |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
@@ -872,13 +1198,16 @@ built and verified, no GitHub Release):
    and `mumble-godot`; on macOS both architectures joined with `lipo`.
    `android` (Ubuntu): `mumble-ffi` for the three Android ABIs, checked
    (§9.4.1) [L4.13, L4.14].
+   `godot-web` (Ubuntu): `mumble-godot` for `wasm32-unknown-emscripten`, checked
+   (§9.3.1) [L4.15, L4.17].
 3. `web`: `@mumble-speech/web` build and `npm pack`.
 4. `assemble`: from the artifacts of 2–3, with `LICENSE-MIT`, `LICENSE-APACHE`
    and the binding README in each archive:
    - `mumble-speech-c-X.Y.Z.zip`: `include/mumble.h`, `lib/<platform>/`
      (shared libraries, Windows import library);
    - `mumble-speech-godot-X.Y.Z.zip`: `addons/mumble_speech/` with `bin/` for
-     the three platforms;
+     the three desktop platforms and the web (`mumble_godot.wasm`, the only
+     archive with it, LD33);
    - `com.mumble-speech.unity-X.Y.Z.tgz`: the UPM package (`package/` prefix,
      as npm tarballs) with `Plugins/` filled, Android included (the only
      archive with Android libraries, LD24);
@@ -886,7 +1215,8 @@ built and verified, no GitHub Release):
    (`scripts/release/assemble.sh`).
 5. `verify` (Linux, `scripts/release/verify.sh`): the C tests link against the
    packaged library; the packaged Godot addon passes the headless tests on
-   Godot 4.3; the Unity tarball has the three desktop plugins, the three
+   Godot 4.3, and its web library passes `check-wasm.mjs` and the exported
+   tests in Chromium on Godot 4.3 (§9.3.1); the Unity tarball has the three desktop plugins, the three
    Android libraries (which pass `check.sh` and `check-metas.sh`) and a
    `.meta` for every file; the npm tarball installs in an empty project and renders a vector.
 6. `notes` (`scripts/release/notes.mjs`) [L8.3, L8.4]: writes
@@ -929,7 +1259,7 @@ After `publish`, four independent jobs (L9.5), tags only:
 | `npm` | npm, `@mumble-speech/web` | `npm publish <release tarball> --access public --provenance`; token `NPM_TOKEN` if present, otherwise OIDC trusted publishing (`id-token: write`, npm ≥ 11.5.1) | npm account and organization `mumble-speech`; a short-lived granular token for the first publish; then trusted publisher (`basteez/mumble-speech`, `release.yml`) and token deleted |
 | `crates` | crates.io, `mumble-speech` | `cargo publish -p mumble-speech`; token `CARGO_REGISTRY_TOKEN` if present, otherwise `rust-lang/crates-io-auth-action` (OIDC) | crates.io account (GitHub login, verified email); a scoped token for the first publish (crates.io requires it); then trusted publishing and token deleted |
 | `upm` | git branch `upm` + OpenUPM | the package from the release tarball pushed as a new commit on `upm` (`package.json` at the root), tagged `upm/vX.Y.Z` | one-time submission on openupm.com (branch `upm`, tag prefix `upm/`) |
-| `godot-addon` | git branch `godot-addon` + Godot Asset Library | the addon from the release zip pushed as a new commit on `godot-addon` (with `LICENSE` and README), tagged `godot/vX.Y.Z`; the run summary prints version, commit and URLs for the Asset Library form | Asset Library account and first submission; each release: edit the entry with the printed values |
+| `godot-addon` | git branch `godot-addon` + Godot Asset Library | the addon from the release zip (desktop and web libraries) pushed as a new commit on `godot-addon` (with `LICENSE` and README), tagged `godot/vX.Y.Z`; the run summary prints version, commit and URLs for the Asset Library form | Asset Library account and first submission; each release: edit the entry with the printed values |
 
 Both branches keep one commit per release on top of the previous one, so every
 tag stays reachable. Pull requests run `cargo publish --dry-run -p mumble-speech`
@@ -950,6 +1280,12 @@ serves the Asset Library.
 | Unity users add `bindings/unity` from a source checkout, which has no native libraries (issue #24) | Docs lead to the git URL / OpenUPM; the interop layer names the missing file and the fix (L4.11, L4.12, LD19–LD20) |
 | Android library that does not load on a device (missing symbol, wrong ABI, 4 KB alignment rejected by Google Play, missing `libc++_shared.so`) | `check.sh` in CI on every PR and before every release (L4.14); device run U6–U7 |
 | Android `.meta` serialization written by hand differs from Unity's | `check-metas.sh` guards intent; U6 confirms in the inspector and the committed file is updated to Unity's form if needed |
+| Godot web: the 4.3 `dlink` template cannot load a side module built with the pinned Emscripten, or a later Godot moves to an incompatible Emscripten | CI exports and runs the tests on 4.3 and 4.7.2 templates on every PR; a failure on a new Godot version is caught when it is added to the matrix; LQ13 says what to do |
+| Godot web: *Extensions Support* turns out to need cross-origin isolation even without threads (Godot's page says so) | The CI test serves without COOP/COEP and checks `crossOriginIsolated === false`; if the export does not run, the issue's premise fails and the spec is amended before merging (document the headers or the PWA workaround in L4.18) |
+| Godot web: gdext's web support is experimental, on nightly Rust | Dated nightly and Emscripten pinned in one file (`versions.env`), bumped only by a PR that passes the full web test; desktop builds stay on stable and are unaffected |
+| Godot web: a panic aborts the game | No panicking path on user input (errors are values from the core); review rule (§9.3.1) |
+| Godot web: Sample-mode samples registered per character accumulate in the browser | W2 checks release over a long line; GW2 watches memory in developer tools |
+| Godot web: headless browsers on CI runners have no GPU or audio device | Software WebGL (SwiftShader, llvmpipe) and a PulseAudio null sink; the runner fails if the `AudioContext` is not in the expected state, so a silent pass is not possible; Firefox and WebKit not required until stable (LQ14) |
 | Determinism on Android without vectors in CI | Same code on every target; AArch64 covered on macOS arm64, 32-bit ARM under QEMU; vectors on a device in U7 (LD25) |
 
 ## 15. Decision log
@@ -979,6 +1315,14 @@ serves the Asset Library.
 | LD24 | Android libraries only in the Unity package | Also in the C archive and the Godot addon | Issue #25 asks for Unity; the C archive and Godot Android export bring their own packaging and testing questions (Godot export templates, NDK consumers), left for a later request |
 | LD25 | Android conformance: library checks in CI, core vectors on `armv7` under QEMU, vectors on a device by hand (PlayMode test assembly, *Run in player*) | Android emulator in CI (`android-emulator-runner`) | The CI emulator is x86_64 (ARM images are too slow without hardware acceleration), the architecture already covered by Linux and Windows, and it is slow and flaky. The only new instruction set is 32-bit ARM, which QEMU covers cheaply; AArch64 is covered on macOS arm64 |
 | LD26 | Android libraries in `Plugins/Android/libs/<abi>/` with committed `.meta` files setting Android and the `CPU` explicitly | Rely on Unity inferring the CPU from the folder name; an `.aar` | The folder name is the common convention, but explicit settings do not depend on inference rules across Unity versions; an `.aar` would add a Gradle build for a plain `.so` |
+| LD27 | Godot web: ship only the non-threaded build (`experimental-wasm-nothreads`), listed as `web.*.wasm32` | Threaded build only; both builds (`.threads.wasm` + `.wasm`) | Non-threaded is Godot's default web export since 4.3, needs no COOP/COEP headers (itch.io and other hosts often cannot set them) and is what the issue asks for. The library uses no threads. A threaded build would need a second build with `-pthread`/`+atomics` through `RUSTFLAGS` (which replaces the config flags), a second CI and release path and cross-origin isolation to test; it can be added on request (LQ12) |
+| LD28 | Godot web toolchain: a dated Rust nightly with `-Zbuild-std` and Emscripten 3.1.74, pinned in `scripts/godot-web/versions.env`; one `.wasm` for every supported Godot version, verified against the 4.3 and 4.7.2 `dlink` templates in CI | Stable Rust (not possible: `-Zbuild-std` and the `-Z` flags are unstable); the Emscripten of each Godot version with one library per version; a floating nightly | gdext's documented path. One addon for every version matches the desktop promise (`compatibility_minimum`). Emscripten side-module compatibility across versions is not guaranteed, so it is tested on the oldest and newest Godot in the matrix rather than assumed; if 4.3 fails, LQ13 applies. A dated nightly keeps builds reproducible; desktop builds stay on stable. **W1 status (2026-11-06):** pinned `nightly-2026-10-20` (rustc 1.101.0-nightly) and Emscripten 3.1.74 in `versions.env`; the first CI run showed that this nightly rejects `-Z emscripten-wasm-eh=false` (removed in rustc 1.98), so the build uses `-C panic=abort` with std rebuilt with `panic_abort` (§9.3.1); **Confirmed (CI run on PR #33, 2026-11-06):** the Godot 4.3 and 4.7.2 `dlink` templates both load the library built with Emscripten 3.1.74 (the 4.7.2 template reports Emscripten 4.0.20) and the 34 conformance vectors pass, so LQ13's fallback is not needed. The editor-side "libmumble_godot.so not found" errors printed during the headless web export are harmless: the export still includes the extension |
+| LD29 | Godot web API level: the `wasm` target uses gdext's prebuilt `api-4-3` bindings if W1 shows they build and load for `wasm32-unknown-emscripten`; otherwise `api-custom-json` with the `extension_api.json` dumped by the Godot 4.3 editor in CI (`--dump-extension-api`, not committed). Either way, the API level is 4.3. The outcome of W1 is written here before merging | `api-custom` with a Godot binary at build time (heavier, same result); committing a dumped JSON (megabytes in git); a newer API level for the web | The godot-rust book says web exports need `api-custom` "for now (no prebuilt Wasm32 target)", while gdext 0.5's feature list does not tie the wasm features to an API feature. Building against 4.3 keeps the web library loadable from 4.3 on, as on desktop. `api-*` features cannot be combined, so the API feature moves into target-specific dependencies (§9.3.1). **W1 status (implementation, 2026-11-06):** the prebuilt `api-4-3` is what the build uses (gdext's `godot-bindings` picks the prebuilt API from the `api-*` feature whatever the target); that it builds and loads for `wasm32-unknown-emscripten` is to be confirmed by CI on the pull request (`godot-web-build`), and if it does not, this entry switches to `api-custom-json` before merging |
+| LD30 | Godot web, *Sample* playback mode: `MumbleSpeaker`'s clock for `character_spoken` and `finished` is the wall clock since `say` started the player; desktop and web *Stream* mode keep the audio clock, and with the audio clock a line whose player has stopped counts as heard to the end (§9.3.1) | Keep the audio clock everywhere; switch the internal player to *Stream* mode; a timer per event | In Sample mode the sound is a Web Audio node started by `play()`; the engine mixer's position does not describe it and stops while the mixer does not run, and before the first user gesture the `AudioContext` is suspended, so a line could never `finish` and a game waiting on it would hang. The wall clock guarantees ordered signals and `finished` (L4.16) at the cost of the browser's output latency (tens of ms, below one slot at the maximum speed of 30 characters/s) and of silent signals before the first gesture, both documented. Forcing *Stream* mode would override the project's choice and add latency without threads. **Stream mode bound (decided 2026-11-07, pending review on PR #33):** with the audio clock on the web, `character_spoken` is bounded like `finished`, 500 ms plus one frame, because CI measured it up to 157 ms (Godot 4.3, Chromium) and 253 ms (WebKit) late; Sample mode and desktop keep 100 ms plus one frame |
+| LD31 | Godot web tests: export the test runner with the Godot editor (headless) on each Godot version of the matrix, run it with Playwright in Chromium (audio running and suspended) and in Firefox and WebKit, none of them a required check at first (LQ14), and Safari and real audio devices by hand (GW1–GW3) | Chromium only; all three engines required; manual only | Chromium is the engine with dependable software WebGL and Web Audio in headless CI. Firefox and WebKit on Linux runners are less proven (WebGL through llvmpipe, audio through a null sink) and Playwright's WebKit is not Safari, so they inform without blocking until stable (LQ14). Chromium also starts non-required (decided 2026-11-06): software WebGL and a null audio sink on shared runners can be flaky, and a required flaky job would block every PR; it is promoted first, after ten green runs on `main`. The vectors and the timing bounds are automated where they run; Safari remains a manual, explicit check. **Suspended audio (2026-11-07):** autoplay flags and Firefox prefs did not keep the context suspended under Playwright (Chromium on 4.7.2, WebKit), so `--audio suspended` has the init script suspend each `AudioContext` and make `resume()` a no-op; the flags remain as a first line |
+| LD32 | One test suite (`tests/suite.gd`) with two runners: the desktop `SceneTree` script and a web runner scene; the vectors are copied into the export, the result is read by the browser runner from the console and a `window` global | A separate web test project; web-only tests | The same checks on both platforms are the point of "same samples as desktop"; a scene is needed because a web export runs its main scene, not a `-s` script; the vectors live outside `res://`, which an export cannot reach |
+| LD33 | The web library ships only in the Godot addon | Also a C ABI WebAssembly build in the C archive | Issue #32 asks for Godot. Outside Godot the web path is `@mumble-speech/web` (L4.1), already tested in browsers; an Emscripten C ABI module would be a third WebAssembly flavor with its own consumers and tests |
+| LD34 | Size budget for `mumble_godot.wasm`: W1 measures the release build and sets the budget to the measured raw size plus 25%, written here with the measurement (raw and gzip) before merging; `check-wasm.mjs` enforces it | No budget; a budget picked before measuring | gdext generates large bindings and the size is unknown until built (`lazy-function-tables` reduces it). A budget set from a measurement catches regressions (a new dependency, a lost LTO setting) without guessing; the sizes also go in the docs (L4.18). **W1 status (2026-11-06):** measured by CI (release build, `nightly-2026-10-20`, Emscripten 3.1.74, `panic=abort`): `mumble_godot.wasm` = 520,810 bytes raw, 175,773 bytes gzip -9. `versions.env` holds `WASM_BUDGET_BYTES=651012` (raw + 25 %, rounded down). The size increase of the `dlink` export template over the standard one is not measured yet (TBD) |
 
 Decisions inherited from the first version (IDs unchanged):
 

@@ -7,6 +7,21 @@ or public API adds an entry to *Unreleased*.
 
 ## [Unreleased]
 
+### Added
+
+- **Godot on the web** ([#32](https://github.com/basteez/mumble-speech/issues/32)): the
+  Godot addon includes a WebAssembly build (`mumble_godot.wasm`), so `MumbleSpeaker`,
+  `MumbleTypewriter` and `Mumble.render` work in web exports of Godot 4.3 or later with
+  *Extensions Support* on and *Thread Support* off, with the same samples as on desktop
+  and no special server headers. In the default *Sample* playback mode,
+  `character_spoken` and `finished` follow the time since the line started, so they
+  arrive even before the browser allows audio. Threaded web exports are not supported.
+
+### Known issues
+
+- Godot on the web is tested in Chromium in CI; Firefox and Safari have not been verified
+  by hand yet; please report problems.
+
 ## [0.2.0] - 2026-11-05
 
 ### Added

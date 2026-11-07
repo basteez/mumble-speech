@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Checks the release archives on Linux before anything is published (specs/tasks.md H1).
 # Usage: scripts/release/verify.sh <version> <archives dir> <godot binary>
+# Environment: MUMBLE_VERIFY_WEB_RUN=0 skips the export and browser run of the Godot web library
+#   (verify.test.sh, which has no Godot editor or browser); the side-module checks still run.
 set -euo pipefail
 
 version=$1
@@ -20,6 +22,8 @@ cmp "$c/include/mumble.h" "$root/bindings/c/include/mumble.h"
 # Android libraries are in the Unity package only (LD24). grep reads the whole listing (no -q): with
 # pipefail, an early exit would make unzip fail on SIGPIPE and hide the match.
 if unzip -l "$archives/mumble-speech-c-$version.zip" | grep -i android >/dev/null; then echo "Android files in the C archive"; exit 1; fi
+# The web library is in the Godot addon only (LD33).
+if unzip -l "$archives/mumble-speech-c-$version.zip" | grep -i '\.wasm' >/dev/null; then echo "WebAssembly files in the C archive"; exit 1; fi
 
 echo "== Godot addon: the packaged addon passes the headless tests"
 # Same layout as the repository: the tests read ../../conformance/vectors.json.
@@ -36,6 +40,16 @@ done
 "$godot" --headless --path "$project" -s res://tests/run_tests.gd
 if unzip -l "$archives/mumble-speech-godot-$version.zip" | grep -i android >/dev/null; then echo "Android files in the Godot addon"; exit 1; fi
 
+echo "== Godot addon: the web library is a side module without threads, listed in the .gdextension, and runs in a browser"
+wasm=$project/addons/mumble_speech/bin/mumble_godot.wasm
+test -f "$wasm" || { echo "missing mumble_godot.wasm in the Godot addon"; exit 1; }
+node "$root/scripts/godot-web/check-wasm.mjs" "$wasm" --gdextension "$project/addons/mumble_speech/mumble_speech.gdextension"
+if [ "${MUMBLE_VERIFY_WEB_RUN:-1}" != 0 ]; then
+  # The exported test runner from the packaged addon, on this Godot (4.3, the minimum), in Chromium (L4.15, L5.2).
+  GODOT_PROJECT=$project "$root/scripts/godot-web/export.sh" "$godot" "$work/web-export"
+  node "$root/scripts/godot-web/run-tests.mjs" "$work/web-export" --browser chromium --audio running
+fi
+
 echo "== Unity package: desktop and Android plugins, a .meta for every file, Android libraries checked"
 mkdir -p "$work/unity" && tar -xzf "$archives/com.mumble-speech.unity-$version.tgz" -C "$work/unity"
 p=$work/unity/package
@@ -48,6 +62,7 @@ for abi in arm64-v8a armeabi-v7a x86_64; do
 done
 "$root/scripts/android/check.sh" "$p/Plugins/Android/libs" "$root/bindings/c/include/mumble.h"
 "$root/scripts/android/check-metas.sh" "$p"
+if tar -tzf "$archives/com.mumble-speech.unity-$version.tgz" | grep -i '\.wasm' >/dev/null; then echo "WebAssembly files in the Unity package"; exit 1; fi
 missing=$(cd "$p" && find . -mindepth 1 ! -name '*.meta' ! -path '*/Samples~*' ! -name 'Samples~' | while read -r f; do [ -f "$f.meta" ] || echo "$f"; done)
 if [ -n "$missing" ]; then echo "files without .meta:"; echo "$missing"; exit 1; fi
 grep -q "\"version\": \"$version\"" "$p/package.json"

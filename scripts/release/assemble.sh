@@ -3,6 +3,7 @@
 # Usage: scripts/release/assemble.sh <version> <artifacts dir> <output dir>
 #   <artifacts dir>/native-{linux-x64,windows-x64,macos-universal}/  libraries from the native job
 #   <artifacts dir>/native-android/<abi>/libmumble_ffi.so              Android libraries (Unity package only, LD24)
+#   <artifacts dir>/native-web/mumble_godot.wasm                       Godot web library (Godot addon only, LD33)
 #   <artifacts dir>/web/mumble-speech-web-<version>.tgz                npm pack of @mumble-speech/web
 set -euo pipefail
 
@@ -18,6 +19,7 @@ linux=$artifacts/native-linux-x64
 windows=$artifacts/native-windows-x64
 macos=$artifacts/native-macos-universal
 android=$artifacts/native-android
+webwasm=$artifacts/native-web
 licenses=("$root/LICENSE-MIT" "$root/LICENSE-APACHE")
 
 # C archive: header, shared libraries per platform, README, licenses.
@@ -30,11 +32,11 @@ cp "$macos/libmumble_ffi.dylib" "$c/lib/macos-universal/"
 cp "$root/bindings/c/README.md" "${licenses[@]}" "$c/"
 (cd "$work" && zip -qr "$out/mumble-speech-c-$version.zip" "mumble-speech-c-$version")
 
-# Godot addon: addons/mumble_speech with bin/ for the three platforms.
+# Godot addon: addons/mumble_speech with bin/ for the three desktop platforms and the web (L4.15, LD33).
 g=$work/godot
 mkdir -p "$g/addons/mumble_speech/bin"
 cp "$root/bindings/godot/addons/mumble_speech/mumble_speech.gdextension" "$g/addons/mumble_speech/"
-cp "$linux/libmumble_godot.so" "$windows/mumble_godot.dll" "$macos/libmumble_godot.dylib" "$g/addons/mumble_speech/bin/"
+cp "$linux/libmumble_godot.so" "$windows/mumble_godot.dll" "$macos/libmumble_godot.dylib" "$webwasm/mumble_godot.wasm" "$g/addons/mumble_speech/bin/"
 cp "$root/bindings/godot/README.md" "${licenses[@]}" "$g/addons/mumble_speech/"
 (cd "$g" && zip -qr "$out/mumble-speech-godot-$version.zip" addons)
 

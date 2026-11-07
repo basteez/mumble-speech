@@ -10,3 +10,20 @@ rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
 
 [target.x86_64-linux-android]
 rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+# Godot on the web: a non-threaded Emscripten side module (specs/design.md §9.3.1, LD27, LD28), built
+# by scripts/godot-web/build.sh with the pinned nightly and Emscripten. These unstable (-Z) flags only
+# apply to this target, so stable builds of every other target are unaffected. No -pthread and no
+# +atomics: the library does not use threads. A RUSTFLAGS environment variable replaces these
+# settings; scripts/godot-web/check-wasm.mjs catches the result (it needs the side module marker).
+[target.wasm32-unknown-emscripten]
+rustflags = [
+    "-C", "link-args=-sSIDE_MODULE=2",
+    "-C", "llvm-args=-enable-emscripten-cxx-exceptions=0",
+    "-Z", "default-visibility=hidden",
+    "-Z", "link-native-libraries=no",
+    # Panics abort (they cannot be caught on the web anyway). rustc 1.98 removed -Z emscripten-wasm-eh=false
+    # and always uses Wasm exception handling for unwinding, which the Godot template does not link
+    # (__cpp_exception); with panic=abort nothing unwinds. build.sh rebuilds std with panic_abort.
+    "-C", "panic=abort",
+]

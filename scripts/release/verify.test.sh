@@ -40,6 +40,7 @@ if ! command -v md5sum >/dev/null 2>&1; then
 fi
 chmod +x "$stubs"/*
 export PATH=$stubs:$PATH
+export MUMBLE_VERIFY_WEB_RUN=0
 
 # Fake llvm-readelf: every library passes, exporting the functions the header declares.
 grep -oE 'mumble_[a-z0-9_]+\(' "$root/bindings/c/include/mumble.h" | tr -d '(' | sort -u > "$work/exports.txt"
@@ -66,13 +67,16 @@ export LLVM_READELF=$work/llvm-readelf FAKE_EXPORTS=$work/exports.txt
 # Fake native artifacts, as the release workflow downloads them.
 art=$work/artifacts
 mkdir -p "$art/native-linux-x64" "$art/native-windows-x64" "$art/native-macos-universal" \
-  "$art/native-android/arm64-v8a" "$art/native-android/armeabi-v7a" "$art/native-android/x86_64" "$art/web"
+  "$art/native-android/arm64-v8a" "$art/native-android/armeabi-v7a" "$art/native-android/x86_64" "$art/native-web" "$art/web"
 for f in native-linux-x64/libmumble_ffi.so native-linux-x64/libmumble_godot.so \
   native-windows-x64/mumble_ffi.dll native-windows-x64/mumble_ffi.dll.lib native-windows-x64/mumble_godot.dll \
   native-macos-universal/libmumble_ffi.dylib native-macos-universal/libmumble_godot.dylib \
   native-android/arm64-v8a/libmumble_ffi.so native-android/armeabi-v7a/libmumble_ffi.so native-android/x86_64/libmumble_ffi.so; do
   echo "fake $f" > "$art/$f"
 done
+# The Godot web library: a tiny side module that passes scripts/godot-web/check-wasm.mjs.
+node "$root/scripts/godot-web/wasm-fixtures.mjs" "$work/wasm-fixtures" || { echo "test setup: wasm-fixtures.mjs failed" >&2; exit 1; }
+cp "$work/wasm-fixtures/good.wasm" "$art/native-web/mumble_godot.wasm"
 mkdir -p "$work/npm-src/package" && echo '{"name":"@mumble-speech/web"}' > "$work/npm-src/package/package.json"
 tar -czf "$art/web/mumble-speech-web-$version.tgz" -C "$work/npm-src" package
 
@@ -146,6 +150,47 @@ expect_exit "Android library in the C archive" 1 "Android files in the C archive
 copy_archives
 rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "mkdir -p addons/mumble_speech/bin/android && echo x > addons/mumble_speech/bin/android/libmumble_godot.so"
 expect_exit "Android library in the Godot addon" 1 "Android files in the Godot addon" "$verify" "$version" "$work/case" "$stubs/godot"
+
+# The Godot web library (L4.15, L4.17, W5).
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" rm addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon without the web library" 1 "missing mumble_godot.wasm in the Godot addon" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/shared-memory.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a threaded web library (shared memory)" 1 "shared memory" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/atomics.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a threaded web library (atomics)" 1 "atomics instruction" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/no-dylink.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a web library that is not a side module" 1 'no "dylink.0" section' "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sed -i.bak '/^web\./d' addons/mumble_speech/mumble_speech.gdextension
+expect_exit "Godot addon whose .gdextension has no web entries" 1 "web.debug.wasm32 is missing" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/not-wasm.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a .wasm that is not a WebAssembly module" 1 "bad magic" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/truncated.wasm" addons/mumble_speech/bin/mumble_godot.wasm
+expect_exit "Godot addon with a truncated WebAssembly library" 1 "malformed WebAssembly binary" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "echo 'web.release.threads.wasm32 = \"res://addons/mumble_speech/bin/mumble_godot.wasm\"' >> addons/mumble_speech/mumble_speech.gdextension"
+expect_exit "Godot addon whose .gdextension lists a threaded web entry" 1 "no threaded web build" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-c-$version.zip" sh -c "cp $work/wasm-fixtures/good.wasm mumble-speech-c-$version/mumble_godot.wasm"
+expect_exit "WebAssembly library in the C archive" 1 "WebAssembly files in the C archive" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+retar "$work/case/$unity" cp "$work/wasm-fixtures/good.wasm" package/Plugins/mumble_godot.wasm
+expect_exit "WebAssembly library in the Unity package" 1 "WebAssembly files in the Unity package" "$verify" "$version" "$work/case" "$stubs/godot"
 
 echo
 echo "$passed passed, $failed failed"

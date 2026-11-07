@@ -16,4 +16,9 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="mumble-speech"
 run/main_scene="res://example/dialogue.tscn"
+run/main_scene.mumble_web_tests="res://tests/web/runner.tscn"
 config/features=PackedStringArray("4.7")
+
+[rendering]
+
+renderer/rendering_method.web="gl_compatibility"

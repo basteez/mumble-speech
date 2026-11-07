@@ -129,6 +129,173 @@ jobs:
           godot/godot --headless --path bindings/godot --quit-after 300 2>&1 | tee example.log
           ! grep -E "SCRIPT ERROR|ERROR:" example.log
 
+  godot-web-build:
+    # The web library of the Godot addon (specs/design.md §9.3.1, L4.15, L4.17, LD27-LD29): nightly Rust and
+    # Emscripten pinned in scripts/godot-web/versions.env; the library is checked and handed to godot-web.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read the pinned versions
+        id: pins
+        run: grep -E '^[A-Z_]+=' scripts/godot-web/versions.env >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: godot-web
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: ${{ steps.pins.outputs.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Desktop builds are unchanged (stable Rust, API 4.3, no wasm features)
+        run: |
+          cargo tree -p mumble-godot -e features > features.txt
+          cat features.txt
+          grep -q 'godot feature "api-4-3"' features.txt
+          if grep -q 'experimental-wasm' features.txt; then
+            echo "::error::the desktop build enables a wasm feature of gdext"
+            exit 1
+          fi
+      - name: Build mumble_godot.wasm (nightly, build-std, wasm32-unknown-emscripten)
+        run: scripts/godot-web/build.sh target/godot-web
+      - name: Check the library (side module, no threads, entry symbol, size budget, .gdextension)
+        run: |
+          {
+            echo "### mumble_godot.wasm (web library, pinned ${{ steps.pins.outputs.RUST_NIGHTLY }} and Emscripten ${{ steps.pins.outputs.EMSDK_VERSION }})"
+            echo
+            echo '```'
+            node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.wasm \
+              --gdextension bindings/godot/addons/mumble_speech/mumble_speech.gdextension
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          # tee hides the exit status of the checks: run them again for it (they are quick).
+          node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.wasm \
+            --gdextension bindings/godot/addons/mumble_speech/mumble_speech.gdextension > /dev/null
+      - name: Negative self-tests of the checks
+        run: scripts/godot-web/check-wasm.test.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: godot-web-lib
+          path: target/godot-web/mumble_godot.wasm
+          if-no-files-found: error
+
+  godot-web:
+    # The Godot web export runs in a browser, served without COOP/COEP (specs/design.md §9.3.1, L4.15, L4.16,
+    # L5.2, LD31): the conformance vectors and the speaker timing, with audio running and suspended.
+    # Not a required check at first (LQ14): promoted after ten consecutive green runs on main.
+    needs: godot-web-build
+    name: godot-web (${{ matrix.godot }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Minimum supported version (L4.6) and the latest tested one, as in the godot job.
+        godot: [4.3-stable, 4.7.2-stable]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: godot-web-lib
+          path: bindings/godot/addons/mumble_speech/bin
+      - name: Download Godot ${{ matrix.godot }}
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}/Godot_v${{ matrix.godot }}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          mv godot/Godot_v*_linux.x86_64 godot/godot
+      - name: Export templates (the two non-threaded dlink web templates, cached)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/mumble-godot-web-templates
+          key: godot-web-templates-${{ matrix.godot }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: scripts/godot-web/package-lock.json
+      - name: Install Playwright and Chromium
+        working-directory: scripts/godot-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Audio device (PulseAudio null sink)
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1 || true
+          sleep 2
+          pactl load-module module-null-sink sink_name=ci_null
+          pactl set-default-sink ci_null
+          pactl info | grep -i 'default sink'
+      - name: Export the test runner (Web (tests), no threads, extensions on)
+        run: scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-tests
+      - name: Chromium, audio running
+        run: node scripts/godot-web/run-tests.mjs build/godot-web-tests --browser chromium --audio running
+      - name: Chromium, audio suspended (no user gesture, L4.16)
+        run: node scripts/godot-web/run-tests.mjs build/godot-web-tests --browser chromium --audio suspended
+      - name: Export the example (Web preset) and run it
+        run: |
+          scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-example Web
+          node scripts/godot-web/run-tests.mjs build/godot-web-example --browser chromium --audio running --mode example
+
+  godot-web-browsers:
+    # Firefox and WebKit: informative, not a required check yet (specs/design.md LD31, LQ14). Promote each
+    # after ten consecutive green runs on main.
+    needs: godot-web-build
+    name: godot-web-browsers (${{ matrix.browser }})
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { browser: firefox, audios: 'running suspended' }
+          # Playwright's WebKit has no flag to allow audio without a gesture: suspended only.
+          - { browser: webkit, audios: 'suspended' }
+    runs-on: ubuntu-latest
+    env:
+      GODOT: 4.7.2-stable
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: godot-web-lib
+          path: bindings/godot/addons/mumble_speech/bin
+      - name: Download Godot ${{ env.GODOT }}
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/$GODOT/Godot_v${GODOT}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          mv godot/Godot_v*_linux.x86_64 godot/godot
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/mumble-godot-web-templates
+          key: godot-web-templates-${{ env.GODOT }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: scripts/godot-web/package-lock.json
+      - name: Install Playwright and ${{ matrix.browser }}
+        working-directory: scripts/godot-web
+        run: |
+          npm ci
+          npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Audio device and virtual display
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils xvfb
+          pulseaudio --start --exit-idle-time=-1 || true
+          sleep 2
+          pactl load-module module-null-sink sink_name=ci_null
+          pactl set-default-sink ci_null
+      - name: Export the test runner
+        run: scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-tests
+      - name: Run in ${{ matrix.browser }} (headed, software WebGL)
+        run: |
+          for audio in ${{ matrix.audios }}; do
+            echo "::group::${{ matrix.browser }}, audio $audio"
+            xvfb-run -a node scripts/godot-web/run-tests.mjs build/godot-web-tests --browser ${{ matrix.browser }} --audio "$audio" --headed
+            echo "::endgroup::"
+          done
+
   unity-interop:
     # The Unity package's UnityEngine-free code, C# 9, against the real native library (LD13).
     runs-on: ubuntu-latest
@@ -210,6 +377,16 @@ jobs:
         run: scripts/release/verify.test.sh
       - name: Release notes, Android in the Unity row only
         run: node --test scripts/release/notes.test.mjs
+      - name: Godot web build scripts, arguments, toolchain errors and the build paths with a stub cargo
+        run: scripts/godot-web/build.test.sh
+      - name: Godot web library checks, broken modules fail
+        run: scripts/godot-web/check-wasm.test.sh
+      - name: Godot web library checks, every instruction class, the budget and the .gdextension
+        run: node --test scripts/godot-web/check-wasm.test.mjs
+      - name: Godot web export script, version strings, template cache and missing library
+        run: scripts/godot-web/export.test.sh
+      - name: Godot web browser runner, command line, verdicts and static server
+        run: node --test scripts/godot-web/run-tests.test.mjs
 
   site:
     # Docs at /, playground at /playground/ (specs/design.md §12, L7). Deployed from main only.

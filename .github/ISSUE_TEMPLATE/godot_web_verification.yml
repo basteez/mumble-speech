@@ -1,0 +1,82 @@
+name: Godot web verification report (GW1–GW5)
+description: Results of the manual Godot web checklist in bindings/godot/TESTING.md.
+title: "[Godot web check]: Godot <version> in <browser> on <OS>"
+labels: ["godot", "verification"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Follow [TESTING.md](https://github.com/basteez/mumble-speech/blob/main/bindings/godot/TESTING.md)
+        and report here, even if everything works. Thank you!
+  - type: input
+    id: godot
+    attributes:
+      label: Godot version
+      placeholder: "4.3-stable or 4.7.2-stable"
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      placeholder: "Safari 19 on macOS 26, Firefox 140, Chrome 140"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and CPU
+      placeholder: "macOS 26 arm64"
+    validations:
+      required: true
+  - type: input
+    id: addon
+    attributes:
+      label: Addon version and source
+      placeholder: "0.3.0 from the release zip, or built from source at <commit>"
+    validations:
+      required: true
+  - type: dropdown
+    id: gw1
+    attributes:
+      label: "GW1: the example in the browser"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: gw2
+    attributes:
+      label: "GW2: timing and memory with sound"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: gw3
+    attributes:
+      label: "GW3: the test runner (MUMBLE_WEB_TESTS PASS)"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: textarea
+    id: gw4
+    attributes:
+      label: "GW4: what happens with Thread Support on (export error, load error or silent failure)"
+      description: With and without the COOP/COEP headers. Leave empty if not tested.
+  - type: dropdown
+    id: gw5
+    attributes:
+      label: "GW5: iOS Safari and itch.io (optional)"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console errors and warnings
+      description: Copy them as they are.
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything that was confusing, surprising, or sounded wrong.
