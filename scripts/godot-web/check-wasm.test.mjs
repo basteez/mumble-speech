@@ -475,11 +475,12 @@ test('readEntrySymbol reads the repository file, in LF and CRLF, and ignores com
   assert.equal(readEntrySymbol('entry_symbol = ""\n'), '');
 });
 
-test('readLibraries returns the eight [libraries] entries of the repository file', () => {
+test('readLibraries returns the ten [libraries] entries of the repository file', () => {
   const libraries = readLibraries(repoGdextensionText);
   assert.deepEqual(Object.keys(libraries).sort(), [
     'linux.debug.x86_64', 'linux.release.x86_64', 'macos.debug', 'macos.release',
-    'web.debug.wasm32', 'web.release.wasm32', 'windows.debug.x86_64', 'windows.release.x86_64',
+    'web.debug.threads.wasm32', 'web.debug.wasm32', 'web.release.threads.wasm32', 'web.release.wasm32',
+    'windows.debug.x86_64', 'windows.release.x86_64',
   ]);
   assert.equal(libraries['web.release.wasm32'], WEB_LIBRARY_PATH);
 });
@@ -512,10 +513,12 @@ test('checkGdextension: missing web keys, a key outside [libraries], a wrong pat
   assert.deepEqual(checkGdextension(noWeb), [
     'web.debug.wasm32 is missing from [libraries]',
     'web.release.wasm32 is missing from [libraries]',
+    'web.debug.threads.wasm32 is missing from [libraries]',
+    'web.release.threads.wasm32 is missing from [libraries]',
   ]);
   // Under [configuration] the web keys are not libraries.
   const underConfiguration = repoGdextensionText.replace('[libraries]', '[configuration]');
-  assert.equal(checkGdextension(underConfiguration).length, 2);
+  assert.equal(checkGdextension(underConfiguration).length, 4);
   const wrongPath = repoGdextensionText.replace(
     'web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"',
     'web.release.wasm32 = "res://addons/mumble_speech/bin/other.wasm"',
@@ -523,11 +526,8 @@ test('checkGdextension: missing web keys, a key outside [libraries], a wrong pat
   assert.deepEqual(checkGdextension(wrongPath), [
     `web.release.wasm32 is "res://addons/mumble_speech/bin/other.wasm", expected "${WEB_LIBRARY_PATH}"`,
   ]);
-  const threaded = `${repoGdextensionText}\nweb.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"\n`;
-  assert.deepEqual(checkGdextension(threaded), [
-    'web.release.threads.wasm32: no threaded web build is shipped (LD27)',
-  ]);
-  assert.match(checkGdextension(`${repoGdextensionText}\nweb.debug.threads.wasm32 = "x"\n`).join('\n'), /threaded web build/);
+  // An extra web key is rejected (the four-key rule of LD38 replaced the rejection of any threads key).
+  assert.match(checkGdextension(`${repoGdextensionText}\nweb.release.nothreads.wasm32 = "x"\n`).join('\n'), /not one of the four web keys/);
 });
 
 test('checkGdextension: a web key placed under another section does not count', () => {
@@ -535,11 +535,13 @@ test('checkGdextension: a web key placed under another section does not count', 
   assert.deepEqual(checkGdextension(text), [
     'web.debug.wasm32 is missing from [libraries]',
     'web.release.wasm32 is missing from [libraries]',
+    'web.debug.threads.wasm32 is missing from [libraries]',
+    'web.release.threads.wasm32 is missing from [libraries]',
   ]);
 });
 
 test('checkGdextension: a file without the [libraries] header lists every web key as missing', () => {
-  assert.equal(checkGdextension('entry_symbol = "gdext_rust_init"\n').length, 2);
+  assert.equal(checkGdextension('entry_symbol = "gdext_rust_init"\n').length, 4);
 });
 
 // --- Budget (versions.env) ------------------------------------------------------------------------

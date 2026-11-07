@@ -59,8 +59,22 @@ grep -v '^web\.release\.wasm32' "$gdext" > "$work/no-release.gdextension"
 expect_exit ".gdextension without the release key fails" 1 "web.release.wasm32 is missing" node "$check" --gdextension "$work/no-release.gdextension"
 sed 's#bin/mumble_godot.wasm#bin/other.wasm#' "$gdext" > "$work/wrong-path.gdextension"
 expect_exit ".gdextension with a wrong path fails" 1 "expected" node "$check" --gdextension "$work/wrong-path.gdextension"
-{ cat "$gdext"; echo 'web.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"'; } > "$work/threads.gdextension"
-expect_exit ".gdextension with a threads key fails" 1 "no threaded web build" node "$check" --gdextension "$work/threads.gdextension"
+grep -v '^web\.release\.threads' "$gdext" > "$work/no-threads-key.gdextension"
+expect_exit ".gdextension without a threaded key fails" 1 "web.release.threads.wasm32 is missing" node "$check" --gdextension "$work/no-threads-key.gdextension"
+{ cat "$gdext"; echo 'web.release.nothreads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"'; } > "$work/extra-key.gdextension"
+expect_exit ".gdextension with an extra web key fails" 1 "not one of the four web keys" node "$check" --gdextension "$work/extra-key.gdextension"
+
+# The threaded library (L4.20, LD38): a threaded side module passes only with --threads, and the file name must agree.
+expect_exit "threaded side module passes with --threads" 0 "check-wasm: ok" node "$check" "$fx/good.threads.wasm" --threads --budget 1000
+expect_exit "threaded run reports the atomics count" 0 "1 atomics instructions" node "$check" "$fx/good.threads.wasm" --threads --budget 1000
+expect_exit "a threaded module without --threads fails (name and shared memory)" 1 "check it with --threads" node "$check" "$fx/good.threads.wasm" --budget 1000
+expect_exit "a non-threaded module with --threads fails" 1 "not a threaded library name" node "$check" "$fx/good.wasm" --threads --budget 1000
+expect_exit "shared memory without atomics fails with --threads" 1 "no atomics instruction" node "$check" "$fx/shared-no-atomics.threads.wasm" --threads --budget 1000
+expect_exit "atomics without shared memory fails with --threads" 1 "no shared memory import" node "$check" "$fx/atomics-no-shared.threads.wasm" --threads --budget 1000
+expect_exit "a defined memory fails with --threads" 1 "defines a memory" node "$check" "$fx/defined-memory.threads.wasm" --threads --budget 1000
+expect_exit "threaded: missing entry symbol fails" 1 "is not exported" node "$check" "$fx/no-entry.threads.wasm" --threads --budget 1000
+expect_exit "threaded: over budget fails" 1 "(LD38)" node "$check" "$fx/big.threads.wasm" --threads --budget 1000
+expect_exit "threaded: the default budget is WASM_THREADS_BUDGET_BYTES" 0 "budget 1000000 bytes" node "$check" "$fx/good.threads.wasm" --threads
 
 echo
 echo "$passed passed, $failed failed"

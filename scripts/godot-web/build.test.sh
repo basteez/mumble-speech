@@ -30,6 +30,7 @@ cat > "$work/bin/cargo" <<'EOF'
 #!/bin/sh
 echo "cargo $*" >> "$WORK/calls.txt"
 case "$*" in
+  *--target-dir\ target/godot-web-threads*) target=target/godot-web-threads/wasm32-unknown-emscripten/release/mumble_godot.wasm; src=$FAKE_THREADS_WASM ;;
   *wasm32-unknown-emscripten*) target=target/wasm32-unknown-emscripten/release/mumble_godot.wasm; src=$FAKE_WASM ;;
   *) target=target/release/libmumble_godot.so; src=$FAKE_SO ;;
 esac
@@ -46,7 +47,7 @@ printf '#!/bin/sh\necho "emcc (Emscripten gcc/clang-like replacement + linker em
 printf '#!/bin/sh\necho "shared:INFO: (Emscripten: Running sanity checks)" >&2\necho "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) %s (abcdef)"\necho "Copyright (C) 2014 the Emscripten authors"\nfor i in 1 2 3 4 5 6 7 8 9; do echo "line $i"; done\n' "$EMSDK_VERSION" > "$work/emcc-notice"
 printf '#!/bin/sh\necho "boom" >&2\nexit 3\n' > "$work/emcc-broken"
 chmod +x "$work/bin"/* "$work"/emcc-*
-export WORK=$work FAKE_WASM=$work/fx/good.wasm FAKE_SO=$work/fake.so
+export WORK=$work FAKE_WASM=$work/fx/good.wasm FAKE_THREADS_WASM=$work/fx/good.threads.wasm FAKE_SO=$work/fake.so
 
 # make_tree <dir>: a copy of the build scripts, the gdextension and the budget. The scripts find their root from
 # their own location, so a build in the copy writes into the copy.
@@ -139,12 +140,45 @@ else
   echo "FAIL the library is not in the addon"; failed=$((failed + 1))
 fi
 
+if [ -f "$tree/bindings/godot/addons/mumble_speech/bin/mumble_godot.threads.wasm" ]; then
+  echo "ok   the threaded library is copied into the addon's bin folder too"; passed=$((passed + 1))
+else
+  echo "FAIL the threaded library is not in the addon"; failed=$((failed + 1))
+fi
+
 tree=$work/tree-threaded
 make_tree "$tree"
 export STUB_ROOT=$tree FAKE_WASM=$work/fx/shared-memory.wasm
-CARGO_STUB=ok expect_exit "bindings web build: a threaded library fails the build (L4.17)" 1 "shared memory" \
+CARGO_STUB=ok expect_exit "bindings web build: a threaded library in the non-threaded slot fails the build (L4.17)" 1 "shared memory" \
   "$tree/bindings/godot/build.sh" web
 export FAKE_WASM=$work/fx/good.wasm
+
+tree=$work/tree-nothreads-in-threads
+make_tree "$tree"
+export STUB_ROOT=$tree FAKE_THREADS_WASM=$work/fx/good.wasm
+CARGO_STUB=ok expect_exit "bindings web build: a non-threaded library in the threaded slot fails the build (L4.20)" 1 "no shared memory import" \
+  "$tree/bindings/godot/build.sh" web
+export FAKE_THREADS_WASM=$work/fx/good.threads.wasm
+
+# --- scripts/godot-web/build.sh --threads (T1, LD36) -------------------------------------------------------------
+expect_exit "build.sh rejects an unknown option" 2 "usage" "$build" --bogus "$work/out"
+expect_exit "build.sh --threads without an output directory is a usage error" 2 "usage" "$build" --threads
+tree=$work/tree-threads-only
+make_tree "$tree"
+export STUB_ROOT=$tree
+: > "$work/calls.txt"
+CARGO_STUB=ok expect_exit "a threaded build writes mumble_godot.threads.wasm" 0 "mumble_godot.threads.wasm" \
+  "$tree/scripts/godot-web/build.sh" --threads "$work/out-threads"
+if [ -f "$work/out-threads/mumble_godot.threads.wasm" ] && [ ! -e "$work/out-threads/mumble_godot.wasm" ] \
+  && grep -qF -- "--config target.wasm32-unknown-emscripten.rustflags=[\"-C\",\"link-args=-pthread\",\"-C\",\"target-feature=+atomics\"]" "$work/calls.txt" \
+  && grep -qF -- "--target-dir target/godot-web-threads" "$work/calls.txt"; then
+  echo "ok   the threaded build passes the --config flags and its own target folder"; passed=$((passed + 1))
+else
+  echo "FAIL the threaded build command is not the documented one:"; cat "$work/calls.txt"; failed=$((failed + 1))
+fi
+CARGO_STUB=fail expect_exit "a failing cargo fails the threaded build" 1 "" "$tree/scripts/godot-web/build.sh" --threads "$work/out-threads-fail"
+EMCC=$work/emcc-old expect_exit "the emcc version check applies to --threads" 1 "Emscripten $EMSDK_VERSION is required" "$build" --threads "$work/out"
+export EMCC=$work/emcc-pinned
 
 tree=$work/tree-budget
 make_tree "$tree"
