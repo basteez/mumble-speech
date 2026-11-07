@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
-# Builds the Godot web library: mumble-godot as a non-threaded WebAssembly side module for
-# wasm32-unknown-emscripten, with the pinned nightly Rust and Emscripten
-# (specs/design.md §9.3.1, L4.15, L4.17, LD27, LD28).
-# Usage: scripts/godot-web/build.sh <out dir>   writes <out dir>/mumble_godot.wasm
-# Environment: EMCC overrides the emcc command (tests).
+# Builds the Godot web library: mumble-godot as a WebAssembly side module for wasm32-unknown-emscripten,
+# with the pinned nightly Rust and Emscripten (specs/design.md §9.3.1, §9.3.2, L4.15, L4.17, L4.19, L4.20,
+# LD27, LD28, LD36).
+# Usage: scripts/godot-web/build.sh [--threads] <out dir>
+#          without --threads: writes <out dir>/mumble_godot.wasm (no threads)
+#          with --threads:    writes <out dir>/mumble_godot.threads.wasm (-pthread, +atomics, own target folder)
+# Environment: EMCC overrides the emcc command (tests); CARGO_VERBOSE=1 passes -v to cargo (T1 checks the flags).
 set -euo pipefail
 
-if [ $# -ne 1 ]; then
-  echo "usage: build.sh <out dir>" >&2
+usage() {
+  echo "usage: build.sh [--threads] <out dir>" >&2
   exit 2
-fi
+}
+threads=0
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    --threads) [ "$threads" -eq 0 ] || usage; threads=1 ;;
+    -*) usage ;;
+    *) [ -z "$out" ] || usage; out=$arg ;;
+  esac
+done
+[ -n "$out" ] || usage
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 # shellcheck source=versions.env
@@ -44,8 +56,24 @@ case " $reported " in
 esac
 
 rustup toolchain install "$RUST_NIGHTLY" --profile minimal --component rust-src --target wasm32-unknown-emscripten
-(cd "$root" && cargo "+$RUST_NIGHTLY" build -Zbuild-std=std,panic_abort -p mumble-godot --release --target wasm32-unknown-emscripten)
 
-mkdir -p "$1"
-cp "$root/target/wasm32-unknown-emscripten/release/mumble_godot.wasm" "$1/"
-ls -l "$1/mumble_godot.wasm"
+verbose=()
+[ "${CARGO_VERBOSE:-0}" = 1 ] && verbose=(-v)
+if [ "$threads" -eq 1 ]; then
+  # The shared flags stay in .cargo/config.toml; Cargo joins array values of every configuration source, the
+  # command line last (LD36). A RUSTFLAGS variable would replace them instead. The threaded build has its own
+  # target folder, so the two builds keep their own rebuilt std (it is built with these flags, atomics included).
+  threads_config='target.wasm32-unknown-emscripten.rustflags=["-C","link-args=-pthread","-C","target-feature=+atomics"]'
+  target_dir=target/godot-web-threads
+  built=$root/$target_dir/wasm32-unknown-emscripten/release/mumble_godot.wasm
+  name=mumble_godot.threads.wasm
+  (cd "$root" && cargo "+$RUST_NIGHTLY" --config "$threads_config" build ${verbose[@]+"${verbose[@]}"} -Zbuild-std=std,panic_abort -p mumble-godot --release --target wasm32-unknown-emscripten --target-dir "$target_dir")
+else
+  built=$root/target/wasm32-unknown-emscripten/release/mumble_godot.wasm
+  name=mumble_godot.wasm
+  (cd "$root" && cargo "+$RUST_NIGHTLY" build ${verbose[@]+"${verbose[@]}"} -Zbuild-std=std,panic_abort -p mumble-godot --release --target wasm32-unknown-emscripten)
+fi
+
+mkdir -p "$out"
+cp "$built" "$out/$name"
+ls -l "$out/$name"

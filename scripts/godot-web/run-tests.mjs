@@ -1,14 +1,22 @@
-// Runs a Godot web export in a browser and checks the result (specs/design.md §9.3.1, L4.15-L4.17,
-// L5.2, LD31): serves the export directory WITHOUT cross-origin isolation headers, opens it with
-// Playwright and waits for the test runner (tests/web/runner.gd) to report.
+// Runs a Godot web export in a browser and checks the result (specs/design.md §9.3.1, §9.3.2, L4.15-L4.17,
+// L4.19, L5.2, LD31, LD39): serves the export directory (WITHOUT cross-origin isolation headers, or with
+// them under --threads), opens it with Playwright and waits for the test runner (tests/web/runner.gd) to
+// report.
 //
 // Usage: node run-tests.mjs <export dir> --browser chromium|firefox|webkit --audio running|suspended
-//          [--mode tests|example] [--headed] [--timeout <seconds>]
+//          [--mode tests|example] [--threads [--no-isolation-headers]] [--headed] [--timeout <seconds>]
 //   tests    (default) the "Web (tests)" export: fails unless the page reports `MUMBLE_WEB_TESTS PASS`.
 //   example  the "Web" export: fails unless the example scene starts (`MUMBLE_EXAMPLE started`) and stays
 //            error-free for a few seconds; the test runner must NOT be running (the main scene is right).
-//   Both fail unless crossOriginIsolated is false, the page logs no fatal error, and every AudioContext
-//   is in the state of --audio when the run ends (a silent pass is not possible).
+//   --threads  the export has Thread Support on: the server adds Cross-Origin-Opener-Policy: same-origin and
+//            Cross-Origin-Embedder-Policy: require-corp to every response, and the run fails unless
+//            crossOriginIsolated is true, the page reports threads (when it reports it) and the server saw a
+//            request for mumble_godot.threads.wasm and none for mumble_godot.wasm. Without it the run fails
+//            unless crossOriginIsolated is false, the page does not report threads, and only
+//            mumble_godot.wasm was requested (so every run proves Godot's choice of library, LD35, LD39).
+//            --no-isolation-headers (only with --threads) switches the headers off: the negative run of T4.
+//   Both fail unless the page logs no fatal error, and every AudioContext is in the state of --audio when
+//   the run ends (a silent pass is not possible).
 // The pure helpers are exported (tested by run-tests.test.mjs); the command line is a thin wrapper.
 import { createReadStream, existsSync, realpathSync, statSync, appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -18,6 +26,12 @@ import { fileURLToPath } from 'node:url';
 export const BROWSERS = ['chromium', 'firefox', 'webkit'];
 export const AUDIO_STATES = ['running', 'suspended'];
 export const MODES = ['tests', 'example'];
+export const ISOLATION_HEADERS = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+};
+export const LIBRARY = 'mumble_godot.wasm';
+export const THREADS_LIBRARY = 'mumble_godot.threads.wasm';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -42,11 +56,14 @@ export function contentTypeFor(file) {
  * @param {string[]} argv arguments after the script name
  */
 export function parseArgs(argv) {
-  const options = { dir: undefined, browser: 'chromium', audio: undefined, mode: 'tests', headed: false, timeoutSeconds: 180 };
+  const options = { dir: undefined, browser: 'chromium', audio: undefined, mode: 'tests', threads: false, isolationHeaders: false, headed: false, timeoutSeconds: 180 };
+  let noHeaders = false;
   const rest = argv.slice();
   while (rest.length > 0) {
     const arg = rest.shift();
     if (arg === '--headed') options.headed = true;
+    else if (arg === '--threads') options.threads = true;
+    else if (arg === '--no-isolation-headers') noHeaders = true;
     else if (arg === '--browser' || arg === '--audio' || arg === '--mode' || arg === '--timeout') {
       const value = rest.shift();
       if (value === undefined) return { error: `${arg} needs a value` };
@@ -66,17 +83,21 @@ export function parseArgs(argv) {
   if (options.audio === undefined) return { error: `--audio is required: ${AUDIO_STATES.join(' or ')}` };
   if (!AUDIO_STATES.includes(options.audio)) return { error: `--audio must be one of ${AUDIO_STATES.join(', ')}` };
   if (!MODES.includes(options.mode)) return { error: `--mode must be one of ${MODES.join(', ')}` };
+  if (noHeaders && !options.threads) return { error: '--no-isolation-headers needs --threads' };
+  options.isolationHeaders = options.threads && !noHeaders;
   return { options };
 }
 
 /**
  * Serves a directory over HTTP on 127.0.0.1, with correct media types and, on purpose, NO
- * Cross-Origin-Opener-Policy or Cross-Origin-Embedder-Policy headers (L4.15). Resolves to
- * { url, close, requests } where `requests` records every request path and status.
+ * Cross-Origin-Opener-Policy or Cross-Origin-Embedder-Policy headers (L4.15), unless `isolationHeaders`
+ * is true: then every response, errors included, carries both (L4.19, a threaded export needs them).
+ * Resolves to { url, close, requests } where `requests` records every request path and status.
  */
-export function serve(dir) {
+export function serve(dir, { isolationHeaders = false } = {}) {
   const base = resolve(dir);
   const requests = [];
+  const extra = isolationHeaders ? ISOLATION_HEADERS : {};
   const server = createServer((req, res) => {
     let pathname;
     try {
@@ -84,7 +105,7 @@ export function serve(dir) {
     } catch {
       // A malformed escape (%E0, a lone %) is not a path: answer it, do not let the handler throw.
       requests.push({ path: req.url ?? '/', status: 400 });
-      res.writeHead(400, { 'Content-Type': 'text/plain' });
+      res.writeHead(400, { 'Content-Type': 'text/plain', ...extra });
       res.end('bad request');
       return;
     }
@@ -92,7 +113,7 @@ export function serve(dir) {
     const inside = file === base || file.startsWith(base + sep);
     if (!inside || !existsSync(file) || !statSync(file).isFile()) {
       requests.push({ path: pathname, status: 404 });
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
+      res.writeHead(404, { 'Content-Type': 'text/plain', ...extra });
       res.end('not found');
       return;
     }
@@ -101,6 +122,7 @@ export function serve(dir) {
       'Content-Type': contentTypeFor(file),
       'Content-Length': statSync(file).size,
       'Cache-Control': 'no-store',
+      ...extra,
     });
     createReadStream(file).pipe(res);
   });
@@ -142,6 +164,21 @@ export function audioVerdict(states, expected) {
 }
 
 /**
+ * Which library the server saw requested (LD35, LD39). Godot copies one library next to index.html and
+ * the page fetches it: `mumble_godot.threads.wasm` in a threaded export, `mumble_godot.wasm` otherwise.
+ * The threaded run needs the first and none of the second; the other run the reverse. Any status counts as
+ * a request (a 404 is reported on its own). Returns a list of failure messages.
+ */
+export function libraryFailures(requests, threads) {
+  const asked = (name) => requests.some((r) => r.path === `/${name}` || r.path.endsWith(`/${name}`));
+  const failures = [];
+  const [want, other] = threads ? [THREADS_LIBRARY, LIBRARY] : [LIBRARY, THREADS_LIBRARY];
+  if (!asked(want)) failures.push(`${want} was not requested (${threads ? 'Thread Support on' : 'Thread Support off'}: that library must load, LD35)`);
+  if (asked(other)) failures.push(`${other} was requested, but this export must load ${want} only (LD35)`);
+  return failures;
+}
+
+/**
  * The verdict on a finished run, from what the page reported. Returns a list of failure messages.
  * @param {object} r
  * @param {string} r.mode
@@ -149,17 +186,22 @@ export function audioVerdict(states, expected) {
  * @param {object|undefined} r.report          window.mumbleWebTests ({ done, failures, checks, vectors, log })
  * @param {string[]} r.consoleLines            every console line of the page
  * @param {string[]} r.fatal                   fatal console lines and page errors
+ * @param {boolean} [r.threads]                the export has Thread Support on (default false)
  * @param {boolean} r.crossOriginIsolated
  * @param {string[]} r.audioStates
  * @param {{path: string, status: number}[]} r.requests
  */
-export function verdict({ mode, audio, report, consoleLines, fatal, crossOriginIsolated, audioStates, requests }) {
+export function verdict({ mode, audio, report, consoleLines, fatal, crossOriginIsolated, audioStates, requests, threads = false }) {
   const failures = [];
   if (mode === 'tests') {
     if (!report || report.done !== true) failures.push('the test runner did not report');
     else {
       if (report.failures !== 0) failures.push(`the test runner reports ${report.failures} failed check(s)`);
       if (!(report.vectors > 0)) failures.push('no conformance vector was checked');
+      // `threads` is true, false or null (the engine did not say, LD39): null passes, a mismatch does not.
+      if (report.threads !== undefined && report.threads !== null && report.threads !== threads) {
+        failures.push(`the test runner reports threads ${report.threads}, expected ${threads}`);
+      }
     }
     if (!consoleLines.some((l) => /MUMBLE_WEB_TESTS PASS \d+/.test(l))) failures.push('no "MUMBLE_WEB_TESTS PASS" line in the page log');
     if (consoleLines.some((l) => /MUMBLE_WEB_TESTS FAIL/.test(l))) failures.push('the page log has a "MUMBLE_WEB_TESTS FAIL" line');
@@ -167,7 +209,12 @@ export function verdict({ mode, audio, report, consoleLines, fatal, crossOriginI
     if (!consoleLines.some((l) => /MUMBLE_EXAMPLE started/.test(l))) failures.push('the example scene did not start (no "MUMBLE_EXAMPLE started" line)');
     if (report || consoleLines.some((l) => /MUMBLE_WEB_TESTS/.test(l))) failures.push('the test runner started instead of the example scene');
   }
-  if (crossOriginIsolated !== false) failures.push(`crossOriginIsolated is ${crossOriginIsolated}, expected false (no COOP/COEP, L4.15)`);
+  if (threads) {
+    if (crossOriginIsolated !== true) failures.push(`crossOriginIsolated is ${crossOriginIsolated}, expected true (COOP/COEP sent, L4.19)`);
+  } else if (crossOriginIsolated !== false) {
+    failures.push(`crossOriginIsolated is ${crossOriginIsolated}, expected false (no COOP/COEP, L4.15)`);
+  }
+  failures.push(...libraryFailures(requests, threads));
   for (const line of fatal) failures.push(`fatal page message: ${line}`);
   const missing = requests.filter((r) => r.status >= 400);
   for (const r of missing) failures.push(`request for ${r.path} answered ${r.status}`);
@@ -244,8 +291,8 @@ function summary(lines) {
 
 async function run(options) {
   const playwright = await import('playwright');
-  const { dir, browser: name, audio, mode, headed, timeoutSeconds } = options;
-  const server = await serve(dir);
+  const { dir, browser: name, audio, mode, headed, timeoutSeconds, threads, isolationHeaders } = options;
+  const server = await serve(dir, { isolationHeaders });
   const browser = await playwright[name].launch(launchOptions(name, audio, headed));
   const consoleLines = [];
   const fatal = [];
@@ -282,14 +329,15 @@ async function run(options) {
     const crossOriginIsolated = await page.evaluate(() => window.crossOriginIsolated);
     const audioStates = await page.evaluate(() => (window.mumbleAudioContexts ?? []).map((c) => c.state));
     const report = await page.evaluate(() => (window.mumbleWebTests ? { ...window.mumbleWebTests } : undefined));
-    const failures = verdict({ mode, audio, report, consoleLines, fatal, crossOriginIsolated, audioStates, requests: server.requests });
+    const failures = verdict({ mode, audio, report, consoleLines, fatal, crossOriginIsolated, audioStates, requests: server.requests, threads });
     if (waitFailure) failures.unshift(waitFailure);
     const timings = consoleLines.filter((l) => l.startsWith('MUMBLE_WEB_TIMING'));
     summary([
-      `### Godot web export in ${name} (${mode}, audio ${audio})`,
+      `### Godot web export in ${name} (${mode}, audio ${audio}, threads ${threads ? 'on' : 'off'})`,
       '',
       `- Godot: ${consoleLines.find((l) => l.startsWith('MUMBLE_WEB_TESTS start')) ?? 'n/a'}`,
       `- browser version: ${browser.version()}`,
+      `- library requested: ${[LIBRARY, THREADS_LIBRARY].filter((l) => server.requests.some((r) => r.path.endsWith(`/${l}`))).join(', ') || 'none'}; page reports threads: ${report?.threads ?? 'n/a'}`,
       `- AudioContext states: ${audioStates.join(', ') || 'none'}; crossOriginIsolated: ${crossOriginIsolated}`,
       ...(mode === 'tests' ? [`- checks: ${report?.checks ?? 'n/a'}; conformance vectors checked: ${report?.vectors ?? 'n/a'}; failures: ${report?.failures ?? 'n/a'}`] : []),
       ...timings.map((t) => `- ${t}`),
@@ -306,7 +354,7 @@ async function run(options) {
 async function main(argv) {
   const parsed = parseArgs(argv);
   if (parsed.error) {
-    console.error(`${parsed.error}\nusage: run-tests.mjs <export dir> --browser chromium|firefox|webkit --audio running|suspended [--mode tests|example] [--headed] [--timeout <seconds>]`);
+    console.error(`${parsed.error}\nusage: run-tests.mjs <export dir> --browser chromium|firefox|webkit --audio running|suspended [--mode tests|example] [--threads [--no-isolation-headers]] [--headed] [--timeout <seconds>]`);
     return 2;
   }
   if (!existsSync(join(parsed.options.dir, 'index.html'))) {

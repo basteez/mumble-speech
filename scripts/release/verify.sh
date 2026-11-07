@@ -40,14 +40,20 @@ done
 "$godot" --headless --path "$project" -s res://tests/run_tests.gd
 if unzip -l "$archives/mumble-speech-godot-$version.zip" | grep -i android >/dev/null; then echo "Android files in the Godot addon"; exit 1; fi
 
-echo "== Godot addon: the web library is a side module without threads, listed in the .gdextension, and runs in a browser"
+echo "== Godot addon: the two web libraries (without and with threads) are side modules, listed in the .gdextension, and run in a browser"
 wasm=$project/addons/mumble_speech/bin/mumble_godot.wasm
+wasm_threads=$project/addons/mumble_speech/bin/mumble_godot.threads.wasm
 test -f "$wasm" || { echo "missing mumble_godot.wasm in the Godot addon"; exit 1; }
+test -f "$wasm_threads" || { echo "missing mumble_godot.threads.wasm in the Godot addon"; exit 1; }
 node "$root/scripts/godot-web/check-wasm.mjs" "$wasm" --gdextension "$project/addons/mumble_speech/mumble_speech.gdextension"
+node "$root/scripts/godot-web/check-wasm.mjs" "$wasm_threads" --threads
 if [ "${MUMBLE_VERIFY_WEB_RUN:-1}" != 0 ]; then
-  # The exported test runner from the packaged addon, on this Godot (4.3, the minimum), in Chromium (L4.15, L5.2).
+  # The exported test runners from the packaged addon, on this Godot (4.3, the minimum), in Chromium (L4.15, L4.19,
+  # L5.2): without threads and without COOP/COEP, then with threads and with them.
   GODOT_PROJECT=$project "$root/scripts/godot-web/export.sh" "$godot" "$work/web-export"
   node "$root/scripts/godot-web/run-tests.mjs" "$work/web-export" --browser chromium --audio running
+  GODOT_PROJECT=$project "$root/scripts/godot-web/export.sh" "$godot" "$work/web-export-threads" "Web (threads tests)"
+  node "$root/scripts/godot-web/run-tests.mjs" "$work/web-export-threads" --browser chromium --audio running --threads
 fi
 
 echo "== Unity package: desktop and Android plugins, a .meta for every file, Android libraries checked"

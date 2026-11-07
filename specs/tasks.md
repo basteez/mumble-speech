@@ -154,6 +154,44 @@ decision log before the pull request is merged.
 - [ ] **W7** Manual verification in browsers (checklist GW1–GW5), by the maintainer or a volunteer through the issue form. — L4.15, L4.16, L5.2 [man]
   - Done when: GW1–GW3 pass in the latest Chrome, Firefox and desktop Safari on Godot 4.3 and on the latest 4.x; GW4 is recorded in the docs; GW5 passes or is recorded as not available. Until then the changelog lists Godot web under *Known issues* as verified in Chromium in CI only.
 
+## Phase T — Godot on the web with threads (issue #34)
+
+Design §9.3.2, LD35–LD41. Phase letter T (threads). T1 settles the facts the
+rest depends on (the build mechanism, the threaded library's size, whether the
+4.3 threaded template loads it); its outcomes go into the decision log before the
+pull request is merged. Desktop builds and the non-threaded web path stay
+unchanged.
+
+- [ ] **T1** Threaded web build: the wasm `godot` dependency split by `cfg(target_feature = "atomics")` in `crates/mumble-godot/Cargo.toml`, `scripts/godot-web/build.sh --threads` (`cargo --config` with `-pthread` and `+atomics`, target folder `target/godot-web-threads`, output `mumble_godot.threads.wasm`), `bindings/godot/build.sh web` building and checking both, the two `web.*.threads.wasm32` entries in `mumble_speech.gdextension`, `WASM_THREADS_BUDGET_BYTES` in `versions.env`. — L4.19, L4.20, LD35, LD36, LD37, LD38
+  - Done when:
+    - happy path (CI, `godot-web-build`): with the pinned nightly and Emscripten, `bindings/godot/build.sh web` writes both `bin/mumble_godot.wasm` and `bin/mumble_godot.threads.wasm`, and `check-wasm.mjs` passes on each in its mode, printing raw and gzip size of both;
+    - build mechanism: the verbose log of the threaded build shows the shared flags of `.cargo/config.toml` and `-pthread`, `+atomics` together; `cargo tree -p mumble-godot -e features --target wasm32-unknown-emscripten` shows `experimental-wasm-nothreads` without `+atomics` and not with it; IF either does not hold, the fallback of LD36 or LD37 is used and recorded there;
+    - non-threaded unchanged: `scripts/godot-web/build.sh <dir>` without `--threads` gives a library that passes the §9.3.1 checks, with a size within 1 % of the 520,810 bytes of LD34 (same toolchain, same features);
+    - desktop unchanged: `bindings/godot/build.sh` with no argument and `cargo build --workspace` on stable build as before, and `cargo tree -p mumble-godot -e features` on the host shows `api-4-3` and no `experimental-wasm*`;
+    - errors: `build.sh` rejects an unknown option and a missing out dir (exit 2), and the `emcc` checks of W1 apply to `--threads` too; `build.test.sh` covers `--threads` with the stub cargo (the `--config` argument and the target folder are passed, the copy is named `.threads.wasm`, a failing cargo fails the script);
+    - decisions recorded: LD38 states the measured threaded size (raw and gzip) and the budget; LD36 and LD37 state whether the chosen mechanism worked.
+- [ ] **T2** Library checks: `check-wasm.mjs --threads` (shared memory imported, atomics present, entry symbol, threaded budget), the name/mode rule, the four-key `.gdextension` check; fixtures and tests. — L4.17, L4.20, LD38
+  - Done when:
+    - happy path: both CI libraries pass in their modes, and the committed `.gdextension` passes;
+    - negatives (`check-wasm.test.sh`, `check-wasm.test.mjs`): a non-threaded module with `--threads`, a threaded one without, shared memory without atomics, atomics without shared memory, a shared memory defined rather than imported, a `.threads.wasm` name without `--threads` and a plain name with it, over the threaded budget, a missing or malformed `WASM_THREADS_BUDGET_BYTES`; `.gdextension` without a threaded key, with the two paths swapped, with an extra `web.release.nothreads.wasm32` key, and the former `threads` key rejection no longer applies;
+    - the non-threaded checks and their tests of W1 pass unchanged.
+- [ ] **T3** Presets and runner: `Web (threads)` and `Web (threads tests)` in `export_presets.cfg`; `runner.gd` reports `threads`; `export.sh` caches the four `dlink` templates and requires exactly the library of the preset's kind. — L4.19, L5.2, LD39
+  - Done when: both threaded presets export on Godot 4.3 and 4.7.2 (through T4), the threaded export folder contains `mumble_godot.threads.wasm` and no `mumble_godot.wasm`, the non-threaded one the reverse; `export.test.sh` covers a threaded preset (template names, the expected file, failure when the wrong or both libraries are present, a cache holding only the non-threaded templates is refilled); the desktop runs of `run_tests.gd` are unchanged (same count); IF `OS.has_feature("threads")` is not reported at runtime on 4.3, the runner reports `null` and LD39 records it.
+- [ ] **T4** CI: `run-tests.mjs --threads` (COOP/COEP headers, `crossOriginIsolated === true`, threaded library requested and the other not; the reverse request check without `--threads`), `godot-web-build` building both, the `godot-web-threads (<version>)` matrix job, the threaded runs in `godot-web-browsers`; none required (LQ14). — L4.16, L4.19, L4.20, L5.2, LD39, LD40
+  - Done when:
+    - the jobs are green on the PR, and the summary lists both library sizes, the Godot version, the browser, threads on or off, the number of vectors checked and the measured timings of the `say` checks (Sample and Stream) in the threaded export;
+    - `run-tests.test.mjs` covers the new flag (headers sent on every response, the verdict on `crossOriginIsolated`, `threads` true, false and `null`, the request-log checks in both directions);
+    - negative runs on scratch commits, then reverted: the threaded export served without headers (`--threads` with the headers switched off: fails on `crossOriginIsolated`), the `.gdextension` without the threaded keys (the threaded run fails on the request log), the two library files swapped in the addon (fails the library check), a vector hash altered (the threaded run fails);
+    - the *Stream*-mode timing in the threaded export is within the L4.16 bound; IF not, LD40 and L4.16 are amended with the measurement in the same pull request;
+    - LD35's selection is confirmed on 4.3 and 4.7.2; IF the 4.3 threaded template does not load the threaded library, LQ17 is resolved and L4.18, L4.19 and the release notes amended in the same pull request;
+    - the Firefox and WebKit threaded results (pass, or the failure and its cause) are recorded in the PR description for LQ14; the non-threaded `godot-web` jobs stay green.
+- [ ] **T5** Release: the `godot-web` job builds and checks both libraries, `native-web` carries both, `assemble.sh` adds both to the Godot zip only, `verify.sh` checks both and runs both kinds of export on Godot 4.3 in Chromium, `notes.mjs` names the web with or without threads. — L4.19, L4.20, L8.1, L8.3, L9.4, LD33, LD35, LD39
+  - Done when: a release dry run (pull request trigger) builds the four archives; the Godot zip contains both `.wasm` files and the C archive and Unity tarball none; `verify.sh` fails on a Godot zip without the threaded file and on one with the two files swapped (`verify.test.sh` covers both); the notes preview shows *Web (Godot 4.3+, with or without threads)* for Godot only (`notes.test.mjs`).
+- [ ] **T6** Documentation: the *Web export* section of `docs/bindings/godot.md` and `bindings/godot/README.md` as a choice (L4.18, LD41: threads off or on, headers, the symptom without them from GW7, PWA, itch.io, *Run in Browser*, both sizes and template increases, main-thread use), root README platform list if it mentions threads, `bindings/godot/TESTING.md` with GW6–GW8 (GW4 replaced by GW7), a threaded section in the *Godot web verification report* issue form, CHANGELOG *Unreleased* entry. — L4.18, L7.1, L8.4, LD41
+  - Done when: the `site` job passes (no broken links); the issue form validates (GitHub renders it on the PR branch); review confirms each L4.18 point is covered, with sizes from T1 and the symptom from GW7 (marked TBD until then).
+- [ ] **T7** Manual verification of threaded exports in browsers (checklist GW6–GW8), by the maintainer or a volunteer through the issue form. — L4.18, L4.19, L5.2 [man]
+  - Done when: GW6 passes in the latest Chrome, Firefox and desktop Safari on Godot 4.3 (or the threaded minimum of LQ17) and on the latest 4.x; GW7 is recorded in the docs; GW8 passes or is recorded as not available. Until then the changelog lists threaded Godot web exports under *Known issues* as verified in Chromium in CI only.
+
 ## Manual checklist
 
 | ID | Steps | Expected | Requirements |
@@ -172,8 +210,11 @@ decision log before the pull request is merged.
 | GW1 | In `bindings/godot` (after `build.sh web`) or a project with the released addon, export the `Web` preset (Extensions Support on, Thread Support off) with Godot 4.3 and with the latest 4.x; serve `build/web/` with a plain static server (`python3 -m http.server`, no extra headers); open it in the latest Chrome, Firefox and desktop Safari, click once | The example types its line letter by letter with sound in sync, as on desktop; no error in the browser console; `crossOriginIsolated` is `false` in the console | L4.15, L4.9 |
 | GW2 | Open the `Web (tests)` export from GW3 in each browser with the speakers on (it says a line and types a 500-character one), with the browser's memory tool open | Each character sounds as its letter appears; the `say` line ends as `finished` is logged (within about a frame plus the browser's output latency); memory returns to its level after the long line | L4.16 |
 | GW3 | Export the `Web (tests)` preset; serve and open it in Firefox and Safari, click once | The page console ends with `MUMBLE_WEB_TESTS PASS`: every conformance vector is bit-identical in the browser and the timing checks pass | L5.2, L1.4, L4.16 |
-| GW4 | Export the `Web` preset with Thread Support on; serve it with and without COOP/COEP headers | Record what happens (export error, load error, or silent failure) and check the docs describe it | L4.18 |
+| GW4 | Export the `Web` preset with Thread Support on; serve it with and without COOP/COEP headers | Record what happens (export error, load error, or silent failure) and check the docs describe it. *Replaced by GW7 once the threaded library ships (issue #34)* | L4.18 |
 | GW5 | Optional: open the GW1 export on iOS Safari, and upload it to itch.io as an HTML game (embedded in the page, *SharedArrayBuffer support* off) | The line speaks after a tap, as in GW1 | L4.15 |
+| GW6 | After `build.sh web` (or with the released addon), export the `Web (threads)` and `Web (threads tests)` presets with Godot 4.3 and with the latest 4.x; serve each with COOP `same-origin` and COEP `require-corp` (the editor's *Run in Browser*, or a static server that sets them); open them in the latest Chrome, Firefox and desktop Safari, click once | `crossOriginIsolated` is `true`; the network panel shows `mumble_godot.threads.wasm` loaded and not `mumble_godot.wasm`; the example types its line with sound in sync as in GW1; the tests page ends with `MUMBLE_WEB_TESTS PASS` and reports threads on; the non-threaded GW1 export still loads `mumble_godot.wasm` | L4.19, L4.16, L5.2 |
+| GW7 | Serve the `Web (threads)` export of GW6 without the headers (`python3 -m http.server`) and open it in Chrome and Firefox | Record what the page shows (Godot's error about cross-origin isolation or `SharedArrayBuffer`, or another failure) and check the docs describe it and the fixes | L4.18 |
+| GW8 | Optional: upload the `Web (threads)` export to itch.io with *SharedArrayBuffer support* on, and the `Web (threads)` export with the PWA option (*Progressive Web App* on, *Ensure Cross Origin Isolation Headers* on) to a static host without headers | Both speak after a click (the PWA one after the reload its service worker triggers); with itch.io's option off, the GW7 symptom appears | L4.18, L4.19 |
 
 ## Verifiability on this machine
 
@@ -182,7 +223,10 @@ decision log before the pull request is merged.
 - Not available: Godot, Unity, .NET. Godot is verified in CI (headless) and
   with G1–G3 by you; Unity only with U1–U3 by you.
 - Not available: Emscripten, a Rust nightly, Playwright browsers. The Godot web
-  build and its browser tests are verified in CI (W4) and with GW1–GW5 by you.
+  build and its browser tests are verified in CI (W4, T4) and with GW1–GW8 by you.
+- Available since 2026-11-07: the Godot 4.7.2 desktop editor
+  (`/Applications/Godot.app`), enough to open the project and its export presets;
+  the web export templates are not installed, so web exports run in CI.
 - Windows and Linux are verified only in CI.
 
 ## Traceability
@@ -197,12 +241,13 @@ decision log before the pull request is merged.
 | L4.6 | F1–F3 |
 | L4.7 | G1–G3 |
 | L4.13–L4.14 | N1–N7 |
-| L4.15–L4.18 | W1–W7 |
+| L4.15–L4.18 | W1–W7, T2 (L4.17), T6–T7 (L4.18) |
+| L4.19–L4.20 | T1–T7 |
 | L4.8–L4.9 | F2, G2, H2 |
 | L4.10 | M1 |
 | L4.11–L4.12 | G4 |
-| L5 | C1, C2, D2, E2, F2, G2, H1, N3, N4, N7, W3, W4, W7 |
-| L7 | J1–J3, M1 (L7.5), W6 |
-| L8 | H1, H3, H4, N5, W5 |
-| L9 | K1–K3, H3, W5 (L9.4) |
+| L5 | C1, C2, D2, E2, F2, G2, H1, N3, N4, N7, W3, W4, W7, T3, T4, T7 |
+| L7 | J1–J3, M1 (L7.5), W6, T6 |
+| L8 | H1, H3, H4, N5, W5, T5, T6 (L8.4) |
+| L9 | K1–K3, H3, W5, T5 (L9.4) |
 | L6 | A1b, A2, D3, P1–P3 |

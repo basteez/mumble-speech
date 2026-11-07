@@ -90,6 +90,14 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     'atomics.wasm': { atomics: true },
     'no-entry.wasm': { exports: ['something_else'] },
     'big.wasm': { padding: 4096 },
+    // Threaded library fixtures (L4.20): named *.threads.wasm, as the file-name rule of LD38 asks.
+    'good.threads.wasm': { sharedMemory: true, atomics: true },
+    'big.threads.wasm': { sharedMemory: true, atomics: true, padding: 4096 },
+    'shared-no-atomics.threads.wasm': { sharedMemory: true },
+    'atomics-no-shared.threads.wasm': { atomics: true },
+    'defined-memory.threads.wasm': { sharedMemory: true, atomics: true, memory: 'section' },
+    'no-dylink.threads.wasm': { sharedMemory: true, atomics: true, dylink: false },
+    'no-entry.threads.wasm': { sharedMemory: true, atomics: true, exports: ['something_else'] },
   };
   for (const [name, options] of Object.entries(fixtures)) writeFileSync(join(out, name), buildModule(options));
   writeFileSync(join(out, 'not-wasm.wasm'), 'this is not a WebAssembly module');

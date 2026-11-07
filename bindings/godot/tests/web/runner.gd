@@ -1,7 +1,8 @@
 # The test runner of the web export (specs/design.md §9.3.1, L4.15, L4.16, L5.2, LD31, LD32).
 # Runs the shared suite (tests/suite.gd) and the web-only checks, prints every failure and a last
 # line `MUMBLE_WEB_TESTS PASS <n>` or `MUMBLE_WEB_TESTS FAIL <n>`, and sets
-# `window.mumbleWebTests = { done, failures, log }` for scripts/godot-web/run-tests.mjs.
+# `window.mumbleWebTests = { done, failures, checks, vectors, threads, log }` for scripts/godot-web/run-tests.mjs.
+# `threads` says which engine ran (specs/design.md §9.3.2, LD39): true, false, or null when the engine reports neither tag.
 # The vectors are copied to res://tests/web/vectors.json before the export (scripts/godot-web/export.sh).
 extends Node
 
@@ -47,8 +48,18 @@ func check(condition: bool, message: String) -> void:
 		printerr("FAIL: ", message)
 
 
+# Godot's web export adds the feature tag `threads` or `nothreads` from Thread Support. Returns true, false,
+# or null when the engine reports neither (the browser runner then relies on the request log, LD39).
+func threads_report():
+	if OS.has_feature("threads"):
+		return true
+	if OS.has_feature("nothreads"):
+		return false
+	return null
+
+
 func _run() -> void:
-	log_line("MUMBLE_WEB_TESTS start: Godot %s, web feature %s" % [Engine.get_version_info().string, OS.has_feature("web")])
+	log_line("MUMBLE_WEB_TESTS start: Godot %s, web feature %s, threads %s" % [Engine.get_version_info().string, OS.has_feature("web"), threads_report()])
 	suite = Suite.new(self, VECTORS)
 	await suite.run()
 	failures += suite.failures
@@ -65,7 +76,7 @@ func _run() -> void:
 
 
 func finish() -> void:
-	var verdict := "MUMBLE_WEB_TESTS %s %d" % ["PASS" if failures == 0 else "FAIL", checks]
+	var verdict := "MUMBLE_WEB_TESTS %s %d threads=%s" % ["PASS" if failures == 0 else "FAIL", checks, threads_report()]
 	log_line(verdict)
 	if OS.has_feature("web"):
 		var result = JavaScriptBridge.create_object("Object")
@@ -73,6 +84,7 @@ func finish() -> void:
 		result.failures = failures
 		result.checks = checks
 		result.vectors = suite.vectors_checked
+		result.threads = threads_report()
 		result.log = "\n".join(lines)
 		JavaScriptBridge.get_interface("window").mumbleWebTests = result
 
@@ -230,10 +242,13 @@ func check_typewriter() -> void:
 	var text := ""
 	for i in 7:
 		text += "The quick brown fox jumps over the lazy dog. "
-	var state := {"finished": 0, "visible": []}
+	var state := {"finished": 0, "visible": [], "last_ms": Time.get_ticks_msec(), "longest_gap_ms": 0}
 	typewriter.finished.connect(func(): state.finished += 1)
 	typewriter.type_text(text)
 	var done: bool = await suite.wait_until(func():
+		var now := Time.get_ticks_msec()
+		state.longest_gap_ms = maxi(state.longest_gap_ms, now - state.last_ms)
+		state.last_ms = now
 		state.visible.append(label.visible_characters)
 		return state.finished > 0, 30000)
 	await get_tree().create_timer(0.3).timeout
@@ -245,6 +260,14 @@ func check_typewriter() -> void:
 	for i in range(1, shown.size()):
 		monotonic = monotonic and shown[i] >= shown[i - 1]
 	check(monotonic, "typewriter: reveals monotonically")
-	check(shown.has(text.length()), "typewriter: reaches the last character (%d code points)" % text.length())
+	# The label is sampled once per frame, so the last count (all code points visible) is seen only if
+	# a frame falls between the reveal of the last character and `finished`, which is one character slot
+	# (1/30 s) later. On a slow or irregular frame source (software rendering, a busy browser) one frame
+	# can span that slot, and the reveal and `finished` happen in the same frame: the last count is
+	# then not observable by sampling, and `finished` (which the typewriter emits only after revealing
+	# every character) plus a visible_characters of -1 are the evidence.
+	var slot_ms := 1000.0 / voice.speed
+	check(shown.has(text.length()) or state.longest_gap_ms > slot_ms,
+		"typewriter: reaches the last character (%d code points)" % text.length())
 	for node in [label, speaker, typewriter]:
 		node.queue_free()

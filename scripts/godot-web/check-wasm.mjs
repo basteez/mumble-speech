@@ -1,21 +1,25 @@
-// Checks of the Godot web library (specs/design.md §9.3.1, L4.17): the file must be a WebAssembly
-// Emscripten side module built without threads, export the GDExtension entry symbol and stay
-// within the size budget; the .gdextension file must list it for the two web keys and no threaded
-// one. No dependencies. The checks are pure functions on bytes and text (exported, tested by
+// Checks of the Godot web libraries (specs/design.md §9.3.1, §9.3.2, L4.17, L4.20): the file must be a
+// WebAssembly Emscripten side module built without threads (default) or with them (--threads: shared
+// memory imported, atomics present), export the GDExtension entry symbol and stay within the size
+// budget of its mode; the .gdextension file must list exactly the four web keys. No dependencies. The checks are pure functions on bytes and text (exported, tested by
 // check-wasm.test.sh); the command line is a thin wrapper.
 //
-// Usage: node scripts/godot-web/check-wasm.mjs [<library.wasm>] [--gdextension <file>] [--budget <bytes>]
-//   Without --budget, WASM_BUDGET_BYTES from versions.env (next to this script) is the budget.
+// Usage: node scripts/godot-web/check-wasm.mjs [<library.wasm>] [--threads] [--gdextension <file>] [--budget <bytes>]
+//   --threads checks the threaded library (mumble_godot.threads.wasm); the file name and the mode must agree.
+//   Without --budget, WASM_BUDGET_BYTES (WASM_THREADS_BUDGET_BYTES with --threads) from versions.env
+//   (next to this script) is the budget.
 //   Without --gdextension, the entry symbol is gdext_rust_init.
 //   Exit status: 0 when every check passes, 1 when one fails, 2 on a usage error.
 import { readFileSync, realpathSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const DEFAULT_ENTRY_SYMBOL = 'gdext_rust_init';
 export const WEB_LIBRARY_PATH = 'res://addons/mumble_speech/bin/mumble_godot.wasm';
+export const THREADS_LIBRARY_PATH = 'res://addons/mumble_speech/bin/mumble_godot.threads.wasm';
 export const WEB_KEYS = ['web.debug.wasm32', 'web.release.wasm32'];
+export const WEB_THREADS_KEYS = ['web.debug.threads.wasm32', 'web.release.threads.wasm32'];
 
 class DecodeError extends Error {}
 
@@ -108,17 +112,36 @@ export function simdImmediates(sub) {
   return undefined;
 }
 
+// The 0xFE (atomics) sub-opcodes of the threads proposal: notify and the two waits (0x00-0x02), loads,
+// stores and read-modify-write (0x10-0x4e) have a memarg; atomic.fence (0x03) has one reserved byte.
+const ATOMICS_MEMARG = [[0x00, 0x02], [0x10, 0x4e]];
+
 /**
- * Walks the instructions of one function body (after its locals) and returns the offset of the
- * first atomics instruction (prefix 0xFE), or -1 if there is none. Every opcode of the MVP and of
- * the finished proposals Emscripten and LLVM emit is decoded, so immediates are never mistaken
- * for opcodes; an opcode that is not known is an error, not a pass.
+ * Walks the instructions of one function body (after its locals). `state.first` keeps the offset of
+ * the first atomics instruction (prefix 0xFE), -1 if there is none. By default the walk stops at the
+ * first one; with `all` it decodes the atomics instruction and goes on, counting them in
+ * `state.count` (L4.20 reports the count). Every opcode of the MVP and of the finished proposals
+ * Emscripten and LLVM emit is decoded, so immediates are never mistaken for opcodes; an opcode that
+ * is not known is an error, not a pass.
  */
-function findAtomics(r, bodyEnd) {
+function findAtomics(r, bodyEnd, state, all) {
+  let lastAt = -1;
+  let lastOp = -1;
   while (r.pos < bodyEnd) {
     const at = r.pos;
     const op = r.byte();
-    if (op === 0xfe) return at;
+    lastAt = at;
+    lastOp = op;
+    if (op === 0xfe) {
+      if (state.first < 0) state.first = at;
+      state.count++;
+      if (!all) return;
+      const sub = r.u();
+      if (inRanges(ATOMICS_MEMARG, sub)) memarg(r);
+      else if (sub === 0x03) r.skip(1);
+      else throw new DecodeError(`unknown instruction 0xfe sub-opcode 0x${sub.toString(16)} at offset ${at}`);
+      continue;
+    }
     if (op >= 0x45 && op <= 0xc4) continue; // numeric instructions, sign extension included
     switch (op) {
       case 0x00: case 0x01: case 0x05: case 0x0b: case 0x0f: case 0x0a: case 0x19:
@@ -195,7 +218,8 @@ function findAtomics(r, bodyEnd) {
     }
   }
   if (r.pos !== bodyEnd) throw new DecodeError(`function body overruns its size at offset ${r.pos}`);
-  return -1;
+  // The body ends with its `end`, read as an opcode: an immediate that swallowed it is a malformed body.
+  if (lastOp !== 0x0b || lastAt !== bodyEnd - 1) throw new DecodeError(`function body does not end with end at offset ${bodyEnd - 1}`);
 }
 
 /**
@@ -203,9 +227,10 @@ function findAtomics(r, bodyEnd) {
  * Returns { error } on a malformed file; otherwise
  * { sections, dylink, imports, memories, exports, atomicsAt }, where `imports` and `memories` carry
  * the `shared` flag, `exports` are names, and `atomicsAt` is the offset of the first atomics
- * instruction (or -1).
+ * instruction (or -1). With `countAtomics` the whole code section is walked and `atomicsCount`
+ * (every atomics instruction) is added.
  */
-export function parseWasm(bytes) {
+export function parseWasm(bytes, { countAtomics = false } = {}) {
   const out = { sections: [], dylink: false, imports: [], memories: [], exports: [], atomicsAt: -1 };
   try {
     if (bytes.length < 8 || bytes[0] !== 0x00 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) {
@@ -249,16 +274,19 @@ export function parseWasm(bytes) {
           r.byte();
           r.u();
         }
-      } else if (id === 10 && out.atomicsAt < 0) {
+      } else if (id === 10 && (countAtomics || out.atomicsAt < 0)) {
+        const state = { first: out.atomicsAt, count: 0 };
         const count = r.u();
-        for (let i = 0; i < count && out.atomicsAt < 0; i++) {
+        for (let i = 0; i < count && (countAtomics || state.first < 0); i++) {
           const bodySize = r.u();
           const bodyEnd = r.pos + bodySize;
           if (bodyEnd > end) throw new DecodeError('function body runs past the code section');
           const locals = r.u();
           for (let j = 0; j < locals; j++) { r.u(); valtype(r); }
-          out.atomicsAt = findAtomics(r, bodyEnd);
+          findAtomics(r, bodyEnd, state, countAtomics);
         }
+        out.atomicsAt = state.first;
+        if (countAtomics) out.atomicsCount = state.count;
       }
       top.pos = end;
     }
@@ -269,25 +297,53 @@ export function parseWasm(bytes) {
   return out;
 }
 
+/** The file-name rule of LD38: the threaded library is `*.threads.wasm`, the other is not. Returns an error or undefined. */
+export function checkModeName(fileName, threads) {
+  const threadedName = fileName.endsWith('.threads.wasm');
+  if (threadedName && !threads) return `file name "${fileName}" is the threaded library: check it with --threads (LD38)`;
+  if (!threadedName && threads) return `file name "${fileName}" is not a threaded library name (*.threads.wasm): --threads checks only that (LD38)`;
+  return undefined;
+}
+
 /**
- * The checks of L4.17 on the bytes of the library. Returns { errors, info }: `errors` is a list of
- * messages (empty when everything passes), `info` has the raw and gzip sizes (for the run summary).
+ * The checks of L4.17 (default) or L4.20 (`threads`) on the bytes of the library. Returns { errors,
+ * info }: `errors` is a list of messages (empty when everything passes), `info` has the raw and gzip
+ * sizes (for the run summary) and, with `threads`, the number of atomics instructions. `fileName`,
+ * when given, must agree with the mode (LD38).
  */
-export function checkWasm(bytes, { entrySymbol = DEFAULT_ENTRY_SYMBOL, budget } = {}) {
+export function checkWasm(bytes, { entrySymbol = DEFAULT_ENTRY_SYMBOL, budget, threads = false, fileName } = {}) {
   const info = { rawBytes: bytes.length, gzipBytes: gzipSync(bytes, { level: 9 }).length };
-  const parsed = parseWasm(bytes);
-  if (parsed.error) return { errors: [parsed.error], info };
   const errors = [];
-  if (!parsed.dylink) errors.push('no "dylink.0" section: not an Emscripten side module (SIDE_MODULE)');
-  if (parsed.imports.some((i) => i.shared) || parsed.memories.some((m) => m.shared)) {
-    errors.push('shared memory: this is a threaded build (L4.17: no threads)');
+  if (fileName !== undefined) {
+    const nameError = checkModeName(fileName, threads);
+    if (nameError) errors.push(nameError);
   }
-  if (parsed.atomicsAt >= 0) {
-    errors.push(`atomics instruction at offset ${parsed.atomicsAt}: this is a threaded build (L4.17: no threads)`);
+  const parsed = parseWasm(bytes, { countAtomics: threads });
+  if (parsed.error) return { errors: [...errors, parsed.error], info };
+  if (!parsed.dylink) errors.push('no "dylink.0" section: not an Emscripten side module (SIDE_MODULE)');
+  if (threads) {
+    info.atomicsCount = parsed.atomicsCount;
+    const sharedImports = parsed.imports.filter((i) => i.shared);
+    if (parsed.memories.length > 0) {
+      errors.push('the module defines a memory: a side module imports the engine\'s shared memory (L4.20)');
+    }
+    if (sharedImports.length === 0) {
+      errors.push(parsed.imports.length > 0
+        ? 'no shared memory import: the imported memory is not shared, this is not a threaded build (L4.20)'
+        : 'no shared memory import: a threaded side module imports the engine\'s shared memory (L4.20)');
+    }
+    if (parsed.atomicsCount === 0) errors.push('no atomics instruction: this is not a threaded build (L4.20)');
+  } else {
+    if (parsed.imports.some((i) => i.shared) || parsed.memories.some((m) => m.shared)) {
+      errors.push('shared memory: this is a threaded build (L4.17: no threads)');
+    }
+    if (parsed.atomicsAt >= 0) {
+      errors.push(`atomics instruction at offset ${parsed.atomicsAt}: this is a threaded build (L4.17: no threads)`);
+    }
   }
   if (!parsed.exports.includes(entrySymbol)) errors.push(`the entry symbol "${entrySymbol}" is not exported`);
   if (budget !== undefined && bytes.length > budget) {
-    errors.push(`size ${bytes.length} bytes exceeds the budget of ${budget} bytes (LD34)`);
+    errors.push(`size ${bytes.length} bytes exceeds the budget of ${budget} bytes (${threads ? 'LD38' : 'LD34'})`);
   }
   return { errors, info };
 }
@@ -315,27 +371,34 @@ export function readLibraries(text) {
   return libraries;
 }
 
-/** The web entries of the .gdextension file (L4.17, LD27). Returns a list of error messages. */
-export function checkGdextension(text, { path = WEB_LIBRARY_PATH } = {}) {
+/**
+ * The web entries of the .gdextension file (L4.17, L4.20, LD35, LD38): exactly the four keys, each with
+ * its own library path. Returns a list of error messages.
+ */
+export function checkGdextension(text, { path = WEB_LIBRARY_PATH, threadsPath = THREADS_LIBRARY_PATH } = {}) {
   const libraries = readLibraries(text);
   const errors = [];
-  for (const key of WEB_KEYS) {
+  const expected = [...WEB_KEYS.map((key) => [key, path]), ...WEB_THREADS_KEYS.map((key) => [key, threadsPath])];
+  for (const [key, want] of expected) {
     if (!(key in libraries)) errors.push(`${key} is missing from [libraries]`);
-    else if (libraries[key] !== path) errors.push(`${key} is "${libraries[key]}", expected "${path}"`);
+    else if (libraries[key] !== want) errors.push(`${key} is "${libraries[key]}", expected "${want}"`);
   }
   for (const key of Object.keys(libraries)) {
-    if (key.startsWith('web.') && key.split('.').includes('threads')) {
-      errors.push(`${key}: no threaded web build is shipped (LD27)`);
+    if (key.startsWith('web.') && !expected.some(([k]) => k === key)) {
+      errors.push(`${key}: not one of the four web keys (${[...WEB_KEYS, ...WEB_THREADS_KEYS].join(', ')}) (LD35)`);
     }
   }
   return errors;
 }
 
-/** WASM_BUDGET_BYTES from versions.env, or undefined. */
-export function readBudget(versionsEnv) {
-  const match = versionsEnv.match(/^WASM_BUDGET_BYTES=(\d+)\s*$/m);
+/** A whole-number budget variable of versions.env (default WASM_BUDGET_BYTES), or undefined. */
+export function readBudget(versionsEnv, name = 'WASM_BUDGET_BYTES') {
+  const match = versionsEnv.match(new RegExp(`^${name}=(\\d+)\\s*$`, 'm'));
   return match ? Number(match[1]) : undefined;
 }
+
+/** WASM_THREADS_BUDGET_BYTES from versions.env, or undefined. */
+export const readThreadsBudget = (versionsEnv) => readBudget(versionsEnv, 'WASM_THREADS_BUDGET_BYTES');
 
 const format = (n) => `${n} bytes (${(n / 1024 / 1024).toFixed(2)} MiB)`;
 
@@ -348,12 +411,16 @@ function main(argv) {
     args.splice(i, value === undefined ? 1 : 2);
     return value ?? '';
   };
+  const threadsIndex = args.indexOf('--threads');
+  const threads = threadsIndex >= 0;
+  if (threads) args.splice(threadsIndex, 1);
   const gdextensionPath = take('--gdextension');
   const budgetArg = take('--budget');
   const unknown = args.filter((a) => a.startsWith('--'));
-  if (unknown.length > 0 || args.length > 1 || (args.length === 0 && gdextensionPath === undefined) ||
+  // --threads with no library would check nothing (a silent pass): it needs the library.
+  if (unknown.length > 0 || args.length > 1 || (args.length === 0 && (gdextensionPath === undefined || threads)) ||
       gdextensionPath === '' || budgetArg === '' || (budgetArg !== undefined && !/^\d+$/.test(budgetArg))) {
-    console.error('usage: check-wasm.mjs [<library.wasm>] [--gdextension <file>] [--budget <bytes>]');
+    console.error('usage: check-wasm.mjs [<library.wasm>] [--threads] [--gdextension <file>] [--budget <bytes>]');
     return 2;
   }
   const failures = [];
@@ -377,14 +444,16 @@ function main(argv) {
     let budget = budgetArg === undefined ? undefined : Number(budgetArg);
     if (budget === undefined) {
       const env = join(dirname(fileURLToPath(import.meta.url)), 'versions.env');
-      budget = readBudget(readFileSync(env, 'utf8'));
+      const name = threads ? 'WASM_THREADS_BUDGET_BYTES' : 'WASM_BUDGET_BYTES';
+      budget = readBudget(readFileSync(env, 'utf8'), name);
       // A missing or malformed budget must fail: otherwise the size check would silently switch off (L4.17).
-      if (budget === undefined) failures.push(`${env}: no WASM_BUDGET_BYTES (a whole number of bytes): the size budget cannot be checked (LD34)`);
+      if (budget === undefined) failures.push(`${env}: no ${name} (a whole number of bytes): the size budget cannot be checked (${threads ? 'LD38' : 'LD34'})`);
     }
     const bytes = read(args[0]);
     if (bytes !== undefined) {
-      const { errors, info } = checkWasm(bytes, { entrySymbol, budget });
+      const { errors, info } = checkWasm(bytes, { entrySymbol, budget, threads, fileName: basename(args[0]) });
       console.log(`${args[0]}: raw ${format(info.rawBytes)}, gzip ${format(info.gzipBytes)}` +
+        (threads ? `, ${info.atomicsCount ?? 0} atomics instructions` : '') +
         (budget === undefined ? ', no budget' : `, budget ${format(budget)}`));
       for (const message of errors) failures.push(`${args[0]}: ${message}`);
     }

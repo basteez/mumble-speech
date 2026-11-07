@@ -77,6 +77,7 @@ done
 # The Godot web library: a tiny side module that passes scripts/godot-web/check-wasm.mjs.
 node "$root/scripts/godot-web/wasm-fixtures.mjs" "$work/wasm-fixtures" || { echo "test setup: wasm-fixtures.mjs failed" >&2; exit 1; }
 cp "$work/wasm-fixtures/good.wasm" "$art/native-web/mumble_godot.wasm"
+cp "$work/wasm-fixtures/good.threads.wasm" "$art/native-web/mumble_godot.threads.wasm"
 mkdir -p "$work/npm-src/package" && echo '{"name":"@mumble-speech/web"}' > "$work/npm-src/package/package.json"
 tar -czf "$art/web/mumble-speech-web-$version.tgz" -C "$work/npm-src" package
 
@@ -130,6 +131,16 @@ unity=com.mumble-speech.unity-$version.tgz
 
 # --- Cases -------------------------------------------------------------------------------------
 # check.sh is given Plugins/Android/libs, which also holds the ABI folders' .meta files: they are allowed.
+cat > "$work/swap-gdext.mjs" <<'JS'
+// Exchanges the two web library paths of a .gdextension (the files themselves are untouched).
+import { readFileSync, writeFileSync } from 'node:fs';
+const [file] = process.argv.slice(2);
+const plain = '"res://addons/mumble_speech/bin/mumble_godot.wasm"';
+const threads = '"res://addons/mumble_speech/bin/mumble_godot.threads.wasm"';
+const text = readFileSync(file, 'utf8');
+writeFileSync(file, text.split(plain).join('@PLAIN@').split(threads).join(plain).split('@PLAIN@').join(threads));
+JS
+
 copy_archives
 expect_exit "intact archives verify" 0 "all release archives verified" "$verify" "$version" "$work/case" "$stubs/godot"
 
@@ -181,8 +192,16 @@ rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/trun
 expect_exit "Godot addon with a truncated WebAssembly library" 1 "malformed WebAssembly binary" "$verify" "$version" "$work/case" "$stubs/godot"
 
 copy_archives
-rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "echo 'web.release.threads.wasm32 = \"res://addons/mumble_speech/bin/mumble_godot.wasm\"' >> addons/mumble_speech/mumble_speech.gdextension"
-expect_exit "Godot addon whose .gdextension lists a threaded web entry" 1 "no threaded web build" "$verify" "$version" "$work/case" "$stubs/godot"
+rezip "$work/case/mumble-speech-godot-$version.zip" rm addons/mumble_speech/bin/mumble_godot.threads.wasm
+expect_exit "Godot addon without the threaded web library" 1 "missing mumble_godot.threads.wasm in the Godot addon" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "cp $work/wasm-fixtures/good.threads.wasm addons/mumble_speech/bin/mumble_godot.wasm && cp $work/wasm-fixtures/good.wasm addons/mumble_speech/bin/mumble_godot.threads.wasm"
+expect_exit "Godot addon with the two web libraries swapped" 1 "shared memory" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "sed -i.bak '/^web\\.release\\.threads/d' addons/mumble_speech/mumble_speech.gdextension"
+expect_exit "Godot addon whose .gdextension lacks a threaded web entry" 1 "web.release.threads.wasm32 is missing" "$verify" "$version" "$work/case" "$stubs/godot"
 
 copy_archives
 rezip "$work/case/mumble-speech-c-$version.zip" sh -c "cp $work/wasm-fixtures/good.wasm mumble-speech-c-$version/mumble_godot.wasm"
@@ -192,6 +211,53 @@ copy_archives
 retar "$work/case/$unity" cp "$work/wasm-fixtures/good.wasm" package/Plugins/mumble_godot.wasm
 expect_exit "WebAssembly library in the Unity package" 1 "WebAssembly files in the Unity package" "$verify" "$version" "$work/case" "$stubs/godot"
 
+
+# --- Threads (L4.19, L4.20, LD33, LD35, LD39): the pair of web libraries in the Godot addon and the other archives ----
+# A swapped pair whose files are each valid for their own mode: the paths in the .gdextension are exchanged, so
+# the threaded file is listed under the non-threaded keys and the reverse (the check of LD38 catches it).
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" node "$work/swap-gdext.mjs" addons/mumble_speech/mumble_speech.gdextension
+expect_exit "Godot addon whose .gdextension swaps the two web paths (both files valid)" 1 \
+  'web.debug.wasm32 is "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"' "$verify" "$version" "$work/case" "$stubs/godot"
+
+# A non-threaded library in the threaded slot (valid as a file, wrong for the threaded name).
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/good.wasm" addons/mumble_speech/bin/mumble_godot.threads.wasm
+expect_exit "Godot addon with a non-threaded library as mumble_godot.threads.wasm" 1 "no shared memory import" \
+  "$verify" "$version" "$work/case" "$stubs/godot"
+
+# A threaded library without atomics in the threaded slot.
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/shared-no-atomics.threads.wasm" addons/mumble_speech/bin/mumble_godot.threads.wasm
+expect_exit "Godot addon with a threaded library without atomics" 1 "no atomics instruction" "$verify" "$version" "$work/case" "$stubs/godot"
+
+# An extra web key in the .gdextension (LD35): the four-key rule.
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c 'printf "%s\n" "web.release.nothreads.wasm32 = \"res://addons/mumble_speech/bin/mumble_godot.wasm\"" >> addons/mumble_speech/mumble_speech.gdextension'
+expect_exit "Godot addon whose .gdextension has an extra web key" 1 "web.release.nothreads.wasm32: not one of the four web keys" \
+  "$verify" "$version" "$work/case" "$stubs/godot"
+
+# A threaded library in the C archive, and in the Unity package (LD33: the web libraries are in the Godot addon only).
+copy_archives
+rezip "$work/case/mumble-speech-c-$version.zip" sh -c "cp $work/wasm-fixtures/good.threads.wasm mumble-speech-c-$version/mumble_godot.threads.wasm"
+expect_exit "threaded WebAssembly library in the C archive" 1 "WebAssembly files in the C archive" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+retar "$work/case/$unity" cp "$work/wasm-fixtures/good.threads.wasm" package/Plugins/mumble_godot.threads.wasm
+expect_exit "threaded WebAssembly library in the Unity package" 1 "WebAssembly files in the Unity package" "$verify" "$version" "$work/case" "$stubs/godot"
+
+# assemble.sh: a release without the threaded library is not assembled (LD35, LD39).
+rm -rf "$work/art-no-threads" "$work/out-no-threads"
+cp -R "$art" "$work/art-no-threads"
+rm "$work/art-no-threads/native-web/mumble_godot.threads.wasm"
+mkdir -p "$work/out-no-threads"
+expect_exit "assemble.sh without the threaded web library fails" 1 "mumble_godot.threads.wasm" \
+  "$assemble" "$version" "$work/art-no-threads" "$work/out-no-threads"
+if [ ! -e "$work/out-no-threads/mumble-speech-godot-$version.zip" ]; then
+  echo "ok   no Godot addon archive is written without the threaded library"; passed=$((passed + 1))
+else
+  echo "FAIL the Godot addon archive was written without the threaded library"; failed=$((failed + 1))
+fi
 echo
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

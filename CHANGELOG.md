@@ -15,12 +15,17 @@ or public API adds an entry to *Unreleased*.
   *Extensions Support* on and *Thread Support* off, with the same samples as on desktop
   and no special server headers. In the default *Sample* playback mode,
   `character_spoken` and `finished` follow the time since the line started, so they
-  arrive even before the browser allows audio. Threaded web exports are not supported.
+  arrive even before the browser allows audio.
+- **Godot web exports with threads** ([#34](https://github.com/basteez/mumble-speech/issues/34)):
+  the Godot addon also includes a threaded WebAssembly build (`mumble_godot.threads.wasm`),
+  so the addon works in web exports with *Thread Support* on, served with cross-origin
+  isolation headers (COOP/COEP). Godot picks the right library for each export; an export
+  includes only one of the two, and exports without threads are unchanged.
 
 ### Known issues
 
 - Godot on the web is tested in Chromium in CI; Firefox and Safari have not been verified
-  by hand yet; please report problems.
+  by hand yet; please report problems. This applies to exports with and without threads.
 
 ## [0.2.0] - 2026-11-05
 
