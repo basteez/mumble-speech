@@ -125,7 +125,7 @@ Design §9.3.1, LD27–LD34. W1 settles the facts the rest depends on (API level
 Emscripten compatibility with the 4.3 template, size); its outcomes go into the
 decision log before the pull request is merged.
 
-- [ ] **W1** Web build: target-specific `godot` dependencies in `crates/mumble-godot/Cargo.toml`, the `[target.wasm32-unknown-emscripten]` section in `.cargo/config.toml`, `scripts/godot-web/versions.env`, `scripts/godot-web/build.sh`, `bindings/godot/build.sh web`, the two `web.*.wasm32` entries in `mumble_speech.gdextension`, `scripts/godot-web/check-wasm.mjs` with `check-wasm.test.sh` and the `.gdextension` check. — L4.15, L4.17, LD27, LD28, LD29, LD34
+- [x] **W1** Web build: target-specific `godot` dependencies in `crates/mumble-godot/Cargo.toml`, the `[target.wasm32-unknown-emscripten]` section in `.cargo/config.toml`, `scripts/godot-web/versions.env`, `scripts/godot-web/build.sh`, `bindings/godot/build.sh web`, the two `web.*.wasm32` entries in `mumble_speech.gdextension`, `scripts/godot-web/check-wasm.mjs` with `check-wasm.test.sh` and the `.gdextension` check. — L4.15, L4.17, LD27, LD28, LD29, LD34
   - Done when:
     - happy path: with the pinned nightly and Emscripten, `bindings/godot/build.sh web` writes `addons/mumble_speech/bin/mumble_godot.wasm` and `check-wasm.mjs` passes on it (magic and version, `dylink.0`, no shared memory, no atomics, `gdext_rust_init` exported, within budget), printing raw and gzip size;
     - desktop unchanged: `bindings/godot/build.sh` with no argument and `cargo build --workspace` on stable build as before, and `cargo tree -p mumble-godot -e features` on the host shows `api-4-3` and no `experimental-wasm*`;
