@@ -130,8 +130,9 @@ jobs:
           ! grep -E "SCRIPT ERROR|ERROR:" example.log
 
   godot-web-build:
-    # The web library of the Godot addon (specs/design.md §9.3.1, L4.15, L4.17, LD27-LD29): nightly Rust and
-    # Emscripten pinned in scripts/godot-web/versions.env; the library is checked and handed to godot-web.
+    # The web libraries of the Godot addon, without and with threads (specs/design.md §9.3.1, §9.3.2, L4.15, L4.17,
+    # L4.19, L4.20, LD27-LD29, LD35-LD39): nightly Rust and Emscripten pinned in scripts/godot-web/versions.env; the
+    # libraries are checked and handed to the godot-web jobs.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -160,30 +161,66 @@ jobs:
           fi
       - name: Build mumble_godot.wasm (nightly, build-std, wasm32-unknown-emscripten)
         run: scripts/godot-web/build.sh target/godot-web
-      - name: Check the library (side module, no threads, entry symbol, size budget, .gdextension)
+      - name: Build mumble_godot.threads.wasm (the same, with -pthread and +atomics, own target folder)
+        run: scripts/godot-web/build.sh --threads target/godot-web
+      - name: The threaded build mechanism (T1, LD36, LD37)
+        env:
+          NIGHTLY: ${{ steps.pins.outputs.RUST_NIGHTLY }}
+        run: |
+          # gdext features follow the target feature atomics: experimental-wasm-nothreads only without it.
+          threads_config='target.wasm32-unknown-emscripten.rustflags=["-C","link-args=-pthread","-C","target-feature=+atomics"]'
+          cargo "+$NIGHTLY" tree -p mumble-godot -e features --target wasm32-unknown-emscripten > features-nothreads.txt
+          cargo "+$NIGHTLY" --config "$threads_config" tree -p mumble-godot -e features --target wasm32-unknown-emscripten > features-threads.txt
+          echo '--- without +atomics'; grep 'godot feature' features-nothreads.txt
+          echo '--- with +atomics'; grep 'godot feature' features-threads.txt
+          grep -q 'godot feature "experimental-wasm-nothreads"' features-nothreads.txt
+          grep -q 'godot feature "experimental-wasm"' features-nothreads.txt
+          grep -q 'godot feature "experimental-wasm"' features-threads.txt
+          if grep -q 'experimental-wasm-nothreads' features-threads.txt; then
+            echo "::error::the threaded build enables experimental-wasm-nothreads"
+            exit 1
+          fi
+          # The effective rustc flags of the threaded build: the shared ones of .cargo/config.toml and the two
+          # from --config together (rebuild only mumble-godot, with -v).
+          touch crates/mumble-godot/src/lib.rs
+          CARGO_VERBOSE=1 scripts/godot-web/build.sh --threads target/godot-web-verbose 2>&1 | tee threads-build.log
+          line=$(grep -F -- '--crate-name mumble_godot' threads-build.log | grep -F -- 'cdylib' | tail -n 1)
+          [ -n "$line" ] || { echo "::error::no rustc line for mumble_godot in the verbose log"; exit 1; }
+          for flag in 'link-args=-sSIDE_MODULE=2' 'panic=abort' 'link-args=-pthread' 'target-feature=+atomics'; do
+            case "$line" in
+              *"$flag"*) echo "ok: $flag" ;;
+              *) echo "::error::the threaded rustc line lacks $flag"; echo "$line"; exit 1 ;;
+            esac
+          done
+      - name: Check both libraries (side modules, threads or not, entry symbol, size budgets, .gdextension)
         run: |
           {
-            echo "### mumble_godot.wasm (web library, pinned ${{ steps.pins.outputs.RUST_NIGHTLY }} and Emscripten ${{ steps.pins.outputs.EMSDK_VERSION }})"
+            echo "### Godot web libraries (pinned ${{ steps.pins.outputs.RUST_NIGHTLY }} and Emscripten ${{ steps.pins.outputs.EMSDK_VERSION }})"
             echo
             echo '```'
             node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.wasm \
               --gdextension bindings/godot/addons/mumble_speech/mumble_speech.gdextension
+            node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.threads.wasm --threads
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           # tee hides the exit status of the checks: run them again for it (they are quick).
           node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.wasm \
             --gdextension bindings/godot/addons/mumble_speech/mumble_speech.gdextension > /dev/null
+          node scripts/godot-web/check-wasm.mjs target/godot-web/mumble_godot.threads.wasm --threads > /dev/null
       - name: Negative self-tests of the checks
         run: scripts/godot-web/check-wasm.test.sh
       - uses: actions/upload-artifact@v7
         with:
           name: godot-web-lib
-          path: target/godot-web/mumble_godot.wasm
+          path: |
+            target/godot-web/mumble_godot.wasm
+            target/godot-web/mumble_godot.threads.wasm
           if-no-files-found: error
 
   godot-web:
     # The Godot web export runs in a browser, served without COOP/COEP (specs/design.md §9.3.1, L4.15, L4.16,
-    # L5.2, LD31): the conformance vectors and the speaker timing, with audio running and suspended.
+    # L5.2, LD31): the conformance vectors and the speaker timing, with audio running and suspended. The
+    # addon holds both libraries; the run also proves that this export loads the non-threaded one (LD39).
     # Not a required check at first (LQ14): promoted after ten consecutive green runs on main.
     needs: godot-web-build
     name: godot-web (${{ matrix.godot }})
@@ -204,11 +241,11 @@ jobs:
           curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}/Godot_v${{ matrix.godot }}_linux.x86_64.zip"
           unzip -q godot.zip -d godot
           mv godot/Godot_v*_linux.x86_64 godot/godot
-      - name: Export templates (the two non-threaded dlink web templates, cached)
+      - name: Export templates (the four dlink web templates, cached)
         uses: actions/cache@v6
         with:
           path: ~/.cache/mumble-godot-web-templates
-          key: godot-web-templates-${{ matrix.godot }}
+          key: godot-web-templates-v2-${{ matrix.godot }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -237,6 +274,62 @@ jobs:
         run: |
           scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-example Web
           node scripts/godot-web/run-tests.mjs build/godot-web-example --browser chromium --audio running --mode example
+
+  godot-web-threads:
+    # The threaded Godot web export, served WITH COOP/COEP (specs/design.md §9.3.2, L4.19, L4.20, L5.2, LD39, LD40):
+    # the same checks as godot-web, with crossOriginIsolated true and the threaded library loaded.
+    # Not a required check (LQ14): promoted after ten consecutive green runs on main, counted from its start.
+    needs: godot-web-build
+    name: godot-web-threads (${{ matrix.godot }})
+    strategy:
+      fail-fast: false
+      matrix:
+        godot: [4.3-stable, 4.7.2-stable]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: godot-web-lib
+          path: bindings/godot/addons/mumble_speech/bin
+      - name: Download Godot ${{ matrix.godot }}
+        run: |
+          curl -fsSL -o godot.zip "https://github.com/godotengine/godot-builds/releases/download/${{ matrix.godot }}/Godot_v${{ matrix.godot }}_linux.x86_64.zip"
+          unzip -q godot.zip -d godot
+          mv godot/Godot_v*_linux.x86_64 godot/godot
+      - name: Export templates (the four dlink web templates, cached)
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/mumble-godot-web-templates
+          key: godot-web-templates-v2-${{ matrix.godot }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: scripts/godot-web/package-lock.json
+      - name: Install Playwright and Chromium
+        working-directory: scripts/godot-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Audio device (PulseAudio null sink)
+        run: |
+          sudo apt-get install -y --no-install-recommends pulseaudio pulseaudio-utils
+          pulseaudio --start --exit-idle-time=-1 || true
+          sleep 2
+          pactl load-module module-null-sink sink_name=ci_null
+          pactl set-default-sink ci_null
+          pactl info | grep -i 'default sink'
+      - name: Export the test runner (Web (threads tests), Thread Support on)
+        run: scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-threads-tests "Web (threads tests)"
+      - name: Chromium, threads, audio running
+        run: node scripts/godot-web/run-tests.mjs build/godot-web-threads-tests --browser chromium --audio running --threads
+      - name: Chromium, threads, audio suspended (no user gesture, L4.16)
+        run: node scripts/godot-web/run-tests.mjs build/godot-web-threads-tests --browser chromium --audio suspended --threads
+      - name: Export the example (Web (threads) preset) and run it
+        run: |
+          scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-threads-example "Web (threads)"
+          node scripts/godot-web/run-tests.mjs build/godot-web-threads-example --browser chromium --audio running --mode example --threads
 
   godot-web-browsers:
     # Firefox and WebKit: informative, not a required check yet (specs/design.md LD31, LQ14). Promote each
@@ -268,7 +361,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/mumble-godot-web-templates
-          key: godot-web-templates-${{ env.GODOT }}
+          key: godot-web-templates-v2-${{ env.GODOT }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -286,13 +379,22 @@ jobs:
           sleep 2
           pactl load-module module-null-sink sink_name=ci_null
           pactl set-default-sink ci_null
-      - name: Export the test runner
-        run: scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-tests
+      - name: Export the test runners (without and with threads)
+        run: |
+          scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-tests
+          scripts/godot-web/export.sh "$PWD/godot/godot" build/godot-web-threads-tests "Web (threads tests)"
       - name: Run in ${{ matrix.browser }} (headed, software WebGL)
         run: |
           for audio in ${{ matrix.audios }}; do
             echo "::group::${{ matrix.browser }}, audio $audio"
             xvfb-run -a node scripts/godot-web/run-tests.mjs build/godot-web-tests --browser ${{ matrix.browser }} --audio "$audio" --headed
+            echo "::endgroup::"
+          done
+      - name: Run in ${{ matrix.browser }}, threads (headed, COOP/COEP)
+        run: |
+          for audio in ${{ matrix.audios }}; do
+            echo "::group::${{ matrix.browser }}, threads, audio $audio"
+            xvfb-run -a node scripts/godot-web/run-tests.mjs build/godot-web-threads-tests --browser ${{ matrix.browser }} --audio "$audio" --threads --headed
             echo "::endgroup::"
           done
 
