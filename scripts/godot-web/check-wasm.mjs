@@ -411,7 +411,8 @@ function main(argv) {
   const gdextensionPath = take('--gdextension');
   const budgetArg = take('--budget');
   const unknown = args.filter((a) => a.startsWith('--'));
-  if (unknown.length > 0 || args.length > 1 || (args.length === 0 && gdextensionPath === undefined) ||
+  // --threads with no library would check nothing (a silent pass): it needs the library.
+  if (unknown.length > 0 || args.length > 1 || (args.length === 0 && (gdextensionPath === undefined || threads)) ||
       gdextensionPath === '' || budgetArg === '' || (budgetArg !== undefined && !/^\d+$/.test(budgetArg))) {
     console.error('usage: check-wasm.mjs [<library.wasm>] [--threads] [--gdextension <file>] [--budget <bytes>]');
     return 2;
