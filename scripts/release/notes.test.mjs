@@ -141,6 +141,19 @@ test('0.2.0 uses its own CHANGELOG section, which mentions Android (L8.4)', () =
   }
 });
 
+test('0.3.0 uses its own CHANGELOG section, which mentions Godot on the web with and without threads (L8.4)', () => {
+  const v = '0.3.0';
+  const { result, notes, cleanup } = compose(['--require-changelog'], Object.values(archivesOf(v)), v);
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(notes, /Preview:/);
+    assert.match(notes, /Godot on the web/);
+    assert.match(notes, /Godot web exports with threads/);
+  } finally {
+    cleanup();
+  }
+});
+
 test('the Godot web build is named in the Godot rows only, not in the C, Unity, npm or Web rows (L4.15, L8.1)', () => {
   const { result, notes, cleanup } = compose();
   try {

@@ -189,6 +189,8 @@ Closed with the proposed defaults, approved together with the specs on 2026-10-1
 | LQ12 | Ship a threaded build (`.threads.wasm`) next to the non-threaded one? | First answered no (LD27, revision of 2026-11-06). Revised to **yes** (user decision, 2026-11-07, issue #34): larger projects export with *Thread Support* on (background loading, threaded physics or audio) and could not use the addon on the web. Both builds ship in the Godot addon (L4.19, L4.20, LD35). |
 | LQ13 | IF the Godot 4.3 `dlink` template cannot load the side module built with the pinned Emscripten, raise the web minimum or build one library per Godot version? | Not needed: the 4.3 and 4.7.2 `dlink` templates both load the library built with Emscripten 3.1.74 (CI on PR #33, 2026-11-07); one library serves every version (LD28). |
 | LQ17 | IF the Godot 4.3 threaded `dlink` template cannot load the threaded side module built with the pinned Emscripten, raise the minimum for threaded exports only, or build one threaded library per Godot version? | Not needed: the 4.3 and 4.7.2 threaded `dlink` templates both load `mumble_godot.threads.wasm` built with Emscripten 3.1.74 (CI on PR #36, 2026-11-07); one threaded library serves every version (LD35). |
+| LQ15 | Which version ships the Godot web library (issue #32)? | `0.3.0`, approved with the revision (2026-11-07); released 2026-11-07. |
+| LQ16 | Which version ships the threaded web library (issue #34)? | `0.3.0`, with the non-threaded one, approved with the revision (2026-11-07); released 2026-11-07. |
 
 ## 7. Open questions
 
@@ -198,5 +200,3 @@ they close with the approval of the revision that raised them.
 | # | Question | Proposed default |
 |---|---|---|
 | LQ14 | Should the Godot web CI runs become required checks? | Not at first, Chromium included (LD31; decided 2026-11-06): a flaky emulated-browser job would block every PR. Promote `godot-web (<version>)` (Chromium) after ten consecutive green runs on `main`; Firefox and WebKit after the same, once Chromium is required. The threaded jobs (`godot-web-threads (<version>)`, issue #34) follow the same rule on their own count, starting when they are added (LD39). |
-| LQ15 | Which version ships it? | `0.3.0`: a new platform is a minor change under semver. |
-| LQ16 | Which version ships the threaded web library (issue #34)? | `0.3.0`, with the non-threaded one, if the revision is merged before that release; otherwise the next minor version (a new kind of export is a feature). |
