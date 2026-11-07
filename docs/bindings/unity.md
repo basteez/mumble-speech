@@ -25,7 +25,7 @@ Or in Unity: **Package Manager → + → Add package from git URL…**
 https://github.com/basteez/mumble-speech.git#upm
 ```
 
-Append a tag to pin a version, for example `#upm/v0.2.0`. The `upm` branch holds the
+Append a tag to pin a version, for example `#upm/v0.3.0`. The `upm` branch holds the
 complete package with its native plugins, and every
 [release](https://github.com/basteez/mumble-speech/releases) also has it as a tarball
 (**Add package from tarball…**).
