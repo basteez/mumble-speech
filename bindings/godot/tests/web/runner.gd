@@ -10,6 +10,9 @@ const VECTORS := "res://tests/web/vectors.json"
 const LINE := "Hé 👋!"
 # Bounds of L4.16, in seconds, each plus one frame.
 const SPOKEN_LATE := 0.1
+# Stream mode on the web (L4.16, decided 2026-11-07): the audio clock advances in large mix chunks
+# behind a large output latency, so character_spoken gets the bound of finished.
+const SPOKEN_LATE_STREAM := 0.5
 const FINISHED_LATE := 0.25
 const FINISHED_LATE_STREAM := 0.5
 
@@ -89,7 +92,7 @@ func run_web_checks() -> void:
 	# would test the wrong path.
 	check(int(ProjectSettings.get_setting_with_override("audio/general/default_playback_type")) == 1,
 		"audio/general/default_playback_type is Sample (1) in the web export")
-	await measure_line(speaker, LINE, FINISHED_LATE, "say (Sample mode)", true)
+	await measure_line(speaker, LINE, FINISHED_LATE, SPOKEN_LATE, "say (Sample mode)", true)
 	var player := speaker.get_child(0) as AudioStreamPlayer
 	check(player != null and player.playback_type == AudioServer.PLAYBACK_TYPE_DEFAULT,
 		"the speaker's internal player keeps the default playback type")
@@ -102,7 +105,7 @@ func run_web_checks() -> void:
 	if player != null:
 		if audio_running():
 			player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
-			await measure_line(speaker, LINE, FINISHED_LATE_STREAM, "say (Stream mode)", false)
+			await measure_line(speaker, LINE, FINISHED_LATE_STREAM, SPOKEN_LATE_STREAM, "say (Stream mode)", false)
 			player.playback_type = AudioServer.PLAYBACK_TYPE_DEFAULT
 		else:
 			log_line("the AudioContext is not running: the Stream mode check is skipped")
@@ -110,9 +113,9 @@ func run_web_checks() -> void:
 
 
 # Says `text` and checks L4.16: character_spoken once per event, in order, no earlier than the event's
-# start and at most SPOKEN_LATE plus one frame after it; finished once, after the last
+# start and at most `spoken_late` plus one frame after it; finished once, after the last
 # character_spoken, at most `finished_late` plus one frame after the duration. Times are from the call.
-func measure_line(speaker: MumbleSpeaker, text: String, finished_late: float, label: String, sample_mode: bool) -> void:
+func measure_line(speaker: MumbleSpeaker, text: String, finished_late: float, spoken_late: float, label: String, sample_mode: bool) -> void:
 	var render: Dictionary = Mumble.render(text, speaker.voice, 48000)
 	var spoken := []
 	var finished := []
@@ -153,8 +156,8 @@ func measure_line(speaker: MumbleSpeaker, text: String, finished_late: float, la
 		var start: float = render.events[k].start
 		worst_spoken = maxf(worst_spoken, at - start)
 		check(at >= start, "%s: character %d spoken at %.3f s, before its start %.3f s" % [label, k, at, start])
-		check(at <= start + SPOKEN_LATE + frame,
-			"%s: character %d spoken at %.3f s, later than start %.3f s + %.0f ms + one frame (%.0f ms)" % [label, k, at, start, SPOKEN_LATE * 1000.0, frame * 1000.0])
+		check(at <= start + spoken_late + frame,
+			"%s: character %d spoken at %.3f s, later than start %.3f s + %.0f ms + one frame (%.0f ms)" % [label, k, at, start, spoken_late * 1000.0, frame * 1000.0])
 	var late := -1.0
 	if finished.size() > 0:
 		var end := float(finished[0] - t0) / 1000000.0

@@ -92,7 +92,9 @@ with the same API and the same samples as on desktop. Export settings
   allowed audio (the line is then silent and the signals still arrive, so a game that
   waits for `finished` never hangs). The sound can lag the signal by the browser's
   output latency, typically 10 to 40 ms. In *Stream* playback mode the audio clock is
-  used, as on desktop.
+  used, as on desktop, but on the web it advances in large chunks behind a large output
+  latency: each `character_spoken` can arrive up to 500 ms plus one frame after its
+  start (the same bound as `finished`), not 100 ms.
 - **Empty lines.** A line that renders no samples (empty text, or text with nothing to say)
   is not played, because Web Audio rejects a zero-length buffer; `finished` is still
   emitted once. `render_stream` can return an empty stream (0 frames): do not play it on

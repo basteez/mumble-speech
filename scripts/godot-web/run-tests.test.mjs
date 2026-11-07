@@ -11,7 +11,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
-  AUDIO_TRACKER, audioVerdict, contentTypeFor, isFatalConsole, launchOptions, parseArgs, serve, verdict,
+  AUDIO_SUSPENDER, AUDIO_TRACKER, audioVerdict, initScripts, contentTypeFor, isFatalConsole, launchOptions, parseArgs, serve, verdict,
 } from './run-tests.mjs';
 
 // The status and body of a request whose path is sent exactly as given (fetch would normalize `..`).
@@ -338,4 +338,12 @@ test('the server: every request is recorded with its path and status', async () 
 test('AUDIO_TRACKER is the page script that records the AudioContexts and whether one runs', () => {
   assert.match(AUDIO_TRACKER, /window\.mumbleAudioContexts = contexts/);
   assert.match(AUDIO_TRACKER, /window\.mumbleAudioRunning = \(\) => contexts\.some\(\(c\) => c\.state === 'running'\)/);
+});
+
+test('initScripts: the suspender is added, before the tracker, only for --audio suspended', () => {
+  assert.deepEqual(initScripts('running'), [AUDIO_TRACKER]);
+  assert.deepEqual(initScripts('suspended'), [AUDIO_SUSPENDER, AUDIO_TRACKER]);
+  assert.match(AUDIO_SUSPENDER, /context\.suspend\(\)/);
+  assert.match(AUDIO_SUSPENDER, /context\.resume = \(\) =>/);
+  assert.match(AUDIO_TRACKER, /__mumbleSuspendAudio\(context\)/);
 });

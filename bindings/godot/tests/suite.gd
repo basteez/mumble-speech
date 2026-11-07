@@ -133,12 +133,15 @@ func test_typewriter() -> void:
 	voice.speed = 30.0
 	speaker.voice = voice
 
-	var state := {"finished": false, "visible": []}
+	var state := {"finished": false, "visible": [], "last_ms": Time.get_ticks_msec(), "longest_gap_ms": 0}
 	typewriter.finished.connect(func(): state.finished = true)
 	var text := "Hi, 👋 è!"
 	typewriter.type_text(text)
 	check(label.text == text and label.visible_characters == 0, "typewriter sets the text, nothing visible yet")
 	var ok := await wait_until(func():
+		var now := Time.get_ticks_msec()
+		state.longest_gap_ms = maxi(state.longest_gap_ms, now - state.last_ms)
+		state.last_ms = now
 		state.visible.append(label.visible_characters)
 		return state.finished, 5000)
 	check(ok, "typewriter emits finished")
@@ -147,7 +150,15 @@ func test_typewriter() -> void:
 	check(shown.size() > 1, "typewriter recorded progress")
 	for i in range(1, shown.size()):
 		check(shown[i] >= shown[i - 1], "typewriter reveals monotonically")
-	check(shown.has(text.length()), "typewriter reaches the last character (%d code points)" % text.length())
+	# The label is sampled once per frame, so the last count (all code points visible) is seen only if
+	# a frame falls between the reveal of the last character and `finished`, which is one character slot
+	# (1/30 s) later. On a slow or irregular frame source (software rendering, a busy browser) one frame
+	# can span that slot, and the reveal and `finished` happen in the same frame: the last count is
+	# then not observable by sampling, and `finished` (which the typewriter emits only after revealing
+	# every character) plus a visible_characters of -1 are the evidence.
+	var slot_ms := 1000.0 / voice.speed
+	check(shown.has(text.length()) or state.longest_gap_ms > slot_ms,
+		"typewriter reaches the last character (%d code points)" % text.length())
 
 	typewriter.type_text("A long line that will be skipped.")
 	typewriter.skip()

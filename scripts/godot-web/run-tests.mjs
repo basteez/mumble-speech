@@ -185,6 +185,7 @@ export const AUDIO_TRACKER = `(() => {
       construct(target, args, newTarget) {
         const context = Reflect.construct(target, args, newTarget);
         contexts.push(context);
+        if (window.__mumbleSuspendAudio) window.__mumbleSuspendAudio(context);
         return context;
       },
     });
@@ -192,6 +193,29 @@ export const AUDIO_TRACKER = `(() => {
   window.mumbleAudioContexts = contexts;
   window.mumbleAudioRunning = () => contexts.some((c) => c.state === 'running');
 })();`;
+
+// `--audio suspended`: emulates a page that never got a user gesture, the same in every browser (the
+// autoplay flags and prefs of launchOptions are only a first line: they do not keep the context
+// suspended under Playwright). Every AudioContext is suspended right away and resume() is a no-op
+// that resolves without resuming; logged once so it is visible.
+export const AUDIO_SUSPENDER = `(() => {
+  let logged = false;
+  window.__mumbleSuspendAudio = (context) => {
+    context.suspend().catch(() => {});
+    context.resume = () => {
+      if (!logged) {
+        logged = true;
+        console.log('MUMBLE_WEB_TESTS audio suspended: AudioContext.resume() is a no-op (--audio suspended)');
+      }
+      return Promise.resolve();
+    };
+  };
+})();`;
+
+/** The init scripts of the page for `--audio running|suspended`: the suspender must come first. */
+export function initScripts(audio) {
+  return audio === 'suspended' ? [AUDIO_SUSPENDER, AUDIO_TRACKER] : [AUDIO_TRACKER];
+}
 
 /** Launch options of a browser for the audio and WebGL setup of CI (specs/design.md §9.3.1). */
 export function launchOptions(browser, audio, headed) {
@@ -225,7 +249,7 @@ async function run(options) {
   const fatal = [];
   try {
     const page = await browser.newPage();
-    await page.addInitScript(AUDIO_TRACKER);
+    for (const script of initScripts(audio)) await page.addInitScript(script);
     page.on('console', (message) => {
       const text = message.text();
       consoleLines.push(text);
