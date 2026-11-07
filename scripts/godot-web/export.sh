@@ -24,7 +24,7 @@ fi
 godot=$1
 mkdir -p "$2"
 out=$(cd "$2" && pwd)
-preset=${3:-Web (tests)}
+preset=${3-Web (tests)} # an empty name is an unknown preset, not the default (${3:-...} would take it for unset)
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 project=${GODOT_PROJECT:-$root/bindings/godot}
@@ -49,6 +49,7 @@ if [ ! -f "$presets" ]; then
   exit 1
 fi
 thread_support=$(awk -v want="$preset" '
+  { sub(/\r$/, "") } # a presets file with CRLF line ends (a Windows checkout) is read like an LF one
   /^\[preset\.[0-9]+\]$/ { id = $0; sub(/^\[/, "", id); sub(/\]$/, "", id); current = ""; next }
   /^name="/ { n = $0; sub(/^name="/, "", n); sub(/"[[:space:]]*$/, "", n); if (n == want) current = id; next }
   /^\[preset\.[0-9]+\.options\]$/ { opts = $0; sub(/^\[/, "", opts); sub(/\.options\]$/, "", opts); inopts = (opts == current && current != ""); next }
