@@ -61,24 +61,46 @@ default *Sample* playback mode, they follow the time since the line started inst
 
 ## Web export
 
-The addon includes a WebAssembly library (`addons/mumble_speech/bin/mumble_godot.wasm`),
-so `Mumble`, `MumbleVoice`, `MumbleSpeaker` and `MumbleTypewriter` work in a web export
-with the same API and the same samples as on desktop. Export settings
-(**Project → Export… → Add… → Web**):
+The addon includes two WebAssembly libraries, one for exports without threads
+(`addons/mumble_speech/bin/mumble_godot.wasm`) and one for exports with threads
+(`mumble_godot.threads.wasm`), so `Mumble`, `MumbleVoice`, `MumbleSpeaker` and
+`MumbleTypewriter` work in a web export with the same API and the same samples as on
+desktop. Godot picks the library that matches the export's **Thread Support** setting and
+copies only that one next to `index.html`, so a player downloads one of them. Export
+settings (**Project → Export… → Add… → Web**):
 
-- **Godot 4.3 or later.** Earlier versions only export the web with threads, which the
-  addon does not support.
+- **Godot 4.3 or later.** Earlier versions only export the web with threads and are not
+  supported.
 - **Extensions Support: on.** The web export then uses the `dlink` export templates,
   which are part of the official export template package (nothing extra to download).
-- **Thread Support: off** (the default in 4.3 and later). The addon ships a build
-  without threads only. A threaded export still picks that library (Godot matches the
-  `web.*.wasm32` entries whatever the threads setting), but threaded exports are not
-  supported and the result is not verified yet (it is likely not to load). Turn Thread Support off.
-- **No special server headers.** Without threads, the export does not need the
-  cross-origin isolation headers (`Cross-Origin-Opener-Policy`,
-  `Cross-Origin-Embedder-Policy`), so it also works on hosts that cannot set them, such
-  as itch.io's HTML5 embed. CI serves the export without them and checks that the page
-  is not cross-origin isolated.
+- **Thread Support: off or on.** Off (the default in 4.3 and later) is recommended unless
+  your project needs threads: it needs no special server headers, so it works on hosts
+  and embeds that cannot set them, such as itch.io's HTML5 embed by default. Turn it on
+  for projects that need threads (background loading, threaded physics or audio, or
+  other add-ons that require them); the export then needs cross-origin isolation (below).
+- **No special server headers without threads.** A non-threaded export does not need the
+  cross-origin isolation headers. CI serves it without them and checks that the page is
+  not cross-origin isolated and that it loads `mumble_godot.wasm` only.
+- **Threads need cross-origin isolation.** A threaded export needs `SharedArrayBuffer`,
+  which browsers offer only to a cross-origin isolated page: serve every file of the
+  export with `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp`. To check, type `crossOriginIsolated` in
+  the browser console: it must print `true`. CI serves the threaded export with these
+  headers and checks that the page is cross-origin isolated and loads
+  `mumble_godot.threads.wasm` only. The ways to get the headers:
+  - your own server or CDN: add the two headers;
+  - Godot's *Progressive Web App* export option with *Ensure Cross Origin Isolation
+    Headers* on: a service worker adds the headers after a reload, so it works on a static
+    host that cannot set them (the first visit reloads once);
+  - itch.io: turn on *SharedArrayBuffer support* in the project's embed options;
+  - the editor's **Remote Debug → Run in Browser** already serves the headers;
+  - some hosts and embeds allow none of these: use Thread Support off there.
+- **A threaded export served without the headers** does not start. Symptom: TBD (to be
+  recorded from the manual check GW7 in `bindings/godot/TESTING.md`; usually Godot
+  reports that cross-origin isolation or `SharedArrayBuffer` is missing).
+- **Main thread only.** The addon's classes (`Mumble`, `MumbleVoice`, `MumbleSpeaker`,
+  `MumbleTypewriter`) are used from the main thread, as on desktop; do not call them from
+  a `Thread`. On the web a failed check there aborts the whole game.
 - **A user gesture before audio is heard.** Browsers keep audio suspended until the
   player clicks, taps or presses a key on the page. A line said earlier is silent, but
   see the timing below: its signals still arrive.
@@ -104,23 +126,27 @@ with the same API and the same samples as on desktop. Export settings
 
 Sizes of this addon on the web:
 
-| | Size |
-|---|---|
-| `mumble_godot.wasm`, raw | 520,810 bytes (about 509 KiB) |
-| `mumble_godot.wasm`, gzip | 175,773 bytes (about 172 KiB, `gzip -9`) |
-| Increase of the `dlink` export template over the standard one | TBD (not measured yet) |
+An export includes only one of the two libraries.
 
-To build the web library from source you need the pinned nightly Rust and
+| | Without threads | With threads |
+|---|---|---|
+| Library | `mumble_godot.wasm` | `mumble_godot.threads.wasm` |
+| Raw | 520,810 bytes (about 509 KiB) | TBD (measured by CI) |
+| gzip (`gzip -9`) | 175,773 bytes (about 172 KiB) | TBD (measured by CI) |
+| Increase of the `dlink` export template over the standard one | TBD (not measured yet) | TBD (not measured yet) |
+
+To build both web libraries from source you need the pinned nightly Rust and
 Emscripten (`scripts/godot-web/versions.env`, currently Emscripten 3.1.74):
 
 ```sh
-bindings/godot/build.sh web    # writes addons/mumble_speech/bin/mumble_godot.wasm and checks it
+bindings/godot/build.sh web    # writes both libraries into addons/mumble_speech/bin/ and checks them
 ```
 
-CI exports the test runner of `bindings/godot` with Godot 4.3 and 4.7.2 and runs it in
+CI exports the test runner of `bindings/godot` with Godot 4.3 and 4.7.2, without threads
+(served without the headers) and with threads (served with them), and runs both in
 Chromium, with audio running and with audio blocked: every conformance vector must be
-bit-identical in the browser and the timing above must hold. Firefox and desktop Safari
-are checked by hand (`bindings/godot/TESTING.md`); please
+bit-identical in the browser and the timing above must hold in both. Firefox and desktop
+Safari are checked by hand (`bindings/godot/TESTING.md`); please
 [report what you find](https://github.com/basteez/mumble-speech/issues/new?template=godot_web_verification.yml).
 
 ## Example project

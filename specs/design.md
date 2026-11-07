@@ -1069,7 +1069,10 @@ both and the `.gdextension`, runs the self-tests, uploads both in the
 audio `running` and `suspended`, then exports `Web (threads)` and runs it with
 `--mode example --threads`. `godot-web-browsers (<browser>)` gains the same threaded
 run (Firefox `running` and `suspended`, WebKit `suspended`). None of these jobs is
-required (LQ14); `godot-web` and the desktop `godot` jobs are unchanged apart from
+required (LQ14). `godot-web-build` also runs the T1 mechanism checks (`cargo tree` under both flag
+sets, and a verbose rebuild of the threaded library whose `rustc` line must carry the shared and the
+threaded flags; `build.sh` passes `-v` when `CARGO_VERBOSE=1`), and `run-tests.mjs` has a
+`--no-isolation-headers` option (valid only with `--threads`) for the negative run of T4; `godot-web` and the desktop `godot` jobs are unchanged apart from
 the reverse request check and the template cache key.
 
 **Release** (LD39): the `godot-web` job builds and checks both libraries;

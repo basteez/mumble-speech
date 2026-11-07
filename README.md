@@ -30,7 +30,7 @@ crates/mumble-ffi/    C ABI (cdylib + staticlib)
 bindings/c/           mumble.h, CMake tests and example
 crates/mumble-godot/  Godot 4 GDExtension
 bindings/godot/       Godot addon (desktop and web), example scene and tests
-scripts/godot-web/    build, export and browser tests of the Godot web library
+scripts/godot-web/    build, export and browser tests of the Godot web libraries (without and with threads)
 bindings/unity/       Unity package (UPM): C# interop, components, EditMode tests
 apps/playground/      web playground to try the styles (private, not published)
 docs/                 documentation site (VitePress), published with the playground
@@ -52,7 +52,7 @@ npm test                      # web package and playground tests
 cargo build -p mumble-ffi --release                 # C ABI
 cmake -S bindings/c -B build/c && cmake --build build/c && ctest --test-dir build/c
 bindings/godot/build.sh && godot --headless --path bindings/godot -s res://tests/run_tests.gd
-bindings/godot/build.sh web    # Godot web library (pinned nightly Rust + Emscripten 3.1.74)
+bindings/godot/build.sh web    # Godot web libraries, with and without threads (pinned nightly Rust + Emscripten 3.1.74)
 bindings/unity/build.sh        # native library into the Unity package's Plugins/
 ```
 

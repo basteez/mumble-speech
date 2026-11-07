@@ -13,7 +13,7 @@ Download `mumble-speech-godot-X.Y.Z.zip` from the
 
 ```sh
 bindings/godot/build.sh        # builds the GDExtension into addons/mumble_speech/bin
-bindings/godot/build.sh web    # the web library (pinned nightly Rust and Emscripten, see below)
+bindings/godot/build.sh web    # both web libraries, with and without threads (pinned nightly Rust and Emscripten, see below)
 ```
 
 Copy `addons/mumble_speech/` into your project.
@@ -21,14 +21,26 @@ Copy `addons/mumble_speech/` into your project.
 ## Web export
 
 Godot 4.3 or later. In **Project → Export… → Web** turn **Extensions Support** on (it
-selects the `dlink` export templates, included in the official template package) and
-**Thread Support** off (the addon ships a build without threads only; with Thread Support
-on is not supported). No special server headers (COOP/COEP) are needed. Browsers
-keep audio suspended until the first click, tap or key press on the page. In the default
+selects the `dlink` export templates, included in the official template package). The
+addon ships a library without threads (`mumble_godot.wasm`) and one with threads
+(`mumble_godot.threads.wasm`); Godot picks the one that matches **Thread Support**, and an
+export includes only that one.
+
+- **Thread Support off** (recommended unless your project needs threads): no special server
+  headers, so it also works on itch.io's embed and on hosts that cannot set headers.
+- **Thread Support on**: the page must be served with `Cross-Origin-Opener-Policy:
+  same-origin` and `Cross-Origin-Embedder-Policy: require-corp` (check that
+  `crossOriginIsolated` prints `true` in the browser console), through your server, Godot's
+  *Progressive Web App* option (*Ensure Cross Origin Isolation Headers*), itch.io's
+  *SharedArrayBuffer support* option, or the editor's *Remote Debug → Run in Browser*, which
+  already sends them. Without the headers the export does not start. Use the addon's classes
+  from the main thread only.
+
+Browsers keep audio suspended until the first click, tap or key press on the page. In the default
 *Sample* playback mode, `character_spoken` and `finished` follow the time since `say`, so
 they arrive even before audio is allowed (the line is then silent); see
 [the documentation](https://mumble-speech.github.io/bindings/godot#web-export) for the
-timing, the size of `mumble_godot.wasm` and of the `dlink` template, and what to expect
+timing, the size of both libraries and of the two `dlink` templates, and what to expect
 from each browser.
 
 ## Use

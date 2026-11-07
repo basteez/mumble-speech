@@ -1,12 +1,12 @@
-# Testing the Godot web export (checklist GW1–GW5)
+# Testing the Godot web export (checklist GW1–GW8)
 
 A guide for whoever tries the Godot addon in a browser. It takes about 30 minutes.
 Please report the results with the issue form
 [Godot web verification report](https://github.com/basteez/mumble-speech/issues/new?template=godot_web_verification.yml),
 even if everything works.
 
-CI already exports the test runner with Godot 4.3 and 4.7.2 and runs it in Chromium, with
-audio running and with audio blocked (every conformance vector, the timing of
+CI already exports the test runner with Godot 4.3 and 4.7.2, without and with Thread Support, and
+runs it in Chromium, with audio running and with audio blocked (every conformance vector, the timing of
 `character_spoken` and `finished`). What needs a human is everything CI cannot do: Safari,
 Firefox with a real audio device, hearing that the sound is in sync, and the browser's memory
 tool.
@@ -52,17 +52,40 @@ tool.
 3. Expected: the page console ends with `MUMBLE_WEB_TESTS PASS`: every conformance vector is
    bit-identical in the browser and the timing checks pass.
 
-## GW4 — Thread Support on
-
-1. Export the `Web` preset with **Thread Support** on. Serve it with and without the
-   `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`
-   headers.
-2. Record what happens: an export error, a load error in the browser console, or a silent
-   failure. The documentation (`docs/bindings/godot.md`, *Web export*) must describe it.
-
 ## GW5 — iOS Safari and itch.io (optional)
 
 1. Open the GW1 export on an iPhone or iPad in Safari; tap the page.
 2. Zip the export, upload it to itch.io as an HTML game (embedded in the page, *SharedArrayBuffer
    support* off) and open it.
 3. Expected: the line speaks after a tap, as in GW1.
+
+## GW6 — Thread Support on, served with the headers
+
+1. After `bindings/godot/build.sh web` (or with the released addon), export the
+   `Web (threads)` and `Web (threads tests)` presets with Godot 4.3 and with the latest 4.x
+   (`scripts/godot-web/export.sh <godot binary> build/web-threads "Web (threads)"` does the
+   same without the editor).
+2. Serve each folder with `Cross-Origin-Opener-Policy: same-origin` and
+   `Cross-Origin-Embedder-Policy: require-corp` (the editor's *Remote Debug → Run in
+   Browser*, or a static server that sets them). Open them in the latest Chrome, Firefox and
+   desktop Safari and click once.
+3. Expected: `crossOriginIsolated` typed in the console prints `true`; the network panel shows
+   `mumble_godot.threads.wasm` loaded and not `mumble_godot.wasm`; the example types its line
+   with sound in sync as in GW1; the tests page ends with `MUMBLE_WEB_TESTS PASS` and its
+   last line says `threads=true`; the non-threaded GW1 export still loads `mumble_godot.wasm`.
+
+## GW7 — Thread Support on, served without the headers
+
+1. Serve the `Web (threads)` export of GW6 without the headers
+   (`python3 -m http.server -d build/web-threads 8000`) and open it in Chrome and Firefox.
+2. Record what the page shows: Godot's error about cross-origin isolation or
+   `SharedArrayBuffer`, or another failure. The documentation (`docs/bindings/godot.md`,
+   *Web export*) must describe it and the fixes.
+
+## GW8 — itch.io and the PWA option (optional)
+
+1. Upload the `Web (threads)` export to itch.io as an HTML game with *SharedArrayBuffer
+   support* on. Export it again with **Progressive Web App** on and **Ensure Cross Origin
+   Isolation Headers** on, and put it on a static host that sets no headers.
+2. Expected: both speak after a click (the PWA one after the reload its service worker
+   triggers). With itch.io's option off, the GW7 symptom appears.

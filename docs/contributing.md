@@ -30,7 +30,7 @@ decision IDs are cited in tasks, tests, commits and pull requests.
 | `crates/mumble-wasm`, `packages/web` | WebAssembly exports and the npm package |
 | `crates/mumble-ffi`, `bindings/c` | C ABI, header, CMake tests |
 | `crates/mumble-godot`, `bindings/godot` | Godot GDExtension and addon project |
-| `scripts/godot-web` | Build, export and browser tests of the Godot web library |
+| `scripts/godot-web` | Build, export and browser tests of the Godot web libraries (without and with threads) |
 | `bindings/unity` | Unity package |
 | `crates/mumble-conformance`, `conformance/` | Conformance vectors |
 | `apps/playground` | The web playground (private) |
@@ -54,4 +54,4 @@ npm run dev:docs                                    # this site
 
 `main` is protected: every change goes through a pull request, and CI must be green
 (core on three operating systems, web, playground, C ABI on three platforms, Godot 4.3
-and 4.7.2, Godot web in Chromium on 4.3 and 4.7.2, C# interop, site). Keep pull requests focused on one task and cite its ID.
+and 4.7.2, Godot web, without and with threads, in Chromium on 4.3 and 4.7.2, C# interop, site). Keep pull requests focused on one task and cite its ID.

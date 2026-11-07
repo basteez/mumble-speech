@@ -1,4 +1,4 @@
-name: Godot web verification report (GW1–GW5)
+name: Godot web verification report (GW1–GW8)
 description: Results of the manual Godot web checklist in bindings/godot/TESTING.md.
 title: "[Godot web check]: Godot <version> in <browser> on <OS>"
 labels: ["godot", "verification"]
@@ -57,15 +57,29 @@ body:
       options: ["Pass", "Fail", "Not tested"]
     validations:
       required: true
-  - type: textarea
-    id: gw4
-    attributes:
-      label: "GW4: what happens with Thread Support on (export error, load error or silent failure)"
-      description: With and without the COOP/COEP headers. Leave empty if not tested.
   - type: dropdown
     id: gw5
     attributes:
       label: "GW5: iOS Safari and itch.io (optional)"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: dropdown
+    id: gw6
+    attributes:
+      label: "GW6: Thread Support on, served with COOP/COEP (crossOriginIsolated true, the threaded library loads, the example and MUMBLE_WEB_TESTS PASS)"
+      options: ["Pass", "Fail", "Not tested"]
+    validations:
+      required: true
+  - type: textarea
+    id: gw7
+    attributes:
+      label: "GW7: what a threaded export shows when served without COOP/COEP (Godot's error, or another failure)"
+      description: Chrome and Firefox. Leave empty if not tested.
+  - type: dropdown
+    id: gw8
+    attributes:
+      label: "GW8: itch.io SharedArrayBuffer option and the PWA option (optional)"
       options: ["Pass", "Fail", "Not tested"]
     validations:
       required: true
