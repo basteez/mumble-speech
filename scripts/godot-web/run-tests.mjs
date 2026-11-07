@@ -130,11 +130,13 @@ export function isFatalConsole(type, text) {
 /**
  * The verdict on the AudioContext states recorded by the page, for `--audio running|suspended`:
  * at least one context must exist and every one must be in the expected state. Returns an error
- * message or undefined.
+ * message or undefined. WebKit reports `interrupted` for a context that is not playing because the
+ * system or the page has not allowed it; for `--audio suspended` it counts as suspended (not running).
  */
 export function audioVerdict(states, expected) {
   if (!Array.isArray(states) || states.length === 0) return 'the page created no AudioContext';
-  const wrong = states.filter((s) => s !== expected);
+  const matches = (s) => s === expected || (expected === 'suspended' && s === 'interrupted');
+  const wrong = states.filter((s) => !matches(s));
   if (wrong.length > 0) return `AudioContext state is [${states.join(', ')}], expected ${expected} (--audio ${expected})`;
   return undefined;
 }

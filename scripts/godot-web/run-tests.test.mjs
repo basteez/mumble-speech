@@ -120,6 +120,14 @@ test('audioVerdict: one context in the wrong state fails the run, even with othe
   assert.match(audioVerdict(undefined, 'running'), /no AudioContext/);
 });
 
+test('audioVerdict: WebKit "interrupted" counts as suspended, never as running (LD31)', () => {
+  assert.equal(audioVerdict(['interrupted'], 'suspended'), undefined);
+  assert.equal(audioVerdict(['suspended', 'interrupted'], 'suspended'), undefined);
+  assert.match(audioVerdict(['interrupted'], 'running'), /expected running/);
+  assert.match(audioVerdict(['interrupted', 'running'], 'suspended'), /expected suspended/);
+  assert.match(audioVerdict(['closed'], 'suspended'), /expected suspended/);
+});
+
 test('verdict passes a clean run and fails a failing one', () => {
   const good = {
     mode: 'tests', audio: 'running', report: { done: true, failures: 0, checks: 10, vectors: 30 },
