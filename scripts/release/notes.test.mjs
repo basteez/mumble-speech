@@ -159,3 +159,30 @@ test('the Godot web build is named in the Godot rows only, not in the C, Unity, 
     cleanup();
   }
 });
+
+test('the Godot download row names the web build with its exact wording, and the Verification section names both kinds of export (L8.1, LD39)', () => {
+  const { result, notes, cleanup } = compose();
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    const [godotRow] = rowsFor(notes, archives.godot);
+    assert.ok(godotRow.includes('| Windows x64, macOS universal, Linux x64, Web (Godot 4.3+, with or without threads) |'), godotRow);
+    const verification = notes.slice(notes.indexOf('## Verification'));
+    assert.match(verification, /its two web libraries the side-module checks and the exported tests in Chromium/);
+    assert.match(verification, /the export without threads served without cross-origin isolation headers, the export with threads served with them/);
+  } finally {
+    cleanup();
+  }
+});
+
+test('the Web compatibility row does not mention the threaded build (LD39: the Godot rows carry it)', () => {
+  const { result, notes, cleanup } = compose();
+  try {
+    assert.equal(result.status, 0, result.stderr);
+    const webRow = notes.split('\n').find((line) => line.startsWith('| Web |'));
+    assert.ok(webRow, 'no Web compatibility row');
+    assert.doesNotMatch(webRow, /thread/i);
+    assert.doesNotMatch(notes.slice(notes.indexOf('## Install'), notes.indexOf('## Compatibility')), /Web \(Godot/, 'the install text does not name the web build');
+  } finally {
+    cleanup();
+  }
+});

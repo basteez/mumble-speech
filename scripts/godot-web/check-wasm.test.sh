@@ -76,6 +76,22 @@ expect_exit "threaded: missing entry symbol fails" 1 "is not exported" node "$ch
 expect_exit "threaded: over budget fails" 1 "(LD38)" node "$check" "$fx/big.threads.wasm" --threads --budget 1000
 expect_exit "threaded: the default budget is WASM_THREADS_BUDGET_BYTES" 0 "budget 1000000 bytes" node "$check" "$fx/good.threads.wasm" --threads
 
+# Threaded library, more cases (L4.20, LD38): the option twice, a swapped pair in the .gdextension, and a versions.env
+# without the threaded budget, which must fail with --threads and pass when --budget is given.
+expect_exit "--threads twice is a usage error" 2 "usage" node "$check" "$fx/good.threads.wasm" --threads --threads --budget 1000
+expect_exit "a non-threaded module checked with --threads fails (no shared memory)" 1 "no shared memory import" \
+  node "$check" "$fx/no-entry.wasm" --threads --budget 1000
+sed 's#web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"#web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"#' "$gdext" > "$work/swapped.gdextension"
+expect_exit ".gdextension with a threaded path under the non-threaded key fails" 1 'web.release.wasm32 is "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"' \
+  node "$check" --gdextension "$work/swapped.gdextension"
+mkdir -p "$work/nobudget"
+cp "$check" "$work/nobudget/check-wasm.mjs"
+printf 'WASM_BUDGET_BYTES=651012\n' > "$work/nobudget/versions.env"
+expect_exit "a versions.env without WASM_THREADS_BUDGET_BYTES fails with --threads" 1 "WASM_THREADS_BUDGET_BYTES" \
+  node "$work/nobudget/check-wasm.mjs" "$fx/good.threads.wasm" --threads
+expect_exit "the same file passes with an explicit --budget" 0 "check-wasm: ok" \
+  node "$work/nobudget/check-wasm.mjs" "$fx/good.threads.wasm" --threads --budget 1000
+
 echo
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

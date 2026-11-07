@@ -63,9 +63,12 @@ done
 export_run() {
   rc=0
   WORK=$work GODOT_LOG=$work/godot.log STUB_VERSION=${STUB_VERSION-} STUB_LIBS=${STUB_LIBS:-mumble_godot.wasm} HOME=$work/home XDG_DATA_HOME=$work/xdg \
-    PATH=$work/bin:$PATH GODOT_TEMPLATE_CACHE=${CACHE:-$work/cache} GODOT_PROJECT=$work/project \
+    PATH=$work/bin:$PATH GODOT_TEMPLATE_CACHE=${CACHE:-$work/cache} GODOT_PROJECT=${PROJECT:-$work/project} \
     "$export_sh" "$work/bin/godot" "$1" ${2+"$2"} > "$work/out.txt" 2>&1 || rc=$?
 }
+
+# no_export: the last run started no export (the stub logs --version too, so only --export-release counts).
+no_export() { ! grep -q -- '--export-release' "$work/godot.log" 2>/dev/null; }
 
 # check <label> <condition command...>: passes when the command succeeds.
 check() {
@@ -191,6 +194,84 @@ expect_rc "a non-threaded preset with both libraries fails" 1 "also has mumble_g
 STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-unknown" "Web (nope)"
 expect_rc "an unknown preset name fails before exporting" 1 "preset 'Web (nope)'"
 
+
+# --- Threads (T3, LD35, LD39): the preset's thread support decides the library, for any preset file -------------
+# Projects of their own: the repository's presets with CRLF line ends, without the thread_support key, with a
+# malformed value, and a folder without an export_presets.cfg. The script reads only the presets file here.
+mkdir -p "$work/project-crlf" "$work/project-nokey" "$work/project-badvalue" "$work/project-empty"
+awk '{ printf "%s\r\n", $0 }' "$here/../../bindings/godot/export_presets.cfg" > "$work/project-crlf/export_presets.cfg"
+sed '/^variant\/thread_support=/d' "$here/../../bindings/godot/export_presets.cfg" > "$work/project-nokey/export_presets.cfg"
+sed '/^\[preset\.1\.options\]$/,/^\[preset\.2\]$/{s/^variant\/thread_support=.*/variant\/thread_support=maybe/;}' \
+  "$here/../../bindings/godot/export_presets.cfg" > "$work/project-badvalue/export_presets.cfg"
+# A project without presets: every export must refuse before it starts.
+rm -f "$work/godot.log"
+
+# The presets file may have CRLF line ends (a Windows checkout with autocrlf): the same preset kinds are found (LD39).
+PROJECT=$work/project-crlf STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-crlf-threads" "Web (threads tests)"
+expect_rc "a CRLF presets file: the threaded preset exports the threaded library" 0 "(mumble_godot.threads.wasm)"
+PROJECT=$work/project-crlf STUB_LIBS=mumble_godot.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-crlf-plain" "Web (tests)"
+expect_rc "a CRLF presets file: the non-threaded preset exports the non-threaded library" 0 "(mumble_godot.wasm)"
+PROJECT=$work/project-crlf STUB_LIBS=mumble_godot.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-crlf-wrong" "Web (threads tests)"
+expect_rc "a CRLF presets file: the threaded preset with only the non-threaded library fails" 1 "the export has no mumble_godot.threads.wasm"
+
+# A preset whose thread_support key is missing is not guessed: the export fails before it starts (LD39).
+rm -f "$work/godot.log"
+PROJECT=$work/project-nokey STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-nokey" "Web (tests)"
+expect_rc "a preset without variant/thread_support fails, naming the key" 1 "variant/thread_support value not found"
+check "a preset without the key starts no export" no_export
+[ ! -f "$work/out-nokey/index.html" ] && echo "ok   no index.html for a preset without the key" && passed=$((passed + 1)) || { echo "FAIL index.html exists"; failed=$((failed + 1)); }
+
+# A value that is neither true nor false is refused as well.
+rm -f "$work/godot.log"
+PROJECT=$work/project-badvalue STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-badvalue" "Web (tests)"
+expect_rc "a malformed variant/thread_support value fails" 1 "variant/thread_support value not found"
+check "a malformed value starts no export" no_export
+
+# A presets file that is missing: refused before the export, with its path.
+rm -f "$work/godot.log"
+PROJECT=$work/project-empty STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-nofile" "Web (tests)"
+expect_rc "a project without export_presets.cfg fails" 1 "export_presets.cfg not found"
+check "a missing presets file starts no export" no_export
+
+# Preset names are matched exactly: a prefix of a name, or a name with the wrong spacing, is an unknown preset.
+for name in "Web (threads" "Web (threads tests" "web (tests)" "Web  (tests)"; do
+  rm -f "$work/godot.log"
+  STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-name" "$name"
+  expect_rc "the preset name '$name' is matched exactly (unknown: fails)" 1 "preset '$name'"
+  check "the unknown preset '$name' starts no export" no_export
+done
+rm -f "$work/godot.log"
+STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-empty-name" ""
+check "an empty preset name starts no export" no_export
+expect_rc "an empty preset name fails" 1 "preset ''"
+
+# The combinations of preset kind and library present (the others are above): a threaded preset with no library at all.
+touch "$work/no-wasm"
+STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-threads-none" "Web (threads tests)"
+rm -f "$work/no-wasm"
+expect_rc "a threaded preset with no library at all fails" 1 "the export has no mumble_godot.threads.wasm"
+
+# --- Template cache (T3, LD39): all four templates are kept under the tag, and only a missing pair is fetched --
+full=$work/cache-full
+mkdir -p "$full/4.3-stable"
+for t in web_dlink_release web_dlink_debug web_dlink_nothreads_release web_dlink_nothreads_debug; do echo "$t" > "$full/4.3-stable/$t.zip"; done
+before=$(calls)
+CACHE=$full STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-full" "Web (threads tests)"
+expect_rc "a cache with all four templates exports a threaded preset" 0 "exported 'Web (threads tests)'"
+check "a cache with all four templates downloads nothing" test "$(calls)" = "$before"
+check "the four templates are installed for the threaded export too" \
+  test -n "$(find "$work/home" "$work/xdg" -path '*/export_templates/4.3.stable/web_dlink_release.zip' 2>/dev/null)"
+
+# A cache with the threaded pair only (no non-threaded one) is refilled as well.
+threaded_only=$work/cache-threaded-only
+mkdir -p "$threaded_only/4.3-stable"
+echo "release template" > "$threaded_only/4.3-stable/web_dlink_release.zip"
+echo "debug template" > "$threaded_only/4.3-stable/web_dlink_debug.zip"
+before=$(calls)
+CACHE=$threaded_only STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-threaded-only"
+expect_rc "a cache with the threaded templates only exports after fetching" 0 "exported 'Web (tests)'"
+check "a cache with the threaded templates only is fetched" test "$(calls)" -gt "$before"
+check "the non-threaded templates are then in the cache" test -f "$threaded_only/4.3-stable/web_dlink_nothreads_release.zip" -a -f "$threaded_only/4.3-stable/web_dlink_nothreads_debug.zip"
 echo
 echo "$passed passed, $failed failed"
 [ "$failed" -eq 0 ]

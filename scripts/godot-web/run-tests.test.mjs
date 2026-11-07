@@ -356,7 +356,7 @@ test('initScripts: the suspender is added, before the tracker, only for --audio 
   assert.match(AUDIO_TRACKER, /__mumbleSuspendAudio\(context\)/);
 });
 
-// --- --threads (L4.19, LD35, LD39): smoke tests; the full set belongs to the test phase ------------------
+// --- --threads (L4.19, LD35, LD39) ------------------------------------------------------------------------
 
 test('parseArgs: --threads turns the isolation headers on, --no-isolation-headers (with --threads only) off', () => {
   const on = parseArgs(['out', '--audio', 'running', '--threads']).options;
@@ -404,4 +404,193 @@ test('verdict (--threads): isolation, the threads report (null passes) and the l
   assert.deepEqual(verdict({ ...clean, crossOriginIsolated: false }), ['crossOriginIsolated is false, expected true (COOP/COEP sent, L4.19)']);
   assert.deepEqual(verdict({ ...clean, report: { ...clean.report, threads: false } }), ['the test runner reports threads false, expected true']);
   assert.equal(verdict({ ...clean, threads: false }).length > 0, true);
+});
+
+// --- --threads (L4.19, L4.20, LD35, LD39): the command line, the isolation headers, the verdict and the library rule ----
+// Test phase of issue #34 (T4): each case names the requirement it covers.
+
+const THREADS_LIB = '/mumble_godot.threads.wasm';
+const PLAIN_LIB = '/mumble_godot.wasm';
+const cleanPage = (threads, extra = {}) => ({
+  mode: 'tests', audio: 'running', threads,
+  report: { done: true, failures: 0, checks: 10, vectors: 30, threads },
+  consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: threads,
+  audioStates: ['running'], requests: [{ path: threads ? THREADS_LIB : PLAIN_LIB, status: 200 }],
+  ...extra,
+});
+
+test('parseArgs --threads (L4.19): the option may come anywhere, with the other options, and sets both flags', () => {
+  const a = parseArgs(['--threads', 'out', '--audio', 'running']).options;
+  assert.equal(a.threads, true);
+  assert.equal(a.isolationHeaders, true);
+  const b = parseArgs(['out', '--mode', 'example', '--audio', 'suspended', '--threads', '--timeout', '60', '--browser', 'firefox']).options;
+  assert.deepEqual([b.threads, b.isolationHeaders, b.mode, b.audio, b.timeoutSeconds, b.browser], [true, true, 'example', 'suspended', 60, 'firefox']);
+  // Without --threads: no isolation headers, no threads.
+  const c = parseArgs(['out', '--audio', 'running']).options;
+  assert.deepEqual([c.threads, c.isolationHeaders], [false, false]);
+});
+
+test('parseArgs --no-isolation-headers (L4.19 negative run): only with --threads, in either order, and it turns the headers off', () => {
+  const a = parseArgs(['--no-isolation-headers', '--threads', 'out', '--audio', 'running']).options;
+  assert.deepEqual([a.threads, a.isolationHeaders], [true, false]);
+  const b = parseArgs(['out', '--audio', 'running', '--threads', '--no-isolation-headers']).options;
+  assert.deepEqual([b.threads, b.isolationHeaders], [true, false]);
+  assert.match(parseArgs(['out', '--audio', 'running', '--no-isolation-headers']).error, /--no-isolation-headers needs --threads/);
+  assert.match(parseArgs(['--no-isolation-headers', 'out', '--audio', 'running']).error, /needs --threads/);
+  // A value of --threads cannot be taken for the directory: it is an option.
+  assert.equal(parseArgs(['--threads', '--audio', 'running']).error, 'missing <export dir>');
+});
+
+test('parseArgs --threads: a repeated option is accepted (the flags are boolean) and an extra directory is still an error', () => {
+  assert.equal(parseArgs(['out', '--audio', 'running', '--threads', '--threads']).options.threads, true);
+  assert.match(parseArgs(['out', 'second', '--audio', 'running', '--threads']).error, /unexpected argument second/);
+});
+
+test('the server adds COOP and COEP to every response, 200, 404 and 400, when isolation headers are on (L4.19)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'serve-iso-all-'));
+  try {
+    writeFileSync(join(dir, 'index.html'), '<p>hi</p>');
+    const server = await serve(dir, { isolationHeaders: true });
+    try {
+      const port = new URL(server.url).port;
+      for (const [path, status] of [['/', 200], ['/missing.wasm', 404], ['/%E0%A4%A', 400], ['/%', 400], ['/..%2f..%2fetc%2fpasswd', 404]]) {
+        const res = await rawGet(port, path);
+        assert.equal(res.status, status, path);
+        assert.equal(res.headers['cross-origin-opener-policy'], 'same-origin', `${path} COOP`);
+        assert.equal(res.headers['cross-origin-embedder-policy'], 'require-corp', `${path} COEP`);
+      }
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the server sends no isolation headers on 200, 404 and 400 without --threads (L4.15: the non-threaded run)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'serve-noiso-all-'));
+  try {
+    writeFileSync(join(dir, 'index.html'), '<p>hi</p>');
+    const server = await serve(dir);
+    try {
+      const port = new URL(server.url).port;
+      for (const [path, status] of [['/', 200], ['/missing.wasm', 404], ['/%', 400]]) {
+        const res = await rawGet(port, path);
+        assert.equal(res.status, status, path);
+        assert.equal(res.headers['cross-origin-opener-policy'], undefined, `${path} COOP`);
+        assert.equal(res.headers['cross-origin-embedder-policy'], undefined, `${path} COEP`);
+      }
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the server records the path without its query, so a versioned library URL counts as the library (L4.19)', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'serve-query-'));
+  try {
+    mkdirSync(join(dir, 'x'));
+    writeFileSync(join(dir, 'x', 'mumble_godot.threads.wasm'), 'lib');
+    const server = await serve(dir, { isolationHeaders: true });
+    try {
+      const port = new URL(server.url).port;
+      assert.equal((await rawGet(port, '/x/mumble_godot.threads.wasm?v=1')).status, 200);
+      assert.deepEqual(server.requests, [{ path: '/x/mumble_godot.threads.wasm', status: 200 }]);
+      assert.deepEqual(libraryFailures(server.requests, true), []);
+    } finally {
+      await server.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the verdict matrix (L4.15, L4.19): isolation true or false, against threads on or off', () => {
+  // Threads on: only isolated, threaded runs pass.
+  assert.deepEqual(verdict(cleanPage(true)), []);
+  assert.ok(verdict(cleanPage(true, { crossOriginIsolated: false })).some((f) => /crossOriginIsolated is false, expected true/.test(f)));
+  // Threads off: only non-isolated runs pass.
+  assert.deepEqual(verdict(cleanPage(false)), []);
+  assert.ok(verdict(cleanPage(false, { crossOriginIsolated: true })).some((f) => /crossOriginIsolated is true, expected false/.test(f)));
+  // The two mismatches of the matrix, each with the library rule as well.
+  const threadsOnNoIsolation = verdict(cleanPage(true, { crossOriginIsolated: false }));
+  assert.ok(threadsOnNoIsolation.length >= 1);
+  const threadsOffIsolated = verdict(cleanPage(false, { crossOriginIsolated: true, requests: [{ path: PLAIN_LIB, status: 200 }] }));
+  assert.deepEqual(threadsOffIsolated, ['crossOriginIsolated is true, expected false (no COOP/COEP, L4.15)']);
+});
+
+test('the verdict matrix holds in example mode too (L4.19): a threaded example needs isolation and the threaded library', () => {
+  const example = (threads, crossOriginIsolated, path) => ({
+    mode: 'example', audio: 'running', threads, report: undefined, consoleLines: ['MUMBLE_EXAMPLE started'], fatal: [],
+    crossOriginIsolated, audioStates: ['running'], requests: [{ path, status: 200 }],
+  });
+  assert.deepEqual(verdict(example(true, true, THREADS_LIB)), []);
+  assert.ok(verdict(example(true, false, THREADS_LIB)).some((f) => /expected true/.test(f)));
+  assert.ok(verdict(example(true, true, PLAIN_LIB)).some((f) => /mumble_godot\.wasm was requested/.test(f)));
+  assert.deepEqual(verdict(example(false, false, PLAIN_LIB)), []);
+  assert.ok(verdict(example(false, true, PLAIN_LIB)).some((f) => /expected false/.test(f)));
+  assert.ok(verdict(example(false, false, THREADS_LIB)).some((f) => /mumble_godot\.threads\.wasm was requested/.test(f)));
+});
+
+test('the page report of threads (L4.19, LD39): true, false, null and undefined against the mode', () => {
+  // Threads on: true and the unknown (null, undefined) pass; false fails.
+  assert.deepEqual(verdict(cleanPage(true, { report: { done: true, failures: 0, vectors: 1, threads: true } })), []);
+  assert.deepEqual(verdict(cleanPage(true, { report: { done: true, failures: 0, vectors: 1, threads: null } })), []);
+  assert.deepEqual(verdict(cleanPage(true, { report: { done: true, failures: 0, vectors: 1 } })), []);
+  assert.deepEqual(verdict(cleanPage(true, { report: { done: true, failures: 0, vectors: 1, threads: false } })),
+    ['the test runner reports threads false, expected true']);
+  // Threads off: false, null and undefined pass; true fails.
+  assert.deepEqual(verdict(cleanPage(false, { report: { done: true, failures: 0, vectors: 1, threads: false } })), []);
+  assert.deepEqual(verdict(cleanPage(false, { report: { done: true, failures: 0, vectors: 1, threads: null } })), []);
+  assert.deepEqual(verdict(cleanPage(false, { report: { done: true, failures: 0, vectors: 1 } })), []);
+  assert.deepEqual(verdict(cleanPage(false, { report: { done: true, failures: 0, vectors: 1, threads: true }, crossOriginIsolated: false })),
+    ['the test runner reports threads true, expected false']);
+});
+
+test('libraryFailures (L4.19, LD35): each library must be requested in its own mode, and the other must not be', () => {
+  assert.deepEqual(libraryFailures([{ path: THREADS_LIB, status: 200 }], true), []);
+  assert.deepEqual(libraryFailures([{ path: PLAIN_LIB, status: 200 }], false), []);
+  // The threaded run without the threaded library: one message, naming the library and the mode.
+  const noThreaded = libraryFailures([{ path: PLAIN_LIB, status: 200 }], true);
+  assert.equal(noThreaded.length, 2);
+  assert.match(noThreaded[0], /mumble_godot\.threads\.wasm was not requested \(Thread Support on/);
+  assert.match(noThreaded[1], /mumble_godot\.wasm was requested, but this export must load mumble_godot\.threads\.wasm only/);
+  // The non-threaded run with the threaded library requested too.
+  assert.equal(libraryFailures([{ path: PLAIN_LIB, status: 200 }, { path: THREADS_LIB, status: 200 }], false).length, 1);
+  assert.equal(libraryFailures([{ path: PLAIN_LIB, status: 200 }, { path: THREADS_LIB, status: 200 }], true).length, 1);
+  assert.equal(libraryFailures([], true).length, 1);
+  assert.equal(libraryFailures([], false).length, 1);
+});
+
+test('libraryFailures: a 404 on the library still counts as requested; the verdict then fails on the status (L4.19)', () => {
+  // The library was asked for (the request is in the log): no "not requested" message, but the run fails on the 404.
+  assert.deepEqual(libraryFailures([{ path: THREADS_LIB, status: 404 }], true), []);
+  const failures = verdict(cleanPage(true, { requests: [{ path: THREADS_LIB, status: 404 }] }));
+  assert.deepEqual(failures, [`request for ${THREADS_LIB} answered 404`]);
+  // A 404 on the non-threaded library in a non-threaded run is the same.
+  assert.deepEqual(verdict(cleanPage(false, { requests: [{ path: PLAIN_LIB, status: 404 }] })), [`request for ${PLAIN_LIB} answered 404`]);
+});
+
+test('libraryFailures matches the file name only, so names that end the same way do not count (L4.19)', () => {
+  // A versioned library URL in a subfolder is the library.
+  assert.deepEqual(libraryFailures([{ path: '/x/mumble_godot.threads.wasm', status: 200 }], true), []);
+  assert.deepEqual(libraryFailures([{ path: '/deep/nest/mumble_godot.wasm', status: 200 }], false), []);
+  // A file whose name ends with the library name, without the slash, is a different file.
+  assert.equal(libraryFailures([{ path: '/notmumble_godot.wasm', status: 200 }], false).length, 1);
+  assert.equal(libraryFailures([{ path: '/notmumble_godot.threads.wasm', status: 200 }], true).length, 1);
+  assert.equal(libraryFailures([{ path: '/notmumble_godot.threads.wasm', status: 200 }, { path: PLAIN_LIB, status: 200 }], true).length, 2,
+    'the look-alike does not satisfy the threaded run, and the plain library must not be there');
+  // A look-alike next to the right library does not count as the other library being requested.
+  assert.deepEqual(libraryFailures([{ path: THREADS_LIB, status: 200 }, { path: '/notmumble_godot.wasm', status: 200 }], true), []);
+  assert.deepEqual(libraryFailures([{ path: PLAIN_LIB, status: 200 }, { path: '/notmumble_godot.threads.wasm', status: 200 }], false), []);
+});
+
+test('the example scene with --threads needs the same library and isolation as the test runner (L4.19)', () => {
+  const example = { mode: 'example', audio: 'suspended', threads: true, report: undefined, consoleLines: ['MUMBLE_EXAMPLE started'],
+    fatal: [], crossOriginIsolated: true, audioStates: ['suspended'], requests: [{ path: THREADS_LIB, status: 200 }] };
+  assert.deepEqual(verdict(example), []);
+  assert.ok(verdict({ ...example, requests: [] }).some((f) => /mumble_godot\.threads\.wasm was not requested/.test(f)));
+  assert.ok(verdict({ ...example, consoleLines: [] }).some((f) => /example scene did not start/.test(f)));
 });

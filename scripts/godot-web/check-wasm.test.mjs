@@ -11,6 +11,7 @@ import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   checkGdextension,
+  checkModeName,
   checkWasm,
   DEFAULT_ENTRY_SYMBOL,
   parseWasm,
@@ -18,7 +19,10 @@ import {
   readBudget,
   readEntrySymbol,
   readLibraries,
+  readThreadsBudget,
+  WEB_KEYS,
   WEB_LIBRARY_PATH,
+  WEB_THREADS_KEYS,
 } from './check-wasm.mjs';
 import { buildModule } from './wasm-fixtures.mjs';
 
@@ -642,4 +646,367 @@ test('the command line: a versions.env without a budget fails instead of disabli
     assert.equal(result.status, 1, `${name}: ${result.stdout}${result.stderr}`);
     assert.match(result.stderr, /WASM_BUDGET_BYTES/, name);
   }
+});
+
+// --- Threaded library (L4.20, LD38): --threads, the atomics count, the budget and the .gdextension -----
+// Test phase of issue #34 (tasks T1-T5). Every case below names the requirement it covers.
+
+const THREADED_NAME = 'mumble_godot.threads.wasm';
+const NOTIFY = [0xfe, 0x00, 0x02, 0x00]; // memory.atomic.notify, align 2, offset 0
+
+test('the threaded side module passes every --threads check, with its atomics count (L4.20)', () => {
+  const bytes = buildModule({ sharedMemory: true, atomics: true });
+  const parsed = parseWasm(bytes, { countAtomics: true });
+  assert.equal(parsed.error, undefined, parsed.error);
+  assert.deepEqual(parsed.imports, [{ module: 'env', name: 'memory', shared: true }]);
+  assert.deepEqual(parsed.memories, []);
+  assert.equal(parsed.atomicsCount, 1);
+  const result = checkWasm(bytes, { threads: true, budget: bytes.length, fileName: THREADED_NAME });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.info.atomicsCount, 1);
+});
+
+test('a non-threaded module checked with --threads fails on both the shared memory and the atomics (L4.20)', () => {
+  const errors = checkWasm(buildModule(), { threads: true }).errors;
+  assert.deepEqual(errors, [
+    'no shared memory import: the imported memory is not shared, this is not a threaded build (L4.20)',
+    'no atomics instruction: this is not a threaded build (L4.20)',
+  ]);
+});
+
+test('a threaded module checked without --threads fails on the shared memory and the atomics (L4.17)', () => {
+  const bytes = buildModule({ sharedMemory: true, atomics: true });
+  const errors = checkWasm(bytes).errors;
+  assert.equal(errors.length, 2, errors.join('\n'));
+  assert.match(errors[0], /shared memory: this is a threaded build \(L4\.17: no threads\)/);
+  assert.match(errors[1], /atomics instruction at offset \d+: this is a threaded build/);
+});
+
+test('file name and mode must agree in both directions, and the name rule is exact (LD38)', () => {
+  const plain = buildModule();
+  const threaded = buildModule({ sharedMemory: true, atomics: true });
+  assert.equal(checkModeName('mumble_godot.wasm', false), undefined);
+  assert.equal(checkModeName(THREADED_NAME, true), undefined);
+  assert.match(checkModeName(THREADED_NAME, false), /check it with --threads \(LD38\)/);
+  assert.match(checkModeName('mumble_godot.wasm', true), /not a threaded library name \(\*\.threads\.wasm\)/);
+  // A threaded module under the plain name: the name and the mode agree (both plain), so only the content fails it.
+  const swapped = checkWasm(threaded, { fileName: 'mumble_godot.wasm' }).errors;
+  assert.ok(!swapped.some((e) => /check it with --threads|not a threaded library name/.test(e)), swapped.join('\n'));
+  assert.ok(swapped.some((e) => /shared memory: this is a threaded build/.test(e)));
+  // The plain module under the threaded name, checked with --threads: the name agrees, the content fails both checks.
+  const swappedBack = checkWasm(plain, { threads: true, fileName: THREADED_NAME }).errors;
+  assert.equal(swappedBack.length, 2, swappedBack.join('\n'));
+  assert.ok(swappedBack.some((e) => /no shared memory import/.test(e)));
+  assert.ok(swappedBack.some((e) => /no atomics instruction/.test(e)));
+  // The plain module under the threaded name, checked without --threads: the name is the failure (LD38).
+  assert.match(checkWasm(plain, { fileName: THREADED_NAME }).errors[0], /check it with --threads/);
+  // Names that only look like the threaded one do not count as it.
+  assert.equal(checkModeName('mumble_godot.threads.wasm.bak', false), undefined);
+  assert.match(checkModeName('x.threads.wasm', false), /check it with --threads/);
+});
+
+test('shared memory without atomics fails with --threads, naming the missing atomics (L4.20)', () => {
+  const errors = checkWasm(buildModule({ sharedMemory: true }), { threads: true }).errors;
+  assert.deepEqual(errors, ['no atomics instruction: this is not a threaded build (L4.20)']);
+});
+
+test('atomics without a shared memory import fail with --threads (L4.20)', () => {
+  const errors = checkWasm(buildModule({ atomics: true }), { threads: true }).errors;
+  assert.deepEqual(errors, ['no shared memory import: the imported memory is not shared, this is not a threaded build (L4.20)']);
+});
+
+test('a shared memory defined by the module, not imported, fails with --threads (L4.20)', () => {
+  const errors = checkWasm(buildModule({ sharedMemory: true, atomics: true, memory: 'section' }), { threads: true }).errors;
+  assert.ok(errors.some((e) => /the module defines a memory: a side module imports/.test(e)), errors.join('\n'));
+  assert.ok(errors.some((e) => /no shared memory import: a threaded side module imports/.test(e)), errors.join('\n'));
+  // A non-shared memory defined by the module also fails.
+  const plain = checkWasm(buildModule({ atomics: true, memory: 'section' }), { threads: true }).errors;
+  assert.ok(plain.some((e) => /defines a memory/.test(e)), plain.join('\n'));
+});
+
+test('a threaded module without dylink.0 is not a side module (L4.20)', () => {
+  const errors = checkWasm(buildModule({ sharedMemory: true, atomics: true, dylink: false }), { threads: true }).errors;
+  assert.deepEqual(errors, ['no "dylink.0" section: not an Emscripten side module (SIDE_MODULE)']);
+});
+
+test('a threaded module without the entry symbol fails with --threads (L4.20)', () => {
+  const errors = checkWasm(buildModule({ sharedMemory: true, atomics: true, exports: ['other'] }), { threads: true }).errors;
+  assert.deepEqual(errors, ['the entry symbol "gdext_rust_init" is not exported']);
+  assert.deepEqual(checkWasm(buildModule({ sharedMemory: true, atomics: true, exports: ['other'] }), { threads: true, entrySymbol: 'other' }).errors, []);
+});
+
+test('the threaded budget is inclusive: equal passes, one byte more fails with LD38 (LD38)', () => {
+  const bytes = buildModule({ sharedMemory: true, atomics: true, padding: 100 });
+  assert.deepEqual(checkWasm(bytes, { threads: true, budget: bytes.length }).errors, []);
+  assert.deepEqual(checkWasm(bytes, { threads: true, budget: bytes.length - 1 }).errors,
+    [`size ${bytes.length} bytes exceeds the budget of ${bytes.length - 1} bytes (LD38)`]);
+});
+
+test('readThreadsBudget reads WASM_THREADS_BUDGET_BYTES, separately from WASM_BUDGET_BYTES (LD38)', () => {
+  const text = readFileSync(repoVersions, 'utf8');
+  const threadsBudget = readThreadsBudget(text);
+  assert.ok(Number.isInteger(threadsBudget) && threadsBudget > 0, `threads budget ${threadsBudget}`);
+  assert.equal(threadsBudget, readBudget(text, 'WASM_THREADS_BUDGET_BYTES'));
+  assert.equal(readThreadsBudget('WASM_BUDGET_BYTES=1000\n'), undefined, 'the non-threaded budget is not the threaded one');
+  assert.equal(readThreadsBudget('WASM_THREADS_BUDGET_BYTES=1000\r\n'), 1000);
+  assert.equal(readThreadsBudget('# WASM_THREADS_BUDGET_BYTES=1000\n'), undefined);
+  assert.equal(readThreadsBudget('WASM_THREADS_BUDGET_BYTES=1M\n'), undefined);
+  assert.equal(readThreadsBudget('WASM_THREADS_BUDGET_BYTES=-5\n'), undefined);
+  assert.equal(readThreadsBudget('WASM_THREADS_BUDGET_BYTES=\n'), undefined);
+});
+
+// --- Atomics count and decoder (L4.20: the count, every class of atomic instruction) ------------------
+
+test('the atomics count runs over every function, not only the first one that has atomics (L4.20)', () => {
+  const bytes = buildModule({
+    sharedMemory: true,
+    functions: [
+      { code: [0x01, 0xfe, 0x03, 0x00, 0xfe, 0x03, 0x00] }, // two fences
+      { code: [0x41, 0x00, ...NOTIFY] },                    // one notify after an i32.const
+      { code: [0x01] },                                     // none
+      { code: [0xfe, 0x10, 0x02, 0x00] },                   // one load
+    ],
+  });
+  assert.equal(parseWasm(bytes, { countAtomics: true }).atomicsCount, 4);
+  assert.equal(checkWasm(bytes, { threads: true }).info.atomicsCount, 4);
+});
+
+test('every assigned atomics sub-opcode is decoded and counted: notify, waits, fence, loads, stores, rmw, cmpxchg (L4.20)', () => {
+  const memarg = [0x02, 0x80, 0x01]; // align 2, offset 128 (two-byte LEB128)
+  const subs = [0x00, 0x01, 0x02, ...Array.from({ length: 0x4e - 0x10 + 1 }, (_, i) => 0x10 + i)];
+  for (const sub of subs) {
+    const bytes = buildModule({ sharedMemory: true, functions: [{ code: [0xfe, sub, ...memarg] }] });
+    const parsed = parseWasm(bytes, { countAtomics: true });
+    assert.equal(parsed.error, undefined, `0xfe 0x${sub.toString(16)}: ${parsed.error}`);
+    assert.equal(parsed.atomicsCount, 1, `0xfe 0x${sub.toString(16)}`);
+  }
+  const fence = buildModule({ sharedMemory: true, functions: [{ code: [0xfe, 0x03, 0x00] }] });
+  assert.equal(parseWasm(fence, { countAtomics: true }).atomicsCount, 1, 'atomic.fence (one reserved byte)');
+  // atomic.fence has no memarg: the byte after its reserved byte is a separate instruction (nop, then the fence).
+  const twoFences = buildModule({ sharedMemory: true, functions: [{ code: [0xfe, 0x03, 0x00, 0x01, 0xfe, 0x03, 0x00] }] });
+  assert.equal(parseWasm(twoFences, { countAtomics: true }).atomicsCount, 2);
+});
+
+test('atomics immediates that look like other opcodes do not desynchronise the walk (L4.20, L4.17)', () => {
+  const code = [
+    0xfe, 0x10, 0x02, 0x0b, // i32.atomic.load, offset 0x0b (looks like end)
+    0xfe, 0x17, 0x02, 0x10, // i64.atomic.store ... offset 0x10 (looks like call), then nop below
+    0x01,
+    0xfe, 0x48, 0x02, 0xfe, 0x01, // cmpxchg, offset 254 (two-byte LEB128 with 0xfe)
+    0xfe, 0x1e, 0x00, 0x0f, // rmw add, offset 0x0f (looks like return)
+    0xfe, 0x01, 0x02, 0x0b, // memory.atomic.wait32, offset 0x0b
+    0xfe, 0x02, 0x03, 0x0c, // wait64, offset 0x0c (looks like br)
+  ];
+  const bytes = buildModule({ sharedMemory: true, functions: [{ code }] });
+  const parsed = parseWasm(bytes, { countAtomics: true });
+  assert.equal(parsed.error, undefined, parsed.error);
+  assert.equal(parsed.atomicsCount, 6);
+  // The same code in a non-threaded module: the walk stops at the first atomics, which follows the nop.
+  const plain = buildModule({ functions: [{ code: [0x01, ...code] }] });
+  assert.equal(parseWasm(plain).atomicsAt, plain.length - 1 - code.length, 'the first atomics, after the nop, at its own offset');
+});
+
+test('an unknown 0xFE sub-opcode fails closed with --threads, naming the sub-opcode (L4.20, L4.17)', () => {
+  for (const sub of [0x04, 0x0f, 0x4f, 0x50, 0x7f, 0xff, 0x100]) {
+    const bytes = buildModule({ sharedMemory: true, functions: [{ code: [0x01, 0xfe, ...leb(sub), 0x00, 0x00, ...FENCE] }] });
+    const errors = checkWasm(bytes, { threads: true }).errors;
+    assert.equal(errors.length, 1, `0x${sub.toString(16)}: ${errors.join('; ')}`);
+    assert.match(errors[0], new RegExp(`malformed WebAssembly binary: unknown instruction 0xfe sub-opcode 0x${sub.toString(16)} at offset \\d+`));
+    // Without --threads an atomics-like instruction is still a failure, never a pass.
+    assert.ok(checkWasm(bytes).errors.length >= 1, `0x${sub.toString(16)} passed without --threads`);
+  }
+});
+
+test('the threaded walk fails on a body that overruns after the atomics (L4.20: no silent pass)', () => {
+  // The atomic's offset LEB is cut by the end of the body: the walk runs past the body.
+  const bytes = buildModule({ sharedMemory: true, functions: [{ code: [0xfe, 0x10, 0x02, 0x80] }] });
+  const errors = checkWasm(bytes, { threads: true }).errors;
+  assert.equal(errors.length, 1, errors.join('; '));
+  assert.match(errors[0], /malformed WebAssembly binary/);
+});
+
+// --- Command line: --threads ----------------------------------------------------------------------------
+
+const threadedGood = fixture(THREADED_NAME, { sharedMemory: true, atomics: true });
+const threadedBig = fixture('big.threads.wasm', { sharedMemory: true, atomics: true, padding: 4096 });
+const plainNamedThreads = fixture('plain.threads.wasm', {});
+const sharedNoAtomics = fixture('shared-no-atomics.threads.wasm', { sharedMemory: true });
+const atomicsNoShared = fixture('atomics-no-shared.threads.wasm', { atomics: true });
+const definedMemory = fixture('defined-memory.threads.wasm', { sharedMemory: true, atomics: true, memory: 'section' });
+const noEntryThreaded = fixture('no-entry.threads.wasm', { sharedMemory: true, atomics: true, exports: ['other'] });
+const threadedNoDylink = fixture('no-dylink.threads.wasm', { sharedMemory: true, atomics: true, dylink: false });
+
+test('the command line: --threads passes the threaded library and reports its atomics count (L4.20)', () => {
+  const result = run([threadedGood, '--threads', '--budget', '100000']);
+  assert.equal(result.status, 0, result.err);
+  assert.match(result.out, /1 atomics instructions, budget 100000 bytes/);
+  assert.match(result.out, /check-wasm: ok/);
+  // --threads may come before the file.
+  assert.equal(run(['--threads', threadedGood, '--budget', '100000']).status, 0);
+});
+
+test('the command line: --threads twice, and --threads alone, are usage errors (exit 2)', () => {
+  assert.equal(run([threadedGood, '--threads', '--threads', '--budget', '100000']).status, 2);
+  assert.equal(run(['--threads']).status, 2);
+  assert.match(run(['--threads']).err, /usage:/);
+});
+
+test('the command line: --threads with only --gdextension checks nothing, so it is a usage error, not a pass', () => {
+  assert.equal(run(['--threads', '--gdextension', repoGdextension]).status, 2);
+});
+
+test('the command line: a non-threaded module with --threads fails, a threaded one without fails (both ways)', () => {
+  const plainAsThreads = run([good, '--threads', '--budget', '100000']);
+  assert.equal(plainAsThreads.status, 1);
+  assert.match(plainAsThreads.err, /not a threaded library name/);
+  assert.match(plainAsThreads.err, /no shared memory import/);
+  const threadedAsPlain = run([threadedGood, '--budget', '100000']);
+  assert.equal(threadedAsPlain.status, 1);
+  assert.match(threadedAsPlain.err, /check it with --threads/);
+  assert.match(threadedAsPlain.err, /shared memory: this is a threaded build/);
+});
+
+test('the command line: broken threaded modules fail with --threads, each with its reason', () => {
+  const cases = [
+    [sharedNoAtomics, /no atomics instruction/],
+    [atomicsNoShared, /no shared memory import/],
+    [definedMemory, /defines a memory/],
+    [noEntryThreaded, /entry symbol "gdext_rust_init" is not exported/],
+    [threadedNoDylink, /no "dylink\.0" section/],
+  ];
+  for (const [path, reason] of cases) {
+    const result = run([path, '--threads', '--budget', '100000']);
+    assert.equal(result.status, 1, path);
+    assert.match(result.err, reason, path);
+  }
+  // A plain-named file with threaded content, or a threaded name with plain content, fails on the name alone plus its content.
+  assert.match(run([plainNamedThreads, '--threads', '--budget', '100000']).err, /no shared memory import/);
+});
+
+test('the command line: --budget overrides the threaded budget in both directions (LD38)', () => {
+  // Over the explicit budget: fails and names the threaded budget rule.
+  const over = run([threadedBig, '--threads', '--budget', '1000']);
+  assert.equal(over.status, 1);
+  assert.match(over.err, /exceeds the budget of 1000 bytes \(LD38\)/);
+  // A larger explicit budget passes the same file, whatever versions.env says.
+  assert.equal(run([threadedBig, '--threads', '--budget', '100000000']).status, 0);
+  // A budget of 0 is a budget, not a missing one.
+  assert.equal(run([threadedGood, '--threads', '--budget', '0']).status, 1);
+});
+
+test('the command line: the threaded budget is WASM_THREADS_BUDGET_BYTES, equal size passes, one byte less fails (LD38)', () => {
+  const bytes = readFileSync(threadedGood);
+  const exact = run([threadedGood, '--threads', '--budget', String(bytes.length)]);
+  assert.equal(exact.status, 0, exact.err);
+  const under = run([threadedGood, '--threads', '--budget', String(bytes.length - 1)]);
+  assert.equal(under.status, 1);
+  assert.match(under.err, /exceeds the budget/);
+});
+
+test('the command line: without --threads the threaded library is not the budget source (nothing silently mixed)', () => {
+  const expected = readThreadsBudget(readFileSync(repoVersions, 'utf8'));
+  const result = run([threadedGood, '--threads']);
+  assert.equal(result.status, 0, result.err);
+  assert.match(result.out, new RegExp(`budget ${expected} bytes`));
+});
+
+test('the command line: a versions.env without WASM_THREADS_BUDGET_BYTES, or with a malformed one, fails with --threads (LD38, L4.20)', () => {
+  const folder = mkdtempSync(join(work, 'threads-copy-'));
+  copyFileSync(script, join(folder, 'check-wasm.mjs'));
+  const cases = [
+    ['missing', 'WASM_BUDGET_BYTES=651012\nRUST_NIGHTLY=nightly\n'],
+    ['commented', '# WASM_THREADS_BUDGET_BYTES=1000000\nWASM_BUDGET_BYTES=651012\n'],
+    ['with a unit', 'WASM_THREADS_BUDGET_BYTES=1M\n'],
+    ['empty', 'WASM_THREADS_BUDGET_BYTES=\n'],
+    ['negative', 'WASM_THREADS_BUDGET_BYTES=-5\n'],
+    ['fraction', 'WASM_THREADS_BUDGET_BYTES=1000.5\n'],
+  ];
+  for (const [name, content] of cases) {
+    writeFileSync(join(folder, 'versions.env'), content);
+    const result = spawnSync(process.execPath, [join(folder, 'check-wasm.mjs'), threadedGood, '--threads'], { encoding: 'utf8' });
+    assert.equal(result.status, 1, `${name}: ${result.stdout}${result.stderr}`);
+    assert.match(result.stderr, /WASM_THREADS_BUDGET_BYTES/, name);
+    assert.match(result.stderr, /\(LD38\)/, name);
+    // An explicit --budget makes the value unnecessary: the check runs.
+    const explicit = spawnSync(process.execPath, [join(folder, 'check-wasm.mjs'), threadedGood, '--threads', '--budget', '100000'], { encoding: 'utf8' });
+    assert.equal(explicit.status, 0, `${name} with --budget: ${explicit.stdout}${explicit.stderr}`);
+  }
+});
+
+// --- .gdextension: the four web keys (L4.20, LD35, LD38) -----------------------------------------------
+
+const keyLine = (key) => repoGdextensionText.split(/\r?\n/).find((l) => l.startsWith(`${key} = `));
+const WEB_FOUR = ['web.debug.wasm32', 'web.release.wasm32', 'web.debug.threads.wasm32', 'web.release.threads.wasm32'];
+
+test('checkGdextension: each of the four web keys is required, and a missing one is named (L4.20)', () => {
+  for (const key of WEB_FOUR) {
+    const text = repoGdextensionText.split(/\r?\n/).filter((l) => !l.startsWith(`${key} = `)).join('\n');
+    assert.deepEqual(checkGdextension(text), [`${key} is missing from [libraries]`], key);
+  }
+});
+
+test('checkGdextension: a threaded path under a non-threaded key, and the reverse, fail (swapped paths, L4.20)', () => {
+  const swapped = repoGdextensionText
+    .replace(keyLine('web.debug.wasm32'), 'web.debug.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"')
+    .replace(keyLine('web.debug.threads.wasm32'), 'web.debug.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"');
+  assert.deepEqual(checkGdextension(swapped), [
+    'web.debug.wasm32 is "res://addons/mumble_speech/bin/mumble_godot.threads.wasm", expected "res://addons/mumble_speech/bin/mumble_godot.wasm"',
+    'web.debug.threads.wasm32 is "res://addons/mumble_speech/bin/mumble_godot.wasm", expected "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"',
+  ]);
+  // Only one of the two keys swapped: exactly one error.
+  const oneSwap = repoGdextensionText.replace(keyLine('web.release.threads.wasm32'),
+    'web.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"');
+  assert.equal(checkGdextension(oneSwap).length, 1);
+  // Every web key pointing at the other library: four errors, each naming its key.
+  const allSwapped = repoGdextensionText
+    .replace(keyLine('web.debug.wasm32'), 'web.debug.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"')
+    .replace(keyLine('web.release.wasm32'), 'web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"')
+    .replace(keyLine('web.debug.threads.wasm32'), 'web.debug.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"')
+    .replace(keyLine('web.release.threads.wasm32'), 'web.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"');
+  const errors = checkGdextension(allSwapped);
+  assert.equal(errors.length, 4);
+  for (const key of WEB_FOUR) assert.ok(errors.some((e) => e.startsWith(`${key} is `)), key);
+});
+
+test('checkGdextension: any extra web key fails, a non-web key does not (LD35, LD38)', () => {
+  for (const extra of ['web.release.nothreads.wasm32', 'web.debug.threads.wasm64', 'web.wasm32', 'web.release.threads.wasm32.extra']) {
+    const errors = checkGdextension(`${repoGdextensionText}\n${extra} = "res://addons/mumble_speech/bin/mumble_godot.wasm"\n`);
+    assert.deepEqual(errors, [`${extra}: not one of the four web keys (${[...WEB_KEYS, ...WEB_THREADS_KEYS].join(', ')}) (LD35)`], extra);
+  }
+  assert.deepEqual(checkGdextension(`${repoGdextensionText}\nlinux.release.arm64 = "res://a.so"\n`), []);
+});
+
+test('checkGdextension: the four keys under another section, or after [other], do not count', () => {
+  const afterOther = `${repoGdextensionText}\n[other]\n${WEB_FOUR.map((k) => `${k} = "x"`).join('\n')}\n`;
+  // The keys after [other] are not [libraries] entries: the four are missing from [libraries], and they are not extra either.
+  assert.equal(checkGdextension(afterOther).filter((e) => e.endsWith('is missing from [libraries]')).length, 0);
+  const libsSplit = repoGdextensionText.replace('[libraries]', `[other]\n${WEB_FOUR.map((k) => `${k} = "x"`).join('\n')}\n[libraries]`);
+  assert.deepEqual(checkGdextension(libsSplit), [], 'the keys in [other] are not counted as extra web keys');
+  const commented = repoGdextensionText.split(/\r?\n/).map((l) => (l.startsWith('web.release.threads.wasm32') ? `; ${l}` : l)).join('\n');
+  assert.deepEqual(checkGdextension(commented), ['web.release.threads.wasm32 is missing from [libraries]']);
+});
+
+test('checkGdextension: comment lines (; and #) never count as keys, in LF and CRLF (L4.20)', () => {
+  const lines = repoGdextensionText.split(/\r?\n/).map((l) => (l.startsWith('web.') ? `# ${l}` : l));
+  const text = lines.join('\n');
+  assert.equal(checkGdextension(text).length, 4);
+  assert.equal(checkGdextension(text.replace(/\n/g, '\r\n')).length, 4);
+  // A commented-out web key next to the real one changes nothing.
+  assert.deepEqual(checkGdextension(`${repoGdextensionText}\n; web.release.nothreads.wasm32 = "x"\n# web.debug.threads.wasm64 = "y"\n`), []);
+});
+
+test('checkGdextension: CRLF with a swapped path is still reported, with the same message (L4.20)', () => {
+  const swapped = repoGdextensionText.replace(keyLine('web.release.wasm32'), 'web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"');
+  assert.deepEqual(checkGdextension(crlf(swapped)), [
+    'web.release.wasm32 is "res://addons/mumble_speech/bin/mumble_godot.threads.wasm", expected "res://addons/mumble_speech/bin/mumble_godot.wasm"',
+  ]);
+});
+
+test('the command line: the .gdextension with a threaded key swapped fails, and names the key (L4.20)', () => {
+  const swapped = join(work, 'swapped.gdextension');
+  writeFileSync(swapped, repoGdextensionText.replace(keyLine('web.release.threads.wasm32'),
+    'web.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"'));
+  const result = run(['--gdextension', swapped]);
+  assert.equal(result.status, 1);
+  assert.match(result.err, /web\.release\.threads\.wasm32 is "res:\/\/addons\/mumble_speech\/bin\/mumble_godot\.wasm"/);
 });
