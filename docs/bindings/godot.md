@@ -131,8 +131,8 @@ An export includes only one of the two libraries.
 | | Without threads | With threads |
 |---|---|---|
 | Library | `mumble_godot.wasm` | `mumble_godot.threads.wasm` |
-| Raw | 520,810 bytes (about 509 KiB) | TBD (measured by CI) |
-| gzip (`gzip -9`) | 175,773 bytes (about 172 KiB) | TBD (measured by CI) |
+| Raw | 521,578 bytes (about 509 KiB) | 525,440 bytes (about 513 KiB) |
+| gzip (`gzip -9`) | 175,833 bytes (about 172 KiB) | 176,288 bytes (about 172 KiB) |
 | Increase of the `dlink` export template over the standard one | TBD (not measured yet) | TBD (not measured yet) |
 
 To build both web libraries from source you need the pinned nightly Rust and

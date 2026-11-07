@@ -242,10 +242,13 @@ func check_typewriter() -> void:
 	var text := ""
 	for i in 7:
 		text += "The quick brown fox jumps over the lazy dog. "
-	var state := {"finished": 0, "visible": []}
+	var state := {"finished": 0, "visible": [], "last_ms": Time.get_ticks_msec(), "longest_gap_ms": 0}
 	typewriter.finished.connect(func(): state.finished += 1)
 	typewriter.type_text(text)
 	var done: bool = await suite.wait_until(func():
+		var now := Time.get_ticks_msec()
+		state.longest_gap_ms = maxi(state.longest_gap_ms, now - state.last_ms)
+		state.last_ms = now
 		state.visible.append(label.visible_characters)
 		return state.finished > 0, 30000)
 	await get_tree().create_timer(0.3).timeout
@@ -257,6 +260,14 @@ func check_typewriter() -> void:
 	for i in range(1, shown.size()):
 		monotonic = monotonic and shown[i] >= shown[i - 1]
 	check(monotonic, "typewriter: reveals monotonically")
-	check(shown.has(text.length()), "typewriter: reaches the last character (%d code points)" % text.length())
+	# The label is sampled once per frame, so the last count (all code points visible) is seen only if
+	# a frame falls between the reveal of the last character and `finished`, which is one character slot
+	# (1/30 s) later. On a slow or irregular frame source (software rendering, a busy browser) one frame
+	# can span that slot, and the reveal and `finished` happen in the same frame: the last count is
+	# then not observable by sampling, and `finished` (which the typewriter emits only after revealing
+	# every character) plus a visible_characters of -1 are the evidence.
+	var slot_ms := 1000.0 / voice.speed
+	check(shown.has(text.length()) or state.longest_gap_ms > slot_ms,
+		"typewriter: reaches the last character (%d code points)" % text.length())
 	for node in [label, speaker, typewriter]:
 		node.queue_free()

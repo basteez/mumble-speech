@@ -74,7 +74,7 @@ expect_exit "atomics without shared memory fails with --threads" 1 "no shared me
 expect_exit "a defined memory fails with --threads" 1 "defines a memory" node "$check" "$fx/defined-memory.threads.wasm" --threads --budget 1000
 expect_exit "threaded: missing entry symbol fails" 1 "is not exported" node "$check" "$fx/no-entry.threads.wasm" --threads --budget 1000
 expect_exit "threaded: over budget fails" 1 "(LD38)" node "$check" "$fx/big.threads.wasm" --threads --budget 1000
-expect_exit "threaded: the default budget is WASM_THREADS_BUDGET_BYTES" 0 "budget 1000000 bytes" node "$check" "$fx/good.threads.wasm" --threads
+expect_exit "threaded: the default budget is WASM_THREADS_BUDGET_BYTES" 0 "budget 656800 bytes" node "$check" "$fx/good.threads.wasm" --threads
 
 # Threaded library, more cases (L4.20, LD38): the option twice, a swapped pair in the .gdextension, and a versions.env
 # without the threaded budget, which must fail with --threads and pass when --budget is given.
