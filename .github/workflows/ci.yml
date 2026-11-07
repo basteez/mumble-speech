@@ -167,6 +167,8 @@ jobs:
         env:
           NIGHTLY: ${{ steps.pins.outputs.RUST_NIGHTLY }}
         run: |
+          # The default shell runs `bash -e` without pipefail: a failing build piped into tee must fail the step.
+          set -o pipefail
           # gdext features follow the target feature atomics: experimental-wasm-nothreads only without it.
           threads_config='target.wasm32-unknown-emscripten.rustflags=["-C","link-args=-pthread","-C","target-feature=+atomics"]'
           cargo "+$NIGHTLY" tree -p mumble-godot -e features --target wasm32-unknown-emscripten > features-nothreads.txt
