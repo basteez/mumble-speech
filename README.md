@@ -1,5 +1,5 @@
-# mumble-speech 0.2.0 for Godot
+# mumble-speech 0.3.0 for Godot
 
 Generated from [basteez/mumble-speech](https://github.com/basteez/mumble-speech) — do not edit.
-Copy `addons/mumble_speech` into your project (Godot 4.3+, Windows x64, macOS universal, Linux x64).
+Copy `addons/mumble_speech` into your project (Godot 4.3+, Windows x64, macOS universal, Linux x64, web with or without threads).
 Documentation: https://mumble-speech.github.io/bindings/godot
