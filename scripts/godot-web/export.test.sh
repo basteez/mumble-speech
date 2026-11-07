@@ -14,9 +14,12 @@ failed=0
 passed=0
 
 mkdir -p "$work/bin" "$work/home" "$work/xdg" "$work/project"
+# The project's presets are the repository's: the script reads variant/thread_support from them (LD39).
+cp "$here/../../bindings/godot/export_presets.cfg" "$work/project/export_presets.cfg"
 
 # Stub godot: `--version` prints $STUB_VERSION; the export writes index.html and, unless the file
-# $work/no-wasm exists, mumble_godot.wasm next to it. Every call is logged.
+# $work/no-wasm exists, the library files named in $STUB_LIBS (default mumble_godot.wasm) next to it.
+# Every call is logged.
 cat > "$work/bin/godot" <<'EOF'
 #!/bin/sh
 echo "$*" >> "$GODOT_LOG"
@@ -28,7 +31,7 @@ case " $* " in
     for last; do :; done
     dir=$(dirname "$last")
     echo "<html>" > "$last"
-    if [ ! -f "$WORK/no-wasm" ]; then echo "wasm" > "$dir/mumble_godot.wasm"; fi
+    if [ ! -f "$WORK/no-wasm" ]; then for lib in ${STUB_LIBS:-mumble_godot.wasm}; do echo "wasm" > "$dir/$lib"; done; fi
     ;;
 esac
 exit 0
@@ -49,16 +52,17 @@ cp "$WORK/fixture.tpz" "$out"
 EOF
 chmod +x "$work/bin/godot" "$work/bin/curl"
 
-# The template package of a release: the two non-threaded dlink templates, as the official package holds them.
+# The template package of a release: the four dlink templates, as the official package holds them.
 mkdir -p "$work/pkg/templates"
-echo "release template" > "$work/pkg/templates/web_dlink_nothreads_release.zip"
-echo "debug template" > "$work/pkg/templates/web_dlink_nothreads_debug.zip"
+for t in web_dlink_release web_dlink_debug web_dlink_nothreads_release web_dlink_nothreads_debug; do
+  echo "$t template" > "$work/pkg/templates/$t.zip"
+done
 (cd "$work/pkg" && zip -qr "$work/fixture.tpz" templates)
 
 # export_run <out dir> [preset]: runs export.sh with the stubs for STUB_VERSION (set by the caller); sets rc.
 export_run() {
   rc=0
-  WORK=$work GODOT_LOG=$work/godot.log STUB_VERSION=${STUB_VERSION-} HOME=$work/home XDG_DATA_HOME=$work/xdg \
+  WORK=$work GODOT_LOG=$work/godot.log STUB_VERSION=${STUB_VERSION-} STUB_LIBS=${STUB_LIBS:-mumble_godot.wasm} HOME=$work/home XDG_DATA_HOME=$work/xdg \
     PATH=$work/bin:$PATH GODOT_TEMPLATE_CACHE=${CACHE:-$work/cache} GODOT_PROJECT=$work/project \
     "$export_sh" "$work/bin/godot" "$1" ${2+"$2"} > "$work/out.txt" 2>&1 || rc=$?
 }
@@ -103,8 +107,9 @@ STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-43"
 expect_rc "a stable 4.3 build is exported" 0 "Godot 4.3.stable"
 check "the templates are downloaded from the stable release tag" \
   grep -q "godot-builds/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz" "$work/curl.log"
-check "the template cache keeps both templates under the tag" \
-  test -f "$work/cache/4.3-stable/web_dlink_nothreads_release.zip" -a -f "$work/cache/4.3-stable/web_dlink_nothreads_debug.zip"
+check "the template cache keeps all four templates under the tag" \
+  test -f "$work/cache/4.3-stable/web_dlink_nothreads_release.zip" -a -f "$work/cache/4.3-stable/web_dlink_nothreads_debug.zip" \
+    -a -f "$work/cache/4.3-stable/web_dlink_release.zip" -a -f "$work/cache/4.3-stable/web_dlink_debug.zip"
 
 for v in "4.4.beta2.official.1a2b" "4.5.rc1.official.3c4d" "4.6.dev3.custom_build.5e6f" "4.3.beta.official"; do
   before=$(calls)
@@ -125,7 +130,7 @@ STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-hit"
 expect_rc "a cache hit exports" 0 "exported 'Web (tests)'"
 check "a cache hit downloads nothing" test "$(calls)" = "$before"
 
-# A cache with only one of the two templates is fetched again.
+# A cache with only some of the templates is fetched again.
 partial=$work/cache-partial
 mkdir -p "$partial/4.3-stable"
 echo "release template" > "$partial/4.3-stable/web_dlink_nothreads_release.zip"
@@ -133,6 +138,17 @@ before=$(calls)
 CACHE=$partial STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-partial"
 expect_rc "a partial cache exports after fetching" 0 "exported 'Web (tests)'"
 check "a partial cache is fetched" test "$(calls)" -gt "$before"
+
+# A cache from before the threaded templates (the two non-threaded ones only) is refilled (LD39).
+old=$work/cache-nothreads-only
+mkdir -p "$old/4.3-stable"
+echo "release template" > "$old/4.3-stable/web_dlink_nothreads_release.zip"
+echo "debug template" > "$old/4.3-stable/web_dlink_nothreads_debug.zip"
+before=$(calls)
+CACHE=$old STUB_VERSION="4.3.stable.official.77dcf97d8" export_run "$work/out-old-cache"
+expect_rc "a cache with the non-threaded templates only exports after fetching" 0 "exported 'Web (tests)'"
+check "a cache with the non-threaded templates only is fetched" test "$(calls)" -gt "$before"
+check "the threaded templates are then in the cache" test -f "$old/4.3-stable/web_dlink_release.zip" -a -f "$old/4.3-stable/web_dlink_debug.zip"
 
 # A failed download stops the export: no index.html, a non-zero exit.
 touch "$work/curl-fail"
@@ -157,6 +173,23 @@ touch "$work/no-wasm"
 STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-missing"
 rm -f "$work/no-wasm"
 expect_rc "an export without mumble_godot.wasm fails" 1 "the export has no mumble_godot.wasm"
+
+# --- Threaded presets (T3, LD35, LD39): exactly the library of the preset's kind -------------------------------
+STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-threads" "Web (threads tests)"
+expect_rc "a threaded preset with the threaded library exports" 0 "(mumble_godot.threads.wasm)"
+check "the threaded export passes the preset name to godot" grep -qF -- "--export-release Web (threads tests) $work/out-threads/index.html" "$work/godot.log"
+STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-threads-example" "Web (threads)"
+expect_rc "the Web (threads) preset exports too" 0 "(mumble_godot.threads.wasm)"
+STUB_LIBS=mumble_godot.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-threads-wrong" "Web (threads tests)"
+expect_rc "a threaded preset that exported the non-threaded library fails" 1 "the export has no mumble_godot.threads.wasm"
+STUB_LIBS="mumble_godot.threads.wasm mumble_godot.wasm" STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-threads-both" "Web (threads tests)"
+expect_rc "a threaded preset with both libraries fails" 1 "also has mumble_godot.wasm"
+STUB_LIBS=mumble_godot.threads.wasm STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-plain-wrong" "Web (tests)"
+expect_rc "a non-threaded preset that exported the threaded library fails" 1 "the export has no mumble_godot.wasm"
+STUB_LIBS="mumble_godot.wasm mumble_godot.threads.wasm" STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-plain-both" "Web (tests)"
+expect_rc "a non-threaded preset with both libraries fails" 1 "also has mumble_godot.threads.wasm"
+STUB_VERSION="4.7.2.stable.official.abcdef012" export_run "$work/out-unknown" "Web (nope)"
+expect_rc "an unknown preset name fails before exporting" 1 "preset 'Web (nope)'"
 
 echo
 echo "$passed passed, $failed failed"

@@ -11,7 +11,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import {
-  AUDIO_SUSPENDER, AUDIO_TRACKER, audioVerdict, initScripts, contentTypeFor, isFatalConsole, launchOptions, parseArgs, serve, verdict,
+  AUDIO_SUSPENDER, AUDIO_TRACKER, audioVerdict, initScripts, contentTypeFor, isFatalConsole, launchOptions, libraryFailures, parseArgs, serve, verdict,
 } from './run-tests.mjs';
 
 // The status and body of a request whose path is sent exactly as given (fetch would normalize `..`).
@@ -28,7 +28,7 @@ function rawGet(port, path) {
 
 test('parseArgs reads the options and rejects bad input', () => {
   assert.deepEqual(parseArgs(['out', '--browser', 'firefox', '--audio', 'suspended', '--headed']).options, {
-    dir: 'out', browser: 'firefox', audio: 'suspended', mode: 'tests', headed: true, timeoutSeconds: 180,
+    dir: 'out', browser: 'firefox', audio: 'suspended', mode: 'tests', threads: false, isolationHeaders: false, headed: true, timeoutSeconds: 180,
   });
   assert.match(parseArgs(['out']).error, /--audio is required/);
   assert.match(parseArgs(['out', '--audio', 'loud']).error, /--audio must be/);
@@ -38,7 +38,7 @@ test('parseArgs reads the options and rejects bad input', () => {
 
 test('parseArgs: the defaults are chromium, tests mode, 180 s, headless', () => {
   assert.deepEqual(parseArgs(['out', '--audio', 'running']).options, {
-    dir: 'out', browser: 'chromium', audio: 'running', mode: 'tests', headed: false, timeoutSeconds: 180,
+    dir: 'out', browser: 'chromium', audio: 'running', mode: 'tests', threads: false, isolationHeaders: false, headed: false, timeoutSeconds: 180,
   });
 });
 
@@ -131,7 +131,7 @@ test('audioVerdict: WebKit "interrupted" counts as suspended, never as running (
 test('verdict passes a clean run and fails a failing one', () => {
   const good = {
     mode: 'tests', audio: 'running', report: { done: true, failures: 0, checks: 10, vectors: 30 },
-    consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [],
+    consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [{ path: '/mumble_godot.wasm', status: 200 }],
   };
   assert.deepEqual(verdict(good), []);
   assert.ok(verdict({ ...good, crossOriginIsolated: true }).length > 0);
@@ -142,7 +142,7 @@ test('verdict passes a clean run and fails a failing one', () => {
 test('verdict (tests): each failure of the runner is its own message', () => {
   const clean = {
     mode: 'tests', audio: 'running', report: { done: true, failures: 0, checks: 10, vectors: 30 },
-    consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [],
+    consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [{ path: '/mumble_godot.wasm', status: 200 }],
   };
   assert.deepEqual(verdict({ ...clean, report: undefined, consoleLines: [] }).sort(), [
     'no "MUMBLE_WEB_TESTS PASS" line in the page log',
@@ -163,7 +163,7 @@ test('verdict (tests): each failure of the runner is its own message', () => {
 test('verdict (example): the example must start and the test runner must not', () => {
   const example = {
     mode: 'example', audio: 'running', report: undefined,
-    consoleLines: ['MUMBLE_EXAMPLE started'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [],
+    consoleLines: ['MUMBLE_EXAMPLE started'], fatal: [], crossOriginIsolated: false, audioStates: ['running'], requests: [{ path: '/mumble_godot.wasm', status: 200 }],
   };
   assert.deepEqual(verdict(example), []);
   assert.deepEqual(verdict({ ...example, consoleLines: [] }), ['the example scene did not start (no "MUMBLE_EXAMPLE started" line)']);
@@ -354,4 +354,54 @@ test('initScripts: the suspender is added, before the tracker, only for --audio 
   assert.match(AUDIO_SUSPENDER, /context\.suspend\(\)/);
   assert.match(AUDIO_SUSPENDER, /context\.resume = \(\) =>/);
   assert.match(AUDIO_TRACKER, /__mumbleSuspendAudio\(context\)/);
+});
+
+// --- --threads (L4.19, LD35, LD39): smoke tests; the full set belongs to the test phase ------------------
+
+test('parseArgs: --threads turns the isolation headers on, --no-isolation-headers (with --threads only) off', () => {
+  const on = parseArgs(['out', '--audio', 'running', '--threads']).options;
+  assert.equal(on.threads, true);
+  assert.equal(on.isolationHeaders, true);
+  const off = parseArgs(['out', '--audio', 'running', '--threads', '--no-isolation-headers']).options;
+  assert.equal(off.isolationHeaders, false);
+  assert.match(parseArgs(['out', '--audio', 'running', '--no-isolation-headers']).error, /needs --threads/);
+});
+
+test('the server sends COOP and COEP on every response, errors included, when asked to', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'serve-iso-'));
+  writeFileSync(join(dir, 'index.html'), '<p>hi</p>');
+  const server = await serve(dir, { isolationHeaders: true });
+  try {
+    for (const path of ['', 'missing.wasm']) {
+      const res = await fetch(`${server.url}${path}`);
+      assert.equal(res.headers.get('cross-origin-opener-policy'), 'same-origin', path);
+      assert.equal(res.headers.get('cross-origin-embedder-policy'), 'require-corp', path);
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test('libraryFailures: the threaded run needs the threaded library only, the other run the reverse', () => {
+  const plain = [{ path: '/mumble_godot.wasm', status: 200 }];
+  const threaded = [{ path: '/mumble_godot.threads.wasm', status: 200 }];
+  assert.deepEqual(libraryFailures(threaded, true), []);
+  assert.deepEqual(libraryFailures(plain, false), []);
+  assert.equal(libraryFailures(plain, true).length, 2);
+  assert.equal(libraryFailures(threaded, false).length, 2);
+  assert.equal(libraryFailures([...plain, ...threaded], true).length, 1);
+  assert.equal(libraryFailures([], false).length, 1);
+});
+
+test('verdict (--threads): isolation, the threads report (null passes) and the library request', () => {
+  const clean = {
+    mode: 'tests', audio: 'running', threads: true, report: { done: true, failures: 0, checks: 10, vectors: 30, threads: true },
+    consoleLines: ['MUMBLE_WEB_TESTS PASS 10'], fatal: [], crossOriginIsolated: true, audioStates: ['running'],
+    requests: [{ path: '/mumble_godot.threads.wasm', status: 200 }],
+  };
+  assert.deepEqual(verdict(clean), []);
+  assert.deepEqual(verdict({ ...clean, report: { ...clean.report, threads: null } }), []);
+  assert.deepEqual(verdict({ ...clean, crossOriginIsolated: false }), ['crossOriginIsolated is false, expected true (COOP/COEP sent, L4.19)']);
+  assert.deepEqual(verdict({ ...clean, report: { ...clean.report, threads: false } }), ['the test runner reports threads false, expected true']);
+  assert.equal(verdict({ ...clean, threads: false }).length > 0, true);
 });
