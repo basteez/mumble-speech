@@ -104,7 +104,8 @@ dev-dependency, used to generate and verify the folding tables (§4.1, LD11).
 - Verification: the same conformance vectors run on native (macOS, Windows,
   Linux) and on WASM in CI, comparing the PCM hash. The Godot addon's web build
   (`wasm32-unknown-emscripten`, a different toolchain from the npm package's
-  `wasm32-unknown-unknown`) runs them in a browser (§9.3.1).
+  `wasm32-unknown-unknown`) runs them in a browser (§9.3.1), in exports without
+  and with threads (§9.3.2).
 - Scope (L1.4, L7.5): bit-identity is per text, voice (seed included) **and
   sample rate**. The core never picks a rate; the caller does. The engine
   speakers used to pick the device's output rate, so the same line differed
@@ -481,8 +482,8 @@ void mumble_bytes_free(uint8_t *p, size_t len);
 - GDExtension written in Rust with `gdext` (`godot = "0.5.5"`, feature
   `api-4-3`), which uses the core directly (not the C ABI): one fewer layer,
   native Godot types. `compatibility_minimum = 4.3`, so the same build loads in
-  every Godot from 4.3 on. The web build (a second target of the same crate) is
-  in §9.3.1.
+  every Godot from 4.3 on. The web builds (a second target of the same crate,
+  without and with threads) are in §9.3.1 and §9.3.2.
 - `bindings/godot` is itself a Godot project: `addons/mumble_speech/` (what
   users copy: `.gdextension` + `bin/`), `example/` (a dialogue scene, L4.9) and
   `tests/`. `bin/` is not committed: `bindings/godot/build.sh` builds the crate
@@ -597,7 +598,8 @@ checked against them:
     `experimental-wasm`, `experimental-wasm-nothreads`, `lazy-function-tables`
     (smaller and faster to build, recommended by the book; it is incompatible
     only with `experimental-threads`, which we do not use) and the API level
-    from LD29.
+    from LD29. (§9.3.2 splits this entry by `target_feature = "atomics"` for the
+    threaded build, LD37.)
   The two entries keep the same `godot` version (one line comment says so; a
   review rule, since Cargo cannot enforce it).
 - `.cargo/config.toml` gains a `[target.wasm32-unknown-emscripten]` section
@@ -629,16 +631,17 @@ checked against them:
   is on a value created just above). Review keeps it so (L1.1 already keeps
   logic in the core).
 
-**`.gdextension`**: two entries, the non-threaded build only (LD27):
+**`.gdextension`**: two entries, the non-threaded build only (LD27; revised by
+§9.3.2, which adds the two threaded entries, LD35):
 
 ```ini
 web.debug.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
 web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
 ```
 
-No `web.*.threads.wasm32` entry: what a threaded export then does (an export
-error, a load error in the browser, or a silent failure) is observed in GW4 and
-written in the docs (L4.18). `compatibility_minimum` stays 4.3 unless LQ13
+No `web.*.threads.wasm32` entry in this revision: a threaded export then picks
+this non-threaded library (most matching tags, §9.3.2), which cannot work with the
+threaded engine; §9.3.2 adds the threaded entries (GW4 is replaced by GW7). `compatibility_minimum` stays 4.3 unless LQ13
 raises the web minimum, in which case the docs and the release notes state the
 web minimum separately (the field applies to every platform).
 
@@ -673,7 +676,8 @@ exported functions (`checkWasm`, `checkGdextension`, `parseWasm`). `check-wasm.t
 builds small negative fixtures in Node (`wasm-fixtures.mjs`) (a module without `dylink.0`, one importing
 shared memory, one without the entry symbol, one over budget) and expects each
 to fail. A second check reads `mumble_speech.gdextension` and fails if the two
-web keys are missing, point elsewhere, or a `threads` key exists.
+web keys are missing, point elsewhere, or a `threads` key exists (replaced by the
+four-key check of §9.3.2, LD38).
 
 **Playback and timing in Sample mode** (LD30) [L4.16]: since 4.3, web exports
 play `AudioStreamPlayer` streams in *Sample* mode by default: the engine hands
@@ -859,8 +863,241 @@ lists *Web (Godot 4.3+, no threads)* among the Godot addon's platforms and in
 the compatibility table. The `godot-addon` branch gets the file through the zip
 (its README line and the Asset Library values add *Web*).
 
-**Out of scope**: threaded web exports (LD27), Godot 4.2 and earlier on the web,
+**Out of scope**: threaded web exports (LD27; revised: §9.3.2), Godot 4.2 and earlier on the web,
 the C ABI as WebAssembly (LD33), Godot Android export (LD24).
+
+### 9.3.2 Godot on the web with threads [L4.19, L4.20] (LD35–LD41)
+
+Issue #34, a revision of §9.3.1 (user decision, 2026-11-07: larger projects
+export with *Thread Support* on and could not use the addon on the web; LD27 and
+LQ12 revised). The addon ships a second web library, `mumble_godot.threads.wasm`,
+built with threads, next to the non-threaded `mumble_godot.wasm`; Godot picks one
+per export. The GDScript API, the speaker's clock rule (LD30) and the non-threaded
+path of §9.3.1 do not change.
+
+**Facts** (the godot-rust book, *Export to Web*; gdext 0.5.5 feature docs; Godot
+`4.3-stable` and `4.7.2-stable` sources, `platform/web/export/export_plugin.cpp`
+and `find_extension_library`; read 2026-11-07), recorded so the decisions below
+can be checked against them:
+
+- gdext's `experimental-wasm` alone builds for threaded web exports;
+  `experimental-wasm-nothreads` (on top of it) switches threading off and must not
+  be combined with `-pthread`. The book asks for "two separate builds, one for each
+  mode": the threaded one adds `-C link-args=-pthread` and
+  `-C target-feature=+atomics` to the non-threaded flag set, and is named
+  `<crate>.threads.wasm`. Its own recipe sets `RUSTFLAGS` for the threaded build
+  (which replaces the `.cargo/config.toml` flags, so every flag is repeated) and
+  renames the output before running the second build in the same target folder.
+- `lazy-function-tables` "is not yet thread-safe and can thus not be combined with
+  `experimental-threads`". `experimental-threads` is a separate gdext feature
+  (synchronised access to user instances from several threads), not needed for a
+  threaded web export, and not used here: the addon's objects are used from the
+  main thread, as on desktop. The threaded build keeps `lazy-function-tables`.
+- Godot's web export adds the feature tags `web`, `wasm32`, `debug` or `release`,
+  and `threads` or `nothreads` from *Thread Support* (same code in 4.3 and 4.7.2).
+  `find_extension_library` takes the `[libraries]` key all of whose tags are
+  features of the export and, among those, the one with the most tags. With the
+  four keys of this section, a threaded export matches
+  `web.release.threads.wasm32` (4 tags) over `web.release.wasm32` (3); a
+  non-threaded export cannot match a `threads` key and keeps `web.release.wasm32`.
+  Today (no threaded key) a threaded export picks the non-threaded library (PR #33
+  review), which cannot work with the threaded engine.
+- The export copies only the selected library next to `index.html` and lists its
+  file name in the page's `gdextensionLibs`; the two files never ship together in
+  one export.
+- Templates: with *Extensions Support* on, the threaded export uses
+  `web_dlink_debug.zip` / `web_dlink_release.zip`, the non-threaded one
+  `web_dlink_nothreads_*.zip` (`_get_template_name`); all four are in the official
+  template package.
+- A threaded export needs `SharedArrayBuffer`, which browsers offer only to a
+  cross-origin isolated page (`Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Embedder-Policy: require-corp`). Godot's PWA option
+  (`progressive_web_app/enabled` with `ensure_cross_origin_isolation_headers`) adds
+  the headers through a service worker after a reload; itch.io has a
+  *SharedArrayBuffer support* option; some hosts and embeds allow neither.
+- Audio: threaded templates mix *Stream*-mode audio on a thread and hand it to an
+  `AudioWorklet` through shared memory; *Sample*-mode playback is a Web Audio buffer
+  source started from the main thread in both kinds of template. The default
+  playback type on the web is *Sample* through the `.web` override of
+  `audio/general/default_playback_type`, which does not depend on threads; the web
+  runner's precondition checks it in the threaded export too.
+
+**Build** (LD36, LD37):
+
+- `crates/mumble-godot/Cargo.toml`: the wasm `godot` dependency splits in two by
+  the target feature `atomics`, so each flag set gets its gdext features and a
+  mismatch (threaded flags with `experimental-wasm-nothreads`, or the reverse)
+  cannot be built:
+  - `[target.'cfg(all(target_family = "wasm", not(target_feature = "atomics")))'.dependencies]`:
+    as in §9.3.1 (`api-4-3`, `experimental-wasm`, `experimental-wasm-nothreads`,
+    `lazy-function-tables`);
+  - `[target.'cfg(all(target_family = "wasm", target_feature = "atomics"))'.dependencies]`:
+    `api-4-3`, `experimental-wasm`, `lazy-function-tables`.
+  Cargo evaluates `cfg(...)` of target-specific dependencies with the output of
+  `rustc --print cfg` under the target's rustflags, so `+atomics` selects the
+  second entry. T1 confirms it (`cargo tree -e features --target
+  wasm32-unknown-emscripten` under both flag sets shows `experimental-wasm-nothreads`
+  only without `+atomics`); IF it does not hold, the fallback is the book's crate
+  feature (`nothreads = ["godot/experimental-wasm-nothreads"]`, one wasm
+  dependency entry), passed by `build.sh` to the non-threaded build only, recorded
+  in LD37. The desktop entry is unchanged; the three entries keep the same `godot`
+  version (review rule).
+- `.cargo/config.toml`: the `[target.wasm32-unknown-emscripten]` section of §9.3.1
+  stays the single list of the shared flags. The threaded build appends
+  `-C link-args=-pthread` and `-C target-feature=+atomics` on the command line,
+  `cargo --config 'target.wasm32-unknown-emscripten.rustflags=["-C","link-args=-pthread","-C","target-feature=+atomics"]'`:
+  Cargo joins array values from every configuration source, the command line last,
+  so the shared flags are not repeated (no `RUSTFLAGS`, which would replace them).
+  T1 checks the effective flags in the verbose build log (`-sSIDE_MODULE=2`,
+  `panic=abort` and `-pthread` all present); `check-wasm.mjs` catches a wrong
+  result in any case (no side-module marker, or no shared memory). IF rustc or
+  `wasm-ld` asks for further features with `+atomics` (`+bulk-memory`,
+  `+mutable-globals`), they are added to the same `--config` list and recorded in
+  LD36.
+- The threaded build uses its own target folder, `target/godot-web-threads`, so the
+  two builds neither overwrite each other's `mumble_godot.wasm` nor invalidate each
+  other's rebuilt standard library (`-Zbuild-std` rebuilds std with the flags,
+  atomics included).
+- `scripts/godot-web/build.sh [--threads] <out dir>`: without `--threads`,
+  unchanged (`<out dir>/mumble_godot.wasm`); with it, the same toolchain checks,
+  then `cargo +$RUST_NIGHTLY --config '<threaded flags>' build
+  -Zbuild-std=std,panic_abort -p mumble-godot --release --target
+  wasm32-unknown-emscripten --target-dir target/godot-web-threads`, copied to
+  `<out dir>/mumble_godot.threads.wasm` (the crate's output is still
+  `mumble_godot.wasm`; the name in the addon is ours).
+- `bindings/godot/build.sh web` builds both libraries and runs `check-wasm.mjs` on
+  each (in its mode) and the `.gdextension` check: the addon lists both, so a
+  missing file would break one kind of export.
+- No code change in `mumble-godot` is expected: it spawns no threads, and its
+  objects are created and called on the main thread, where Godot runs scripts and
+  `_process`. A project calling `Mumble.render` from a GDScript thread hits gdext's
+  single-thread checks as on desktop, but on the web a panic aborts the game:
+  the docs say the addon's classes are main-thread only (as on desktop).
+
+**`.gdextension`** (LD35): four web entries; the non-threaded keys are unchanged.
+
+```ini
+web.debug.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
+web.release.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.wasm"
+web.debug.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"
+web.release.threads.wasm32 = "res://addons/mumble_speech/bin/mumble_godot.threads.wasm"
+```
+
+`compatibility_minimum` stays 4.3. IF LQ17 applies (the 4.3 threaded template does
+not load the threaded library), the minimum for threaded exports is stated in the
+docs and the release notes only; the field covers every platform.
+
+**Library check** (LD38) [L4.17, L4.20]: `check-wasm.mjs [<wasm>] [--threads]
+[--gdextension <file>] [--budget <bytes>]`.
+
+- Without `--threads`: the checks of §9.3.1, unchanged.
+- With `--threads`: the Wasm magic and version, a `dylink.0` section, a memory
+  **import** with the *shared* flag (a side module imports the engine's memory; a
+  memory definition fails), at least one atomics instruction in the code section
+  (the decoder of §9.3.1 already finds them; it reports the count instead of
+  stopping at the first), the entry symbol, and the budget
+  `WASM_THREADS_BUDGET_BYTES` from `versions.env` (`--budget` overrides it; a
+  missing or malformed value fails, as for the non-threaded budget).
+- The file name and the mode must agree: a file named `*.threads.wasm` checked
+  without `--threads`, or another name checked with it, fails (a swapped copy in
+  the addon is caught even if each file is valid for its own mode).
+- `.gdextension` check: exactly the four web keys above, each with its path; a
+  missing key, a swapped path, or any other `web.*` key (for example
+  `web.release.nothreads.wasm32`) fails. The check of §9.3.1 that rejected any
+  `threads` key is replaced by this one.
+- `check-wasm.test.sh` and `check-wasm.test.mjs` gain the threaded fixtures
+  (`wasm-fixtures.mjs`: a module importing a shared memory with an atomic
+  instruction) and the negatives: a non-threaded module checked with
+  `--threads`, a threaded one checked without, shared memory without atomics,
+  atomics without shared memory, a shared memory defined rather than imported, a
+  `.threads.wasm` name without `--threads`, over the threaded budget, a missing
+  `WASM_THREADS_BUDGET_BYTES`; for the `.gdextension`: a missing threaded key,
+  swapped paths, an extra web key.
+
+**Size** (LD38): T1 measures the threaded release build (raw and gzip) in CI and
+sets `WASM_THREADS_BUDGET_BYTES` to the measured raw size plus 25 %, rounded down,
+recorded in LD38 with the measurement before merging, as LD34 did. An export
+includes one library only, so the download a player sees grows by one of the two;
+the addon itself grows by the threaded file. The increase of the threaded `dlink`
+template over the standard threaded template is measured for the docs (L4.18).
+
+**Playback and timing** (LD40) [L4.16]: the rule of §9.3.1 applies unchanged: the
+wall clock on the web in effective *Sample* mode, the audio clock otherwise, and
+with the audio clock a stopped player counts as heard to the end. `OS.has_feature
+("web")` is true in both kinds of export and the playback type does not depend on
+threads, so `wall_clock_for` needs no new input. The bounds of L4.16 (Sample: 100 ms
+plus one frame for `character_spoken`, 250 ms plus one frame for `finished`;
+web *Stream*: 500 ms plus one frame for both) are checked by the same web runner in
+the threaded export. Whether the threaded `AudioWorklet` driver keeps the *Stream*
+audio clock within 500 ms is not known (it mixes on a thread and may buffer
+differently): to be confirmed by CI on the pull request; IF it does not, the bound
+for threaded *Stream* mode is revised with the measurement before merging, as LD30
+was, and L4.16 amended in the same pull request.
+
+**Export presets and test runner** (LD39):
+
+- `export_presets.cfg` gains `Web (threads)` (the example, `variant/thread_support=true`,
+  `build/web-threads/index.html`) and `Web (threads tests)` (as `Web (tests)` with
+  threads on, `build/web-threads-tests/index.html`). PWA stays off; the CI server
+  sends the headers itself.
+- `tests/web/runner.gd`: the same checks; it adds `threads`
+  (`OS.has_feature("threads")`) to `window.mumbleWebTests` and to its last line, so
+  the browser runner can tell which engine ran. IF the `threads` feature is not
+  reported at runtime on 4.3, the runner reports `null` and the request log below
+  is the only selection check (recorded in LD39).
+- `scripts/godot-web/export.sh <godot> <out dir> [preset]`: the template cache holds
+  all four `web_dlink_*.zip` (cache key bumped); after the export it requires
+  `index.html` and exactly one library: `mumble_godot.threads.wasm` when the preset
+  has `variant/thread_support=true` (read from the project's `export_presets.cfg`),
+  `mumble_godot.wasm` otherwise, and fails if the other file is there too.
+- `scripts/godot-web/run-tests.mjs … [--threads]`: with `--threads` the static
+  server adds `Cross-Origin-Opener-Policy: same-origin` and
+  `Cross-Origin-Embedder-Policy: require-corp` to every response, and the verdict
+  requires `crossOriginIsolated === true`, `threads === true` in the page report
+  (when not `null`), a request for `mumble_godot.threads.wasm` and none for
+  `mumble_godot.wasm`. Without it: no headers, `crossOriginIsolated === false`
+  (unchanged), `threads` false or `null`, and the new reverse request check (only
+  `mumble_godot.wasm` requested), so the non-threaded runs also prove Godot's
+  choice. The suspended-audio emulation (LD31) wraps `AudioContext` on the page,
+  where both kinds of template create it, so it applies unchanged.
+
+**CI** (LD39): `godot-web-build` builds both libraries (two `build.sh` runs), checks
+both and the `.gdextension`, runs the self-tests, uploads both in the
+`godot-web-lib` artifact and prints both sizes in the run summary. A new matrix job
+`godot-web-threads (<version>)`, Godot `4.3-stable` and `4.7.2-stable`, mirrors
+`godot-web`: exports `Web (threads tests)` and runs it in Chromium with `--threads`,
+audio `running` and `suspended`, then exports `Web (threads)` and runs it with
+`--mode example --threads`. `godot-web-browsers (<browser>)` gains the same threaded
+run (Firefox `running` and `suspended`, WebKit `suspended`). None of these jobs is
+required (LQ14); `godot-web` and the desktop `godot` jobs are unchanged apart from
+the reverse request check and the template cache key.
+
+**Release** (LD39): the `godot-web` job builds and checks both libraries;
+`native-web` carries both; `assemble.sh` copies both into the Godot zip only
+(LD33); `verify.sh` requires both in the zip, runs `check-wasm.mjs` on each in its
+mode and the `.gdextension` check, and runs the exported tests from the packaged
+addon on Godot 4.3 in Chromium for both kinds of export (the threaded one with
+`--threads`); `verify.test.sh` adds a zip without the threaded file and one with the
+two files swapped. `notes.mjs` lists *Web (Godot 4.3+, with or without threads)*
+(the threaded minimum separately if LQ17 applies) and says the threaded export was
+tested with cross-origin isolation headers; the `godot-addon` branch gets both files
+through the zip.
+
+**Documentation** (LD41) [L4.18]: the *Web export* section of
+`docs/bindings/godot.md` and `bindings/godot/README.md` becomes a choice:
+*Thread Support* off (recommended, no headers, works on itch.io and in embeds) or
+on (for projects that need threads), with the headers, how to check them
+(`crossOriginIsolated` in the browser console), what a threaded export served
+without them shows (observed in GW7), the PWA and itch.io options, that Godot's
+editor *Remote Debug → Run in Browser* already serves with the headers, both
+library sizes and both template increases, and `build.sh web` building both.
+`bindings/godot/TESTING.md` gains GW6–GW8 and the *Godot web verification report*
+issue form a threaded section; GW4 is replaced by GW7.
+
+**Out of scope**: threaded exports served without cross-origin isolation, gdext's
+`experimental-threads` (calling the addon from several threads), and the rest of
+§9.3.1's list.
+
 
 ### 9.4 Unity [L4.7]
 
@@ -1129,7 +1366,8 @@ GitHub Actions, matrix:
 | web | ubuntu | package build, Vitest (WASM vectors, L4.2 size budget), external consumption check [L6.2] |
 | ffi | ubuntu, macos, windows | native library (macOS universal with `lipo`), CTest tests |
 | godot | ubuntu, Godot 4.3 and 4.7.2 | GDExtension build, headless tests (vectors, typewriter, speaker at a fixed 48 kHz under mix rates 44.1, 48, 22.05 and 96 kHz) |
-| godot-web | ubuntu, pinned nightly Rust + Emscripten; Godot 4.3 and 4.7.2 web templates; Playwright | GDExtension web build (`check-wasm.mjs`: side module, no shared memory, entry symbol, size budget), web export of the test runner, conformance vectors and speaker timing in Chromium with audio running and suspended, served without COOP/COEP [L4.15–L4.17, L5.2] (§9.3.1). Firefox and WebKit in a separate, non-required job (LQ14) |
+| godot-web | ubuntu, pinned nightly Rust + Emscripten; Godot 4.3 and 4.7.2 web templates; Playwright | GDExtension web build (`check-wasm.mjs`: side module, no shared memory, entry symbol, size budget), web export of the test runner, conformance vectors and speaker timing in Chromium with audio running and suspended, served without COOP/COEP [L4.15–L4.17, L5.2] (§9.3.1). Firefox and WebKit in a separate, non-required job (LQ14). Builds and checks the threaded library too (§9.3.2) |
+| godot-web-threads | ubuntu, Godot 4.3 and 4.7.2 threaded web templates; Playwright | web export with *Thread Support* on of the test runner and the example, conformance vectors and speaker timing in Chromium with audio running and suspended, served **with** COOP/COEP (`crossOriginIsolated` true), the threaded library loaded and the non-threaded one not; not required (LQ14) [L4.16, L4.19, L4.20, L5.2] (§9.3.2) |
 | unity-interop | ubuntu, .NET 8 SDK, C# 9 | `Runtime/Core` + shared vector checks against the native library [LD13]; second run without the library: load-failure messages [L4.11]; speaker rate constant [L4.10] |
 | android | ubuntu, pinned NDK + `cargo-ndk` | Android libraries for three ABIs, `check.sh` (symbols, ELF machine, 16 KB alignment, dependencies) and `check-metas.sh`, plus their negative self-tests; core vectors on `armv7` under QEMU [L4.13, L4.14, L5.2] (§9.4.1) |
 | playground | ubuntu | build and tests of `apps/playground` against the workspace package [L6.1] |
@@ -1198,16 +1436,16 @@ built and verified, no GitHub Release):
    and `mumble-godot`; on macOS both architectures joined with `lipo`.
    `android` (Ubuntu): `mumble-ffi` for the three Android ABIs, checked
    (§9.4.1) [L4.13, L4.14].
-   `godot-web` (Ubuntu): `mumble-godot` for `wasm32-unknown-emscripten`, checked
-   (§9.3.1) [L4.15, L4.17].
+   `godot-web` (Ubuntu): `mumble-godot` for `wasm32-unknown-emscripten`, without and
+   with threads, both checked (§9.3.1, §9.3.2) [L4.15, L4.17, L4.19, L4.20].
 3. `web`: `@mumble-speech/web` build and `npm pack`.
 4. `assemble`: from the artifacts of 2–3, with `LICENSE-MIT`, `LICENSE-APACHE`
    and the binding README in each archive:
    - `mumble-speech-c-X.Y.Z.zip`: `include/mumble.h`, `lib/<platform>/`
      (shared libraries, Windows import library);
    - `mumble-speech-godot-X.Y.Z.zip`: `addons/mumble_speech/` with `bin/` for
-     the three desktop platforms and the web (`mumble_godot.wasm`, the only
-     archive with it, LD33);
+     the three desktop platforms and the web (`mumble_godot.wasm` and
+     `mumble_godot.threads.wasm`, the only archive with them, LD33, LD35);
    - `com.mumble-speech.unity-X.Y.Z.tgz`: the UPM package (`package/` prefix,
      as npm tarballs) with `Plugins/` filled, Android included (the only
      archive with Android libraries, LD24);
@@ -1215,8 +1453,9 @@ built and verified, no GitHub Release):
    (`scripts/release/assemble.sh`).
 5. `verify` (Linux, `scripts/release/verify.sh`): the C tests link against the
    packaged library; the packaged Godot addon passes the headless tests on
-   Godot 4.3, and its web library passes `check-wasm.mjs` and the exported
-   tests in Chromium on Godot 4.3 (§9.3.1); the Unity tarball has the three desktop plugins, the three
+   Godot 4.3, and its two web libraries pass `check-wasm.mjs` (each in its mode)
+   and the exported tests in Chromium on Godot 4.3, the threaded export served
+   with COOP/COEP (§9.3.1, §9.3.2); the Unity tarball has the three desktop plugins, the three
    Android libraries (which pass `check.sh` and `check-metas.sh`) and a
    `.meta` for every file; the npm tarball installs in an empty project and renders a vector.
 6. `notes` (`scripts/release/notes.mjs`) [L8.3, L8.4]: writes
@@ -1286,6 +1525,11 @@ serves the Asset Library.
 | Godot web: a panic aborts the game | No panicking path on user input (errors are values from the core); review rule (§9.3.1) |
 | Godot web: Sample-mode samples registered per character accumulate in the browser | W2 checks release over a long line; GW2 watches memory in developer tools |
 | Godot web: headless browsers on CI runners have no GPU or audio device | Software WebGL (SwiftShader, llvmpipe) and a PulseAudio null sink; the runner fails if the `AudioContext` is not in the expected state, so a silent pass is not possible; Firefox and WebKit not required until stable (LQ14) |
+| Godot web, threads: the 4.3 threaded `dlink` template does not load the threaded side module (shared memory and thread-local storage make the side-module ABI stricter than without threads) | CI runs the threaded export on 4.3 and 4.7.2 on every PR; LQ17 says what to do (threaded minimum raised in the docs only) |
+| Godot web, threads: the build mechanism (`cargo --config` joining the rustflags arrays, gdext features chosen by `cfg(target_feature = "atomics")`) does not behave as expected on the pinned nightly | T1 checks the verbose flags and `cargo tree`; `check-wasm.mjs` fails on any wrong result (no side module, no shared memory, atomics in the non-threaded file); fallbacks recorded in LD36, LD37 |
+| Godot web, threads: users serve a threaded export without COOP/COEP, or on a host or embed that cannot set them | The docs recommend threads off unless needed, explain the headers, the PWA and itch.io options and the symptom (GW7) (L4.18, LD41) |
+| Godot web, threads: the threaded audio driver delays the *Stream* audio clock beyond the L4.16 bound | The web runner measures it in CI on the PR; the bound is revised with the measurement before merging if needed (LD40) |
+| Godot web, threads: headless browsers on CI do not grant `SharedArrayBuffer` under COOP/COEP from a local server | The runner asserts `crossOriginIsolated === true`, so a silent fallback is impossible; the job is not required (LQ14) |
 | Determinism on Android without vectors in CI | Same code on every target; AArch64 covered on macOS arm64, 32-bit ARM under QEMU; vectors on a device in U7 (LD25) |
 
 ## 15. Decision log
@@ -1315,7 +1559,7 @@ serves the Asset Library.
 | LD24 | Android libraries only in the Unity package | Also in the C archive and the Godot addon | Issue #25 asks for Unity; the C archive and Godot Android export bring their own packaging and testing questions (Godot export templates, NDK consumers), left for a later request |
 | LD25 | Android conformance: library checks in CI, core vectors on `armv7` under QEMU, vectors on a device by hand (PlayMode test assembly, *Run in player*) | Android emulator in CI (`android-emulator-runner`) | The CI emulator is x86_64 (ARM images are too slow without hardware acceleration), the architecture already covered by Linux and Windows, and it is slow and flaky. The only new instruction set is 32-bit ARM, which QEMU covers cheaply; AArch64 is covered on macOS arm64 |
 | LD26 | Android libraries in `Plugins/Android/libs/<abi>/` with committed `.meta` files setting Android and the `CPU` explicitly | Rely on Unity inferring the CPU from the folder name; an `.aar` | The folder name is the common convention, but explicit settings do not depend on inference rules across Unity versions; an `.aar` would add a Gradle build for a plain `.so` |
-| LD27 | Godot web: ship only the non-threaded build (`experimental-wasm-nothreads`), listed as `web.*.wasm32` | Threaded build only; both builds (`.threads.wasm` + `.wasm`) | Non-threaded is Godot's default web export since 4.3, needs no COOP/COEP headers (itch.io and other hosts often cannot set them) and is what the issue asks for. The library uses no threads. A threaded build would need a second build with `-pthread`/`+atomics` through `RUSTFLAGS` (which replaces the config flags), a second CI and release path and cross-origin isolation to test; it can be added on request (LQ12) |
+| LD27 | Godot web: ship only the non-threaded build (`experimental-wasm-nothreads`), listed as `web.*.wasm32` | Threaded build only; both builds (`.threads.wasm` + `.wasm`) | Non-threaded is Godot's default web export since 4.3, needs no COOP/COEP headers (itch.io and other hosts often cannot set them) and is what the issue asks for. The library uses no threads. A threaded build would need a second build with `-pthread`/`+atomics` through `RUSTFLAGS` (which replaces the config flags), a second CI and release path and cross-origin isolation to test; it can be added on request (LQ12). **Revised 2026-11-07 (issue #34, user decision):** larger projects export with *Thread Support* on, so the threaded build ships too (LD35–LD41, §9.3.2); the cost named above (a second build, CI and release path, cross-origin isolation in tests) is accepted, and the `RUSTFLAGS` problem is avoided with `cargo --config` (LD36) |
 | LD28 | Godot web toolchain: a dated Rust nightly with `-Zbuild-std` and Emscripten 3.1.74, pinned in `scripts/godot-web/versions.env`; one `.wasm` for every supported Godot version, verified against the 4.3 and 4.7.2 `dlink` templates in CI | Stable Rust (not possible: `-Zbuild-std` and the `-Z` flags are unstable); the Emscripten of each Godot version with one library per version; a floating nightly | gdext's documented path. One addon for every version matches the desktop promise (`compatibility_minimum`). Emscripten side-module compatibility across versions is not guaranteed, so it is tested on the oldest and newest Godot in the matrix rather than assumed; if 4.3 fails, LQ13 applies. A dated nightly keeps builds reproducible; desktop builds stay on stable. **W1 status (2026-11-06):** pinned `nightly-2026-10-20` (rustc 1.101.0-nightly) and Emscripten 3.1.74 in `versions.env`; the first CI run showed that this nightly rejects `-Z emscripten-wasm-eh=false` (removed in rustc 1.98), so the build uses `-C panic=abort` with std rebuilt with `panic_abort` (§9.3.1); **Confirmed (CI run on PR #33, 2026-11-06):** the Godot 4.3 and 4.7.2 `dlink` templates both load the library built with Emscripten 3.1.74 (the 4.7.2 template reports Emscripten 4.0.20) and the 34 conformance vectors pass, so LQ13's fallback is not needed. The editor-side "libmumble_godot.so not found" errors printed during the headless web export are harmless: the export still includes the extension |
 | LD29 | Godot web API level: the `wasm` target uses gdext's prebuilt `api-4-3` bindings if W1 shows they build and load for `wasm32-unknown-emscripten`; otherwise `api-custom-json` with the `extension_api.json` dumped by the Godot 4.3 editor in CI (`--dump-extension-api`, not committed). Either way, the API level is 4.3. The outcome of W1 is written here before merging | `api-custom` with a Godot binary at build time (heavier, same result); committing a dumped JSON (megabytes in git); a newer API level for the web | The godot-rust book says web exports need `api-custom` "for now (no prebuilt Wasm32 target)", while gdext 0.5's feature list does not tie the wasm features to an API feature. Building against 4.3 keeps the web library loadable from 4.3 on, as on desktop. `api-*` features cannot be combined, so the API feature moves into target-specific dependencies (§9.3.1). **W1 status (implementation, 2026-11-06):** the prebuilt `api-4-3` is what the build uses (gdext's `godot-bindings` picks the prebuilt API from the `api-*` feature whatever the target); confirmed by CI on PR #33 (2026-11-07): the library builds with it and loads in the Godot 4.3 and 4.7.2 web exports ("Initialize godot-rust (API v4.3.stable.official, runtime v4.x)"), so `api-custom-json` is not needed |
 | LD30 | Godot web, *Sample* playback mode: `MumbleSpeaker`'s clock for `character_spoken` and `finished` is the wall clock since `say` started the player; desktop and web *Stream* mode keep the audio clock, and with the audio clock a line whose player has stopped counts as heard to the end (§9.3.1) | Keep the audio clock everywhere; switch the internal player to *Stream* mode; a timer per event | In Sample mode the sound is a Web Audio node started by `play()`; the engine mixer's position does not describe it and stops while the mixer does not run, and before the first user gesture the `AudioContext` is suspended, so a line could never `finish` and a game waiting on it would hang. The wall clock guarantees ordered signals and `finished` (L4.16) at the cost of the browser's output latency (tens of ms, below one slot at the maximum speed of 30 characters/s) and of silent signals before the first gesture, both documented. Forcing *Stream* mode would override the project's choice and add latency without threads. **Stream mode bound (decided 2026-11-07, pending review on PR #33):** with the audio clock on the web, `character_spoken` is bounded like `finished`, 500 ms plus one frame, because CI measured it up to 157 ms (Godot 4.3, Chromium) and 253 ms (WebKit) late; Sample mode and desktop keep 100 ms plus one frame |
@@ -1323,6 +1567,13 @@ serves the Asset Library.
 | LD32 | One test suite (`tests/suite.gd`) with two runners: the desktop `SceneTree` script and a web runner scene; the vectors are copied into the export, the result is read by the browser runner from the console and a `window` global | A separate web test project; web-only tests | The same checks on both platforms are the point of "same samples as desktop"; a scene is needed because a web export runs its main scene, not a `-s` script; the vectors live outside `res://`, which an export cannot reach |
 | LD33 | The web library ships only in the Godot addon | Also a C ABI WebAssembly build in the C archive | Issue #32 asks for Godot. Outside Godot the web path is `@mumble-speech/web` (L4.1), already tested in browsers; an Emscripten C ABI module would be a third WebAssembly flavor with its own consumers and tests |
 | LD34 | Size budget for `mumble_godot.wasm`: W1 measures the release build and sets the budget to the measured raw size plus 25%, written here with the measurement (raw and gzip) before merging; `check-wasm.mjs` enforces it | No budget; a budget picked before measuring | gdext generates large bindings and the size is unknown until built (`lazy-function-tables` reduces it). A budget set from a measurement catches regressions (a new dependency, a lost LTO setting) without guessing; the sizes also go in the docs (L4.18). **W1 status (2026-11-06):** measured by CI (release build, `nightly-2026-10-20`, Emscripten 3.1.74, `panic=abort`): `mumble_godot.wasm` = 520,810 bytes raw, 175,773 bytes gzip -9. `versions.env` holds `WASM_BUDGET_BYTES=651012` (raw + 25 %, rounded down). The size increase of the `dlink` export template over the standard one is not measured yet (TBD) |
+| LD35 | Godot web, threads (issue #34): ship both libraries in the addon, `mumble_godot.wasm` (non-threaded) and `mumble_godot.threads.wasm` (threaded), listed under the unchanged `web.*.wasm32` keys and the new `web.*.threads.wasm32` keys; Godot picks one per export by feature tags | Threaded only; non-threaded only (LD27 as first decided); explicit `web.*.nothreads.wasm32` keys instead of the plain ones | Small projects export without threads and need no headers; larger ones need threads (user decision, 2026-11-07). `find_extension_library` takes the key with the most matching tags, so the 4-tag `threads` key wins in a threaded export and cannot match in a non-threaded one (checked in the 4.3 and 4.7.2 sources): the plain keys stay correct and unchanged for projects that already use them, and the CI request-log check proves the choice on every PR. An export copies only the chosen file, so players download one library. If the threaded library needs a newer Godot than 4.3, only the docs state it (LQ17); one `compatibility_minimum` covers every platform |
+| LD36 | Threaded build flags: the shared flags stay in the `[target.wasm32-unknown-emscripten]` section of `.cargo/config.toml`; the threaded build appends `-C link-args=-pthread` and `-C target-feature=+atomics` with `cargo --config` (Cargo joins array values across configuration sources) and builds into its own target folder, `target/godot-web-threads` | `RUSTFLAGS`/`CARGO_ENCODED_RUSTFLAGS` with the whole list for the threaded build (the book's recipe); a custom target spec; `profile-rustflags` (needs `cargo-features` in the workspace manifest, which breaks stable builds); one target folder with a rename between builds (the book's recipe) | `RUSTFLAGS` replaces the config flags, so the shared list would live twice and drift; `--config` keeps one list and adds two flags. A separate target folder keeps each build's output and its rebuilt std (different flags) cached, instead of rebuilding both on every switch. Unverified on the pinned nightly until T1: the verbose build log must show the shared and the threaded flags together; IF `wasm-ld`/rustc needs `+bulk-memory` or `+mutable-globals` with `+atomics`, they go in the same `--config` list and are recorded here |
+| LD37 | gdext features of the two web builds chosen by Cargo from the flags: wasm dependency entries split by `cfg(target_feature = "atomics")`, with `experimental-wasm-nothreads` only on the non-atomics entry; `lazy-function-tables` on both | The book's crate feature `nothreads = ["godot/experimental-wasm-nothreads"]` passed to the non-threaded build; `experimental-threads` for the threaded build | Features that follow the flags make a mismatched build impossible and keep the non-threaded command line of §9.3.1 unchanged; Cargo evaluates target `cfg` with the target's rustflags. The crate feature is the fallback if T1 shows otherwise (it must then be passed to every non-threaded build, release included). `experimental-threads` is for calling extension objects from several threads, which the addon does not support (main-thread only, as on desktop), and it would forbid `lazy-function-tables` |
+| LD38 | `check-wasm.mjs` has two modes: default (non-threaded, unchanged) and `--threads` (shared memory imported, atomics present, entry symbol, `WASM_THREADS_BUDGET_BYTES`); the file name must match the mode; the `.gdextension` check requires exactly the four web keys. Budget: the measured threaded release build plus 25 %, rounded down, set by T1 from the CI measurement and written here (raw and gzip) before merging | Infer the mode from the file name only; one budget for both files; no budget for the threaded file | An explicit mode keeps the check readable in CI logs, and the name rule catches a swapped copy that is valid in the wrong slot. The threaded build carries threading support in std and the side module, so its size differs and needs its own measured budget, as LD34 did. **T1 status:** not measured yet (TBD) |
+| LD39 | Threaded web tests: new presets `Web (threads)` and `Web (threads tests)`; a `godot-web-threads (<version>)` matrix job (Godot 4.3 and 4.7.2, Chromium, audio running and suspended, example run) served **with** COOP/COEP and asserting `crossOriginIsolated === true`; threaded runs added to `godot-web-browsers`; every run (threaded or not) asserts from the server's request log which library was loaded; release `verify` runs both kinds of export on Godot 4.3; no job required at first (LQ14) | Threaded runs in Chromium only; a required threaded job; the selection checked only through `OS.has_feature("threads")` | Mirrors LD31 for the second kind of export, so the acceptance of issue #34 (both exports, same samples, timing) is automated where it can run, and Firefox/Safari stay manual (GW6). The request log is independent of Godot's runtime feature names, which also makes the non-threaded runs prove that the added keys did not change their choice. The jobs start non-required, as the other web jobs did |
+| LD40 | The speaker clock rule (LD30) and the L4.16 bounds apply unchanged to threaded exports; no new input to `wall_clock_for` | A threads-specific clock rule; separate bounds decided in advance | *Sample* playback is a Web Audio buffer source started from the main thread in both template kinds, and the default playback type does not depend on threads. Only the *Stream* audio clock may differ (the threaded `AudioWorklet` driver mixes on a thread): to be confirmed by CI on the pull request; IF its lateness exceeds 500 ms plus one frame, the threaded *Stream* bound is revised with the measurement before merging, as LD30 was |
+| LD41 | Docs present the web export as a choice: *Thread Support* off recommended (no headers, works in embeds and on itch.io by default), on for projects that need threads, with the headers, their check, the symptom without them (GW7), Godot's PWA option, itch.io's *SharedArrayBuffer support* option and the editor's *Run in Browser* (which sends the headers) | Document threads on as the default; omit the workarounds | Most hosts and embeds cannot set COOP/COEP; a user who turns threads on needs to know what breaks and how to fix it before publishing |
 
 Decisions inherited from the first version (IDs unchanged):
 
