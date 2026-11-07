@@ -125,9 +125,13 @@ const ATOMICS_MEMARG = [[0x00, 0x02], [0x10, 0x4e]];
  * is not known is an error, not a pass.
  */
 function findAtomics(r, bodyEnd, state, all) {
+  let lastAt = -1;
+  let lastOp = -1;
   while (r.pos < bodyEnd) {
     const at = r.pos;
     const op = r.byte();
+    lastAt = at;
+    lastOp = op;
     if (op === 0xfe) {
       if (state.first < 0) state.first = at;
       state.count++;
@@ -214,6 +218,8 @@ function findAtomics(r, bodyEnd, state, all) {
     }
   }
   if (r.pos !== bodyEnd) throw new DecodeError(`function body overruns its size at offset ${r.pos}`);
+  // The body ends with its `end`, read as an opcode: an immediate that swallowed it is a malformed body.
+  if (lastOp !== 0x0b || lastAt !== bodyEnd - 1) throw new DecodeError(`function body does not end with end at offset ${bodyEnd - 1}`);
 }
 
 /**
