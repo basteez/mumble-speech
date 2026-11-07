@@ -145,7 +145,7 @@ test('the Godot web build is named in the Godot rows only, not in the C, Unity, 
   const { result, notes, cleanup } = compose();
   try {
     assert.equal(result.status, 0, result.stderr);
-    const web = 'Web (Godot 4.3+, no threads)';
+    const web = 'Web (Godot 4.3+, with or without threads)';
     const lines = notes.split('\n').filter((line) => line.includes(web));
     assert.equal(lines.length, 2, `rows with the web build:\n${lines.join('\n')}`);
     assert.ok(lines.some((line) => line.startsWith('| Godot |')), 'the Godot compatibility row names the web build');

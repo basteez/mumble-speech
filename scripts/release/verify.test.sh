@@ -77,6 +77,7 @@ done
 # The Godot web library: a tiny side module that passes scripts/godot-web/check-wasm.mjs.
 node "$root/scripts/godot-web/wasm-fixtures.mjs" "$work/wasm-fixtures" || { echo "test setup: wasm-fixtures.mjs failed" >&2; exit 1; }
 cp "$work/wasm-fixtures/good.wasm" "$art/native-web/mumble_godot.wasm"
+cp "$work/wasm-fixtures/good.threads.wasm" "$art/native-web/mumble_godot.threads.wasm"
 mkdir -p "$work/npm-src/package" && echo '{"name":"@mumble-speech/web"}' > "$work/npm-src/package/package.json"
 tar -czf "$art/web/mumble-speech-web-$version.tgz" -C "$work/npm-src" package
 
@@ -181,8 +182,16 @@ rezip "$work/case/mumble-speech-godot-$version.zip" cp "$work/wasm-fixtures/trun
 expect_exit "Godot addon with a truncated WebAssembly library" 1 "malformed WebAssembly binary" "$verify" "$version" "$work/case" "$stubs/godot"
 
 copy_archives
-rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "echo 'web.release.threads.wasm32 = \"res://addons/mumble_speech/bin/mumble_godot.wasm\"' >> addons/mumble_speech/mumble_speech.gdextension"
-expect_exit "Godot addon whose .gdextension lists a threaded web entry" 1 "no threaded web build" "$verify" "$version" "$work/case" "$stubs/godot"
+rezip "$work/case/mumble-speech-godot-$version.zip" rm addons/mumble_speech/bin/mumble_godot.threads.wasm
+expect_exit "Godot addon without the threaded web library" 1 "missing mumble_godot.threads.wasm in the Godot addon" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "cp $work/wasm-fixtures/good.threads.wasm addons/mumble_speech/bin/mumble_godot.wasm && cp $work/wasm-fixtures/good.wasm addons/mumble_speech/bin/mumble_godot.threads.wasm"
+expect_exit "Godot addon with the two web libraries swapped" 1 "shared memory" "$verify" "$version" "$work/case" "$stubs/godot"
+
+copy_archives
+rezip "$work/case/mumble-speech-godot-$version.zip" sh -c "sed -i.bak '/^web\\.release\\.threads/d' addons/mumble_speech/mumble_speech.gdextension"
+expect_exit "Godot addon whose .gdextension lacks a threaded web entry" 1 "web.release.threads.wasm32 is missing" "$verify" "$version" "$work/case" "$stubs/godot"
 
 copy_archives
 rezip "$work/case/mumble-speech-c-$version.zip" sh -c "cp $work/wasm-fixtures/good.wasm mumble-speech-c-$version/mumble_godot.wasm"
